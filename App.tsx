@@ -5,6 +5,18 @@ import MarketplaceStudio from './components/MarketplaceStudio';
 import VideoStudio from './components/VideoStudio';
 import ChatBot from './components/ChatBot';
 
+const navItems = [
+  { id: AppView.MARKETPLACE, label: 'Market Studio', icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' },
+  { id: AppView.VIDEO, label: 'Video Studio', icon: 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z' },
+  { id: AppView.CHAT, label: 'AI Yordamchi', icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z' },
+];
+
+const pricingPlans = [
+  { name: 'Boshlang\'ich', price: '0', features: ['5 ta bepul rasm', 'Standart sifat', 'Chat yordamchi'] },
+  { name: 'Professional', price: '150,000', features: ['Cheksiz rasm', 'Video generatsiya', '4K sifat', 'Logotip o\'chirish'], popular: true },
+  { name: 'Biznes', price: '450,000', features: ['Jamoaviy kirish', 'Shaxsiy menejer', 'API integratsiya'] },
+];
+
 const UmariProductionLogo: React.FC<{ className?: string }> = ({ className }) => (
   <svg viewBox="0 0 400 220" className={className} xmlns="http://www.w3.org/2000/svg">
     <g transform="translate(100, 20) rotate(-10)">
@@ -22,74 +34,19 @@ const App: React.FC = () => {
   const [activeView, setActiveView] = useState<AppView>(AppView.MARKETPLACE);
   const [userBalance, setUserBalance] = useState(5);
   const [showPricing, setShowPricing] = useState(false);
-  const [hasKey, setHasKey] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    checkKey();
-  }, []);
-
-  const checkKey = async () => {
-    if (window.aistudio) {
-      const selected = await window.aistudio.hasSelectedApiKey();
-      setHasKey(selected);
-    } else {
-      setHasKey(true); // Development muhiti uchun
-    }
-  };
-
-  const handleOpenKey = async () => {
-    if (window.aistudio) {
-      await window.aistudio.openSelectKey();
-      setHasKey(true); // Key selection race condition bypass
-    }
-  };
-
-  if (hasKey === false) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0055b8] p-6 text-center">
-        <div className="max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl animate-slideUp">
-          <UmariProductionLogo className="w-48 mx-auto mb-8" />
-          <h1 className="text-2xl font-black text-slate-800 uppercase italic mb-4">Xush kelibsiz!</h1>
-          <p className="text-slate-500 text-sm font-medium mb-8 leading-relaxed">
-            Ilovadan foydalanish uchun Google Gemini API kalitini tanlashingiz kerak. 
-            <br/><a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="text-blue-600 underline">Billing yo'riqnomasi</a>
-          </p>
-          <button 
-            onClick={handleOpenKey}
-            className="w-full py-5 bg-[#0055b8] text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl active:scale-95"
-          >
-            API Kalitni Tanlash
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-[#f8fafc] font-sans" style={{ letterSpacing: '0.01em', wordSpacing: '0.16em' }}>
+    <div className="min-h-screen flex flex-col md:flex-row bg-[#f8fafc] font-sans">
       <aside className="hidden md:flex flex-col w-72 bg-[#0055b8] text-white p-6 space-y-8 fixed h-full shadow-2xl z-20 border-r border-white/10">
         <div className="py-2">
           <div className="w-full bg-white rounded-[2.5rem] p-6 shadow-2xl transform hover:scale-105 transition-all duration-500 cursor-pointer">
             <UmariProductionLogo className="w-full h-auto" />
           </div>
-          <div className="mt-4 flex items-center justify-center gap-2">
-            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(74,222,128,0.5)]"></span>
-            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/70">Production Studio AI</p>
-          </div>
         </div>
 
         <div className="p-5 bg-white/5 rounded-3xl border border-white/10 backdrop-blur-xl space-y-4">
           <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] font-black uppercase text-blue-100 tracking-widest">Balans</span>
-              <svg width="70" height="30" viewBox="0 0 70 30" className="opacity-90">
-                <rect x="0" y="0" width="10" height="30" rx="2" fill="#ffffff" fillOpacity="0.95" />
-                <rect x="14" y="6" width="10" height="24" rx="2" fill="#ffffff" fillOpacity="0.85" />
-                <rect x="28" y="10" width="10" height="20" rx="2" fill="#ffffff" fillOpacity="0.75" />
-                <rect x="42" y="15" width="10" height="15" rx="2" fill="#ffffff" fillOpacity="0.6" />
-                <rect x="56" y="23" width="10" height="7" rx="2" fill="#ffffff" fillOpacity="0.45" />
-              </svg>
-            </div>
+            <span className="text-[10px] font-black uppercase text-blue-100 tracking-widest">Balans</span>
             <span className="text-xs font-black bg-[#22c55e] px-4 py-1.5 rounded-full shadow-xl border border-white/20">{userBalance} dona</span>
           </div>
           <button onClick={() => setShowPricing(true)} className="w-full py-3.5 bg-white text-[#0055b8] rounded-2xl text-[11px] font-black uppercase hover:bg-blue-50 transition-all shadow-xl active:scale-95">To'ldirish</button>
@@ -120,7 +77,7 @@ const App: React.FC = () => {
 
       <main className="flex-1 md:ml-72 p-4 md:p-12 pb-32">
         <div className="max-w-7xl mx-auto">
-          {activeView === AppView.MARKETPLACE && <MarketplaceStudio userBalance={userBalance} setUserBalance={setUserBalance} openPricing={() => setShowPricing(true)} />}
+          {activeView === AppView.MARKETPLACE && <MarketplaceStudio />}
           {activeView === AppView.VIDEO && <VideoStudio />}
           {activeView === AppView.CHAT && <ChatBot />}
         </div>
@@ -137,7 +94,7 @@ const App: React.FC = () => {
 
       {showPricing && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-[#0f172a]/80 backdrop-blur-md animate-fadeIn">
-          <div className="bg-white w-full max-w-5xl rounded-[4rem] overflow-hidden shadow-[0_50px_100px_rgba(0,0,0,0.4)] animate-slideUp border border-slate-100">
+          <div className="bg-white w-full max-w-5xl rounded-[4rem] overflow-hidden shadow-[0_50px_100px_rgba(0,0,0,0.4)] border border-slate-100">
             <div className="flex justify-between items-center p-10 border-b border-slate-50">
               <h2 className="text-4xl font-black text-slate-800 uppercase italic tracking-tighter">Premium Plans</h2>
               <button onClick={() => setShowPricing(false)} className="p-3 hover:bg-slate-100 rounded-full transition-all">
@@ -171,24 +128,10 @@ const App: React.FC = () => {
 
       <style>{`
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(60px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fadeIn { animation: fadeIn 0.4s ease-out; }
-        .animate-slideUp { animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
       `}</style>
     </div>
   );
 };
-
-const navItems = [
-  { id: AppView.MARKETPLACE, label: 'Market Studio', icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' },
-  { id: AppView.VIDEO, label: 'Video Studio', icon: 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z' },
-  { id: AppView.CHAT, label: 'AI Yordamchi', icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z' },
-];
-
-const pricingPlans = [
-  { name: 'Boshlang\'ich', price: '0', features: ['5 ta bepul rasm', 'Standart sifat', 'Chat yordamchi'] },
-  { name: 'Professional', price: '150,000', features: ['Cheksiz rasm', 'Video generatsiya', '4K sifat', 'Logotip o\'chirish'], popular: true },
-  { name: 'Biznes', price: '450,000', features: ['Jamoaviy kirish', 'Shaxsiy menejer', 'API integratsiya'] },
-];
 
 export default App;

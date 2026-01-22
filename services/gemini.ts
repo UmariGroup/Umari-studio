@@ -1,31 +1,22 @@
 
-import { GoogleGenAI, Type, GenerateContentResponse, Modality } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse, Modality } from "@google/genai";
 
 export class GeminiService {
   private static getAI() {
-    // Har doim yangi GoogleGenAI instance yaratamiz — brauzer muhitida VITE env yoki aistudio orqali kalitni oladi.
-    if (typeof window !== 'undefined' && (window as any).aistudio) {
-      // Agar aistudio select/manager API taqdim etsa, undan kalitni olishga harakat qilamiz.
-      const aistudioKey = (window as any).aistudio.getSelectedApiKey ? (window as any).aistudio.getSelectedApiKey() : undefined;
-      const apiKey = aistudioKey ?? (import.meta.env.VITE_API_KEY as string | undefined);
-      if (!apiKey) {
-        throw new Error("API kalit topilmadi. ‘API Kalitni Tanlash’ tugmasini bosib yoki .env.local ichiga VITE_API_KEY ni qo'ying.");
-      }
-      return new GoogleGenAI({ apiKey });
+    const apiKey = process.env.API_KEY || "";
+    if (!apiKey) {
+      // API kalit bo'lmasa ham SDK'ni boshlamaslikka harakat qilamiz, 
+      // chunki SDK ichkarida "API Key must be set" xatosini tashlaydi.
+      throw new Error("API_KEY_MISSING");
     }
-
-    const key = import.meta.env.VITE_API_KEY as string | undefined;
-    if (!key) {
-      throw new Error("API kalit brauzer muhitida topilmadi. Iltimos, .env.local fayliga VITE_API_KEY qo'ying yoki server-side proxy ishlating.");
-    }
-    return new GoogleGenAI({ apiKey: key });
+    return new GoogleGenAI({ apiKey });
   }
 
   static async checkApiKey() {
     if (typeof window !== 'undefined' && (window as any).aistudio) {
       return await (window as any).aistudio.hasSelectedApiKey();
     }
-    return true;
+    return !!process.env.API_KEY;
   }
 
   static async openKeySelector() {
@@ -38,17 +29,18 @@ export class GeminiService {
     const errorMessage = error?.message || String(error);
     console.error("API Error Detailed:", error);
 
-    // 403 Permission Denied yoki Not Found xatolarida kalit tanlash dialogini qayta ochamiz
+    // Agar xatolik kalit bilan bog'liq bo'lsa
     if (
-      errorMessage.includes("Requested entity was not found") || 
+      errorMessage.includes("API_KEY_MISSING") ||
       errorMessage.includes("permission") || 
-      errorMessage.includes("403") ||
-      errorMessage.includes("not found")
+      errorMessage.includes("403") || 
+      errorMessage.includes("not found") ||
+      errorMessage.includes("API Key")
     ) {
       if (typeof window !== 'undefined' && (window as any).aistudio) {
         window.aistudio.openSelectKey();
       }
-      throw new Error("API kalit topilmadi yoki ruxsat yo'q. Iltimos, billing yoqilgan API kalitni qayta tanlang.");
+      throw new Error("API ruxsat xatosi (403). Iltimos, Gemini API kalitini qayta tanlang yoki to'lov holatini tekshiring.");
     }
 
     throw error;
@@ -61,90 +53,33 @@ export class GeminiService {
     aspectRatio: string = "3:4"
   ): Promise<string> {
     try {
-      // If running in the browser, forward to the server-side proxy so the API key stays secret.
-      // Use VITE_API_SERVER_URL to override base (useful if backend runs on different host/port).
-      if (typeof window !== 'undefined') {
-        const apiServer = (import.meta.env.VITE_API_SERVER_URL as string | undefined) ?? '';
-        const base = apiServer ? apiServer.replace(/\/$/, '') : '';
-        const url = base ? `${base}/api/generate` : '/api/generate';
-
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt, productImages, styleImages, aspectRatio })
-        });
-
-        if (!res.ok) {
-          let errText = `Server proxy error: ${res.status}`;
-          try {
-            const jsonErr = await res.json();
-            errText = jsonErr?.error || JSON.stringify(jsonErr) || errText;
-          } catch (_) {
-            try {
-              const raw = await res.text();
-              if (raw) errText = raw;
-            } catch (_) {}
-          }
-          throw new Error(errText);
-        }
-
-        const json = await res.json();
-        if (!json?.image) throw new Error('Server proxy did not return an image.');
-        return json.image;
-      }
-
       const ai = this.getAI();
-      const model = 'gemini-2.5-flash-image';
+      // Bepul/Flash tier uchun gemini-2.5-flash-image'dan foydalanamiz
+      const model = 'gemini-2.5-flash-image'; 
       const parts: any[] = [];
       
       productImages.forEach((img) => {
-        if (img) {
-          parts.push({ inlineData: { data: img.split(',')[1], mimeType: 'image/png' } });
-        }
+        if (img) parts.push({ inlineData: { data: img.split(',')[1], mimeType: 'image/png' } });
       });
 
       styleImages.forEach((img) => {
-        if (img) {
-          parts.push({ inlineData: { data: img.split(',')[1], mimeType: 'image/png' } });
-        }
+        if (img) parts.push({ inlineData: { data: img.split(',')[1], mimeType: 'image/png' } });
       });
 
-      const instruction = `UMARI STUDIO PROFESSIONAL: Create a marketplace image. Use provided styles. The image must include a clear call-to-action button that reads \"Ishni boshlash\" (Uzbek) — do NOT use the word \"Yaratish\". Keep the UMARI logo intact and unchanged in its colors and placement. ${prompt}`;
-      parts.push({ text: instruction });
+      parts.push({ text: `Professional marketplace product photography, high resolution, clean background. Instruction: ${prompt}` });
 
       const response = await ai.models.generateContent({
         model,
         contents: { parts },
-        config: { imageConfig: { aspectRatio: aspectRatio as any } }
-      });
-
-      for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
-      }
-      throw new Error("Rasm yaratilmadi.");
-    } catch (error) {
-      return this.handleApiError(error);
-    }
-  }
-
-  static async editImage(originalImageBase64: string, instruction: string): Promise<string> {
-    try {
-      const ai = this.getAI();
-      const model = 'gemini-2.5-flash-image';
-      const response = await ai.models.generateContent({
-        model,
-        contents: {
-          parts: [
-            { inlineData: { data: originalImageBase64.split(',')[1], mimeType: 'image/png' } },
-            { text: `UMARI STUDIO EDIT: ${instruction}` }
-          ]
+        config: { 
+          imageConfig: { aspectRatio: aspectRatio as any }
         }
       });
 
       for (const part of response.candidates?.[0]?.content?.parts || []) {
         if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
       }
-      throw new Error("Tahrirlashda xatolik.");
+      throw new Error("Rasm generatsiya qilinmadi.");
     } catch (error) {
       return this.handleApiError(error);
     }
@@ -156,10 +91,10 @@ export class GeminiService {
       const model = 'gemini-3-flash-preview';
       const chat = ai.chats.create({
         model,
-        config: { systemInstruction: "Siz Umari Studio mutaxassisisiz. Faqat o'zbek tilida qisqa javob bering." }
+        config: { systemInstruction: "Siz Umari Studio mutaxassisisiz. O'zbek tilida qisqa va aniq javob bering." }
       });
       const response = await chat.sendMessage({ message });
-      return response.text || "Xatolik.";
+      return response.text || "Javob olib bo'lmadi.";
     } catch (error) {
       return this.handleApiError(error);
     }
@@ -168,13 +103,12 @@ export class GeminiService {
   static async generateVideoFromImage(sourceImage: string, prompt: string, isPortrait: boolean): Promise<string> {
     try {
       const ai = this.getAI();
-      const [mimePart, dataPart] = sourceImage.split(',');
-      const mimeType = mimePart.match(/:(.*?);/)?.[1] || 'image/png';
+      const dataPart = sourceImage.split(',')[1];
       
       let operation = await ai.models.generateVideos({
         model: 'veo-3.1-fast-generate-preview',
         prompt: prompt,
-        image: { imageBytes: dataPart, mimeType: mimeType },
+        image: { imageBytes: dataPart, mimeType: 'image/png' },
         config: { numberOfVideos: 1, resolution: '720p', aspectRatio: isPortrait ? '9:16' : '16:9' }
       });
 
@@ -184,11 +118,9 @@ export class GeminiService {
       }
 
       const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
-      if (!downloadLink) throw new Error("Video linki topilmadi.");
+      if (!downloadLink) throw new Error("Video topilmadi.");
 
       const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
-      if (!response.ok) throw new Error("Yuklash xatosi.");
-      
       const blob = await response.blob();
       return URL.createObjectURL(blob);
     } catch (error) {
