@@ -47,7 +47,6 @@ const MarketplaceStudio: React.FC = () => {
 
     setLoading(true);
     try {
-      // Birinchi marta urinib ko'ramiz, xatolik chiqsa handleApiError dialog ochadi
       const result = await GeminiService.generateMarketplaceImage(
         prompt, 
         activeProducts, 
@@ -57,9 +56,7 @@ const MarketplaceStudio: React.FC = () => {
       setGeneratedImage(result);
     } catch (error) {
       const msg = (error as Error).message;
-      if (!msg.includes("ruxsat")) {
-        alert("Xatolik: " + msg);
-      }
+      alert("Xatolik: " + msg);
     } finally {
       setLoading(false);
     }
@@ -74,11 +71,11 @@ const MarketplaceStudio: React.FC = () => {
           </div>
           <div>
             <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase italic">Market Studio</h2>
-            <p className="text-slate-400 font-bold text-[10px] tracking-[0.3em] uppercase mt-1">Free Version • 2.5 Flash Engine</p>
+            <p className="text-slate-400 font-bold text-[10px] tracking-[0.3em] uppercase mt-1">AI Production Engine</p>
           </div>
         </div>
         <div className="flex items-center gap-4 bg-[#0055b8]/5 px-8 py-4 rounded-3xl border border-blue-100">
-          <span className="text-xs font-black text-[#0055b8] uppercase tracking-widest italic">Tizim Tayyor</span>
+          <span className="text-xs font-black text-[#0055b8] uppercase tracking-widest italic">Tayyor</span>
         </div>
       </header>
 
@@ -86,107 +83,66 @@ const MarketplaceStudio: React.FC = () => {
         <div className="lg:col-span-6 space-y-8">
           <div className="grid md:grid-cols-2 gap-6">
             <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-100">
-              <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-3">
-                <span className="w-6 h-6 bg-[#0055b8] text-white rounded-full flex items-center justify-center font-black">1</span>
-                Mahsulotlar
-              </h3>
-              <div className="grid grid-cols-3 gap-3">
+              <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-6">Mahsulot</h3>
+              <div className="grid grid-cols-3 gap-2">
                 {[0, 1, 2].map(idx => (
-                  <div key={idx} className="relative aspect-square group">
-                    <div className={`w-full h-full rounded-2xl border-2 border-dashed transition-all overflow-hidden flex items-center justify-center ${productImages[idx] ? 'border-transparent shadow-md' : 'border-slate-100 bg-slate-50 group-hover:border-[#0055b8]'}`}>
-                      {productImages[idx] ? (
-                        <img src={productImages[idx]!} className="w-full h-full object-cover" alt="Product" />
-                      ) : (
-                        <div className="text-center p-2">
-                          <svg className="w-6 h-6 mx-auto text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
-                          <input type="file" onChange={(e) => handleUploadProduct(idx, e)} className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" />
-                        </div>
-                      )}
-                    </div>
+                  <div key={idx} className="relative aspect-square rounded-xl border-2 border-dashed border-slate-200 overflow-hidden flex items-center justify-center bg-slate-50">
+                    {productImages[idx] ? <img src={productImages[idx]!} className="w-full h-full object-cover" /> : <input type="file" onChange={(e) => handleUploadProduct(idx, e)} className="absolute inset-0 opacity-0 cursor-pointer" />}
+                    {!productImages[idx] && <svg className="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>}
                   </div>
                 ))}
               </div>
             </div>
-
             <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-100">
-              <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-3">
-                <span className="w-6 h-6 bg-slate-900 text-white rounded-full flex items-center justify-center font-black">2</span>
-                Stil (Reference)
-              </h3>
-              <div className="grid grid-cols-3 gap-3">
+              <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-6">Uslub</h3>
+              <div className="grid grid-cols-3 gap-2">
                 {[0, 1, 2].map(idx => (
-                  <div key={idx} className="relative aspect-square group">
-                    <div className={`w-full h-full rounded-2xl border-2 border-dashed transition-all overflow-hidden flex items-center justify-center ${styleImages[idx] ? 'border-transparent shadow-md' : 'border-slate-100 bg-slate-50 group-hover:border-slate-900'}`}>
-                      {styleImages[idx] ? (
-                        <img src={styleImages[idx]!} className="w-full h-full object-cover" alt="Style" />
-                      ) : (
-                        <div className="text-center p-2">
-                          <svg className="w-6 h-6 mx-auto text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
-                          <input type="file" onChange={(e) => handleUploadStyle(idx, e)} className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" />
-                        </div>
-                      )}
-                    </div>
+                  <div key={idx} className="relative aspect-square rounded-xl border-2 border-dashed border-slate-200 overflow-hidden flex items-center justify-center bg-slate-50">
+                    {styleImages[idx] ? <img src={styleImages[idx]!} className="w-full h-full object-cover" /> : <input type="file" onChange={(e) => handleUploadStyle(idx, e)} className="absolute inset-0 opacity-0 cursor-pointer" />}
+                    {!styleImages[idx] && <svg className="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>}
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-10 rounded-[3.5rem] shadow-2xl border border-slate-100 space-y-8">
-            <div className="space-y-3">
-              <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-4">Ijodiy buyruq</label>
-              <textarea 
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                className="w-full p-6 bg-slate-50 border border-slate-100 rounded-[2.5rem] text-sm font-bold focus:ring-4 focus:ring-blue-100 focus:border-[#0055b8] outline-none h-32 resize-none transition-all placeholder:text-slate-300 shadow-inner"
-                placeholder="Mahsulot haqida batafsil yozing..."
-              />
-            </div>
-
-            <div className="flex flex-col md:flex-row items-center gap-6">
-              <div className="w-full md:w-1/3 space-y-3">
-                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-4">Ratio</label>
-                <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black outline-none hover:border-[#0055b8] transition-all cursor-pointer shadow-sm">
-                  <option value="3:4">3:4 Portrait</option>
-                  <option value="4:3">4:3 Landscape</option>
-                  <option value="1:1">1:1 Square</option>
-                </select>
-              </div>
+          <div className="bg-white p-8 rounded-[3rem] shadow-2xl space-y-6">
+            <textarea 
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              className="w-full p-6 bg-slate-50 rounded-3xl text-sm border-none focus:ring-2 focus:ring-[#0055b8] h-32"
+              placeholder="Tavsif yozing (masalan: oq fonda, cinematic lighting)..."
+            />
+            <div className="flex gap-4">
+              <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} className="flex-1 p-4 bg-slate-50 rounded-2xl text-xs font-bold border-none">
+                <option value="3:4">3:4</option>
+                <option value="1:1">1:1</option>
+                <option value="16:9">16:9</option>
+              </select>
               <button 
                 onClick={handleGenerate}
                 disabled={loading}
-                className={`w-full md:w-2/3 py-6 mt-6 rounded-[2.5rem] font-black text-xl transition-all flex items-center justify-center gap-4 active:scale-95 shadow-3xl ${loading ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-[#0055b8] text-white hover:bg-blue-700'}`}
+                className="flex-[2] bg-[#0055b8] text-white p-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all disabled:opacity-50"
               >
-                {loading ? <div className="w-8 h-8 border-4 border-slate-300 border-t-blue-500 rounded-full animate-spin"></div> : "Yaratish"}
+                {loading ? "Yaratilmoqda..." : "Yaratish"}
               </button>
             </div>
           </div>
         </div>
 
-        <div className="lg:col-span-6 bg-white p-10 rounded-[4rem] shadow-2xl border border-slate-100 flex flex-col space-y-10 min-h-[700px]">
-          <h3 className="text-3xl font-black text-slate-800 uppercase italic tracking-tighter">Natija</h3>
-          <div className="flex-1 relative bg-slate-50 rounded-[3rem] overflow-hidden border border-slate-100 flex items-center justify-center shadow-inner">
+        <div className="lg:col-span-6 bg-white p-10 rounded-[4rem] shadow-2xl border border-slate-100 min-h-[600px] flex flex-col">
+          <h3 className="text-xl font-black text-slate-800 uppercase italic mb-6">Natija</h3>
+          <div className="flex-1 bg-slate-50 rounded-3xl overflow-hidden flex items-center justify-center border-2 border-dashed border-slate-100">
             {loading ? (
-              <div className="text-center space-y-6">
-                <div className="w-16 h-16 bg-white rounded-full shadow-2xl flex items-center justify-center mx-auto">
-                   <div className="w-8 h-8 border-4 border-[#0055b8] border-t-transparent animate-spin rounded-full"></div>
-                </div>
-                <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest">Generatsiya ketmoqda...</p>
-              </div>
+              <div className="animate-spin w-10 h-10 border-4 border-[#0055b8] border-t-transparent rounded-full"></div>
             ) : generatedImage ? (
-              <img src={generatedImage} className="w-full h-full object-contain animate-fadeIn" alt="Result" />
+              <img src={generatedImage} className="w-full h-full object-contain" />
             ) : (
-              <p className="text-xs font-black uppercase tracking-widest text-slate-400 italic opacity-40">Rasm kutilmoqda</p>
+              <p className="text-slate-300 font-bold italic">Rasm kutilmoqda</p>
             )}
           </div>
           {generatedImage && (
-            <a 
-              href={generatedImage} 
-              download="umari_studio_result.png" 
-              className="w-full py-7 bg-[#22c55e] text-white rounded-[2.5rem] text-center font-black uppercase italic text-2xl tracking-widest shadow-2xl hover:bg-green-600 transition-all active:scale-95"
-            >
-              Yuklab Olish
-            </a>
+            <a href={generatedImage} download="umari_result.png" className="mt-6 w-full py-5 bg-[#22c55e] text-white rounded-3xl text-center font-black uppercase tracking-widest">Yuklab Olish</a>
           )}
         </div>
       </div>

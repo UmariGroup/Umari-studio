@@ -3,11 +3,9 @@ import { GoogleGenAI, GenerateContentResponse, Modality } from "@google/genai";
 
 export class GeminiService {
   private static getAI() {
-    const apiKey = process.env.API_KEY || "";
+    const apiKey = process.env.API_KEY;
     if (!apiKey) {
-      // API kalit bo'lmasa ham SDK'ni boshlamaslikka harakat qilamiz, 
-      // chunki SDK ichkarida "API Key must be set" xatosini tashlaydi.
-      throw new Error("API_KEY_MISSING");
+      throw new Error("API_KEY_REQUIRED");
     }
     return new GoogleGenAI({ apiKey });
   }
@@ -29,18 +27,18 @@ export class GeminiService {
     const errorMessage = error?.message || String(error);
     console.error("API Error Detailed:", error);
 
-    // Agar xatolik kalit bilan bog'liq bo'lsa
+    // Agar kalit yo'q bo'lsa yoki ruxsat berilmagan bo'lsa (403), dialog ochish
     if (
-      errorMessage.includes("API_KEY_MISSING") ||
-      errorMessage.includes("permission") || 
-      errorMessage.includes("403") || 
-      errorMessage.includes("not found") ||
-      errorMessage.includes("API Key")
+      errorMessage.includes("API_KEY_REQUIRED") ||
+      errorMessage.includes("API Key") ||
+      errorMessage.includes("403") ||
+      errorMessage.includes("permission") ||
+      errorMessage.includes("not found")
     ) {
       if (typeof window !== 'undefined' && (window as any).aistudio) {
-        window.aistudio.openSelectKey();
+        (window as any).aistudio.openSelectKey();
       }
-      throw new Error("API ruxsat xatosi (403). Iltimos, Gemini API kalitini qayta tanlang yoki to'lov holatini tekshiring.");
+      throw new Error("Iltimos, API kalitni tanlang (billing yoqilgan bo'lishi kerak).");
     }
 
     throw error;
@@ -54,7 +52,6 @@ export class GeminiService {
   ): Promise<string> {
     try {
       const ai = this.getAI();
-      // Bepul/Flash tier uchun gemini-2.5-flash-image'dan foydalanamiz
       const model = 'gemini-2.5-flash-image'; 
       const parts: any[] = [];
       
@@ -66,20 +63,18 @@ export class GeminiService {
         if (img) parts.push({ inlineData: { data: img.split(',')[1], mimeType: 'image/png' } });
       });
 
-      parts.push({ text: `Professional marketplace product photography, high resolution, clean background. Instruction: ${prompt}` });
+      parts.push({ text: `Professional marketplace product photography, high resolution. Prompt: ${prompt}` });
 
       const response = await ai.models.generateContent({
         model,
         contents: { parts },
-        config: { 
-          imageConfig: { aspectRatio: aspectRatio as any }
-        }
+        config: { imageConfig: { aspectRatio: aspectRatio as any } }
       });
 
       for (const part of response.candidates?.[0]?.content?.parts || []) {
         if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
       }
-      throw new Error("Rasm generatsiya qilinmadi.");
+      throw new Error("Rasm yaratilmadi.");
     } catch (error) {
       return this.handleApiError(error);
     }
@@ -91,10 +86,10 @@ export class GeminiService {
       const model = 'gemini-3-flash-preview';
       const chat = ai.chats.create({
         model,
-        config: { systemInstruction: "Siz Umari Studio mutaxassisisiz. O'zbek tilida qisqa va aniq javob bering." }
+        config: { systemInstruction: "Siz Umari Studio mutaxassisisiz. O'zbek tilida qisqa javob bering." }
       });
       const response = await chat.sendMessage({ message });
-      return response.text || "Javob olib bo'lmadi.";
+      return response.text || "Xatolik.";
     } catch (error) {
       return this.handleApiError(error);
     }
@@ -118,8 +113,6 @@ export class GeminiService {
       }
 
       const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
-      if (!downloadLink) throw new Error("Video topilmadi.");
-
       const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
       const blob = await response.blob();
       return URL.createObjectURL(blob);
