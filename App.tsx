@@ -66,7 +66,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-[#f8fafc] font-sans">
+    <div className="min-h-screen flex flex-col md:flex-row bg-[#f8fafc] font-sans" style={{ letterSpacing: '0.01em', wordSpacing: '0.16em' }}>
       <aside className="hidden md:flex flex-col w-72 bg-[#0055b8] text-white p-6 space-y-8 fixed h-full shadow-2xl z-20 border-r border-white/10">
         <div className="py-2">
           <div className="w-full bg-white rounded-[2.5rem] p-6 shadow-2xl transform hover:scale-105 transition-all duration-500 cursor-pointer">
@@ -80,7 +80,16 @@ const App: React.FC = () => {
 
         <div className="p-5 bg-white/5 rounded-3xl border border-white/10 backdrop-blur-xl space-y-4">
           <div className="flex justify-between items-center">
-            <span className="text-[10px] font-black uppercase text-blue-100 tracking-widest">Balans</span>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black uppercase text-blue-100 tracking-widest">Balans</span>
+              <svg width="70" height="30" viewBox="0 0 70 30" className="opacity-90">
+                <rect x="0" y="0" width="10" height="30" rx="2" fill="#ffffff" fillOpacity="0.95" />
+                <rect x="14" y="6" width="10" height="24" rx="2" fill="#ffffff" fillOpacity="0.85" />
+                <rect x="28" y="10" width="10" height="20" rx="2" fill="#ffffff" fillOpacity="0.75" />
+                <rect x="42" y="15" width="10" height="15" rx="2" fill="#ffffff" fillOpacity="0.6" />
+                <rect x="56" y="23" width="10" height="7" rx="2" fill="#ffffff" fillOpacity="0.45" />
+              </svg>
+            </div>
             <span className="text-xs font-black bg-[#22c55e] px-4 py-1.5 rounded-full shadow-xl border border-white/20">{userBalance} dona</span>
           </div>
           <button onClick={() => setShowPricing(true)} className="w-full py-3.5 bg-white text-[#0055b8] rounded-2xl text-[11px] font-black uppercase hover:bg-blue-50 transition-all shadow-xl active:scale-95">To'ldirish</button>

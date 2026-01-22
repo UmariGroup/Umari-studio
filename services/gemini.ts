@@ -63,7 +63,7 @@ export class GeminiService {
         }
       });
 
-      const instruction = `UMARI STUDIO PROFESSIONAL: Create a marketplace image. Use provided styles. ${prompt}`;
+      const instruction = `UMARI STUDIO PROFESSIONAL: Create a marketplace image. Use provided styles. The image must include a clear call-to-action button that reads \"Ishni boshlash\" (Uzbek) — do NOT use the word \"Yaratish\". Keep the UMARI logo intact and unchanged in its colors and placement. ${prompt}`;
       parts.push({ text: instruction });
 
       const response = await ai.models.generateContent({
