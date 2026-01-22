@@ -120,7 +120,7 @@ const App: React.FC = () => {
 
       <main className="flex-1 md:ml-72 p-4 md:p-12 pb-32">
         <div className="max-w-7xl mx-auto">
-          {activeView === AppView.MARKETPLACE && <MarketplaceStudio />}
+          {activeView === AppView.MARKETPLACE && <MarketplaceStudio userBalance={userBalance} setUserBalance={setUserBalance} openPricing={() => setShowPricing(true)} />}
           {activeView === AppView.VIDEO && <VideoStudio />}
           {activeView === AppView.CHAT && <ChatBot />}
         </div>

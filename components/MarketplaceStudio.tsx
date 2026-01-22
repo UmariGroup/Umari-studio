@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { GeminiService } from '../services/gemini';
 
-const MarketplaceStudio: React.FC = () => {
+const MarketplaceStudio: React.FC<{ userBalance: number; setUserBalance: React.Dispatch<React.SetStateAction<number>>; openPricing: () => void }> = ({ userBalance, setUserBalance, openPricing }) => {
   const [productImages, setProductImages] = useState<(string | null)[]>([null, null, null]);
   const [styleImages, setStyleImages] = useState<(string | null)[]>([null, null, null]);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
@@ -36,35 +36,17 @@ const MarketplaceStudio: React.FC = () => {
     }
   };
 
-  const handleGenerate = async () => {
-    const activeProducts = productImages.filter(img => img !== null) as string[];
-    const activeStyles = styleImages.filter(img => img !== null) as string[];
-    
-    if (activeProducts.length === 0) {
-      alert("Iltimos, kamida bitta mahsulot rasmini yuklang.");
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      const result = await GeminiService.generateMarketplaceImage(
-        prompt, 
-        activeProducts, 
-        activeStyles,
-        aspectRatio
-      );
-      setGeneratedImage(result);
-    } catch (error) {
-      alert(error instanceof Error ? error.message : "Xatolik yuz berdi");
-    } finally {
-      setLoading(false);
-    }
-  };
+              </button>
+            </div>
+            {userBalance <= 5 && (
+              <p className="text-xs text-yellow-700 font-black mt-3">Faqat {userBalance} dona qoldi — tezroq <button onClick={openPricing} className="underline">Pro versiyani sotib oling</button></p>
+            )}
+          </div>
 
   return (
     <div className="space-y-10 animate-fadeIn">
       {/* Dynamic Workspace Header */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100">
+      <header className="relative flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100">
         <div className="flex items-center gap-6">
           <div className="p-4 bg-slate-900 rounded-[1.5rem] shadow-xl">
              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"></path></svg>
@@ -74,6 +56,12 @@ const MarketplaceStudio: React.FC = () => {
             <p className="text-slate-400 font-bold text-[10px] tracking-[0.3em] uppercase mt-1">AI-Powered Generation Engine</p>
           </div>
         </div>
+        {userBalance <= 5 && (
+          <div className="absolute top-4 right-4 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-2xl px-4 py-2 flex items-center gap-3 shadow-lg animate-pulse">
+            <span className="w-2 h-2 bg-yellow-500 rounded-full animate-ping" />
+            <span className="text-xs font-black uppercase tracking-tighter">{userBalance} dona qoldi — <button onClick={openPricing} className="underline">Pro versiyani sotib oling</button></span>
+          </div>
+        )}
         <div className="flex items-center gap-4 bg-[#0055b8]/5 px-8 py-4 rounded-3xl border border-blue-100">
           <div className="relative flex">
             <span className="absolute inset-0 bg-blue-500 rounded-full animate-ping opacity-20 scale-150"></span>

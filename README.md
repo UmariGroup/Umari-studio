@@ -23,4 +23,9 @@ View your app in AI Studio: https://ai.studio/apps/drive/1vx_ZOe71v_Gy4bWTwn4ITY
 4. Run the frontend in a separate terminal:
    `npm run dev`
 
+Troubleshooting — "Server proxy error":
+- Ensure the server proxy is running: open a terminal and run `npm run server` (defaults to port 3001). Check the terminal for "Server proxy listening on http://localhost:3001".
+- By default the Vite dev server is configured to proxy `/api` to `http://localhost:3001`. If your server runs on a different host/port set `VITE_API_SERVER_URL` in `.env.local` (for example `VITE_API_SERVER_URL=http://localhost:3001`) and restart the dev server.
+- If you still see "Server proxy error", open DevTools → Network and inspect the POST `/api/generate` response to see the server error message (or check server terminal logs).
+
 Security note: If you accidentally exposed an API key (for example by pasting it into a chat or committing it), rotate/revoke that key immediately in Google Cloud Console.

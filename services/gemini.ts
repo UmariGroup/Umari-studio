@@ -61,18 +61,35 @@ export class GeminiService {
     aspectRatio: string = "3:4"
   ): Promise<string> {
     try {
-      // If running in the browser, forward to the server-side proxy so the API key stays secret
+      // If running in the browser, forward to the server-side proxy so the API key stays secret.
+      // Use VITE_API_SERVER_URL to override base (useful if backend runs on different host/port).
       if (typeof window !== 'undefined') {
-        const res = await fetch('/api/generate', {
+        const apiServer = (import.meta.env.VITE_API_SERVER_URL as string | undefined) ?? '';
+        const base = apiServer ? apiServer.replace(/\/$/, '') : '';
+        const url = base ? `${base}/api/generate` : '/api/generate';
+
+        const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prompt, productImages, styleImages, aspectRatio })
         });
+
         if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text || 'Server proxy error');
+          let errText = `Server proxy error: ${res.status}`;
+          try {
+            const jsonErr = await res.json();
+            errText = jsonErr?.error || JSON.stringify(jsonErr) || errText;
+          } catch (_) {
+            try {
+              const raw = await res.text();
+              if (raw) errText = raw;
+            } catch (_) {}
+          }
+          throw new Error(errText);
         }
+
         const json = await res.json();
+        if (!json?.image) throw new Error('Server proxy did not return an image.');
         return json.image;
       }
 
