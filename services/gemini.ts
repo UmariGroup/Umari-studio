@@ -3,8 +3,22 @@ import { GoogleGenAI, Type, GenerateContentResponse, Modality } from "@google/ge
 
 export class GeminiService {
   private static getAI() {
-    // Har doim yangi GoogleGenAI instance yaratamiz, eng yangi API kalitni olish uchun
-    return new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // Har doim yangi GoogleGenAI instance yaratamiz — brauzer muhitida VITE env yoki aistudio orqali kalitni oladi.
+    if (typeof window !== 'undefined' && (window as any).aistudio) {
+      // Agar aistudio select/manager API taqdim etsa, undan kalitni olishga harakat qilamiz.
+      const aistudioKey = (window as any).aistudio.getSelectedApiKey ? (window as any).aistudio.getSelectedApiKey() : undefined;
+      const apiKey = aistudioKey ?? (import.meta.env.VITE_API_KEY as string | undefined);
+      if (!apiKey) {
+        throw new Error("API kalit topilmadi. ‘API Kalitni Tanlash’ tugmasini bosib yoki .env.local ichiga VITE_API_KEY ni qo'ying.");
+      }
+      return new GoogleGenAI({ apiKey });
+    }
+
+    const key = import.meta.env.VITE_API_KEY as string | undefined;
+    if (!key) {
+      throw new Error("API kalit brauzer muhitida topilmadi. Iltimos, .env.local fayliga VITE_API_KEY qo'ying yoki server-side proxy ishlating.");
+    }
+    return new GoogleGenAI({ apiKey: key });
   }
 
   static async checkApiKey() {
@@ -47,6 +61,21 @@ export class GeminiService {
     aspectRatio: string = "3:4"
   ): Promise<string> {
     try {
+      // If running in the browser, forward to the server-side proxy so the API key stays secret
+      if (typeof window !== 'undefined') {
+        const res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt, productImages, styleImages, aspectRatio })
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || 'Server proxy error');
+        }
+        const json = await res.json();
+        return json.image;
+      }
+
       const ai = this.getAI();
       const model = 'gemini-2.5-flash-image';
       const parts: any[] = [];
