@@ -2,7 +2,8 @@
 export enum AppView {
   MARKETPLACE = 'marketplace',
   VIDEO = 'video',
-  CHAT = 'chat'
+  CHAT = 'chat',
+  COPYWRITER = 'copywriter'
 }
 
 export interface GeneratedAsset {
