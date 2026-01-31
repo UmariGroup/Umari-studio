@@ -1,52 +1,85 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GeminiService } from '../services/gemini';
 
 const MarketplaceStudio: React.FC = () => {
-  const [productImages, setProductImages] = useState<(string | null)[]>([null, null, null]);
-  const [styleImages, setStyleImages] = useState<(string | null)[]>([null, null, null]);
+  const [productImages, setProductImages] = useState<(string | null)[]>([null]);
+  const [styleImages, setStyleImages] = useState<(string | null)[]>([null]);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [enhancing, setEnhancing] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [aspectRatio, setAspectRatio] = useState('3:4');
+  const [countdown, setCountdown] = useState(9);
 
-  const handleUploadProduct = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    let timer: any;
+    if (loading) {
+      timer = setInterval(() => {
+        setCountdown(prev => (prev > 1 ? prev - 1 : 1));
+      }, 1000);
+    } else {
+      setCountdown(9);
+    }
+    return () => clearInterval(timer);
+  }, [loading]);
+
+  const handleUpload = (
+    index: number, 
+    e: React.ChangeEvent<HTMLInputElement>, 
+    type: 'product' | 'style'
+  ) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        const newImages = [...productImages];
+        const state = type === 'product' ? productImages : styleImages;
+        const setState = type === 'product' ? setProductImages : setStyleImages;
+        
+        const newImages = [...state];
         newImages[index] = reader.result as string;
-        setProductImages(newImages);
+        
+        if (newImages.length < 5 && newImages[index] !== null) {
+          newImages.push(null);
+        }
+        setState(newImages);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleUploadStyle = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const newImages = [...styleImages];
-        newImages[index] = reader.result as string;
-        setStyleImages(newImages);
-      };
-      reader.readAsDataURL(file);
+  const removeImage = (index: number, type: 'product' | 'style') => {
+    const state = type === 'product' ? productImages : styleImages;
+    const setState = type === 'product' ? setProductImages : setStyleImages;
+    
+    let newImages = state.filter((_, i) => i !== index);
+    if (newImages.length === 0 || newImages[newImages.length - 1] !== null) {
+      newImages.push(null);
+    }
+    setState(newImages);
+  };
+
+  const handleMagicWand = async () => {
+    if (!prompt.trim()) return;
+    setEnhancing(true);
+    try {
+      const enhanced = await GeminiService.enhancePrompt(prompt);
+      setPrompt(enhanced);
+    } finally {
+      setEnhancing(false);
     }
   };
 
   const handleGenerate = async () => {
     const activeProducts = productImages.filter(img => img !== null) as string[];
-    
     if (activeProducts.length === 0) {
-      alert("Iltimos, mahsulot rasmini yuklang.");
+      alert("Iltimos, kamida bitta mahsulot rasmini yuklang.");
       return;
     }
 
     setLoading(true);
+    setGeneratedImage(null);
     try {
-      // Rasm generatsiyasi Flash modeli bilan BEPUL ishlaydi
       const result = await GeminiService.generateMarketplaceImage(
         prompt, 
         activeProducts, 
@@ -70,45 +103,56 @@ const MarketplaceStudio: React.FC = () => {
           </div>
           <div>
             <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase italic">Market Studio</h2>
-            <p className="text-slate-400 font-bold text-[10px] tracking-[0.3em] uppercase mt-1">Free AI Production</p>
+            <p className="text-slate-400 font-bold text-[10px] tracking-[0.3em] uppercase mt-1">Free AI Image Production</p>
           </div>
         </div>
         <div className="flex items-center gap-4 bg-green-50 px-8 py-4 rounded-3xl border border-green-100">
-          <span className="text-xs font-black text-green-600 uppercase tracking-widest italic">Bepul Rejim Faol</span>
+          <span className="text-xs font-black text-green-600 uppercase tracking-widest italic animate-pulse">Bepul Rejim Faol</span>
         </div>
       </header>
 
       <div className="grid lg:grid-cols-12 gap-10 items-start">
         <div className="lg:col-span-6 space-y-8">
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="space-y-6">
             <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-100">
-              <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-6">Mahsulot</h3>
-              <div className="grid grid-cols-3 gap-2">
-                {[0, 1, 2].map(idx => (
-                  <div key={idx} className="relative aspect-square rounded-xl border-2 border-dashed border-slate-200 overflow-hidden flex items-center justify-center bg-slate-50 transition-all hover:border-[#0055b8]">
-                    {productImages[idx] ? (
-                      <img src={productImages[idx]!} className="w-full h-full object-cover" />
+              <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-6">Mahsulot Rasmlari</h3>
+              <div className="flex flex-wrap gap-3">
+                {productImages.map((img, idx) => (
+                  <div key={idx} className="relative w-20 h-20 rounded-2xl border-2 border-dashed border-slate-200 overflow-hidden flex items-center justify-center bg-slate-50 transition-all hover:border-[#0055b8] group">
+                    {img ? (
+                      <>
+                        <img src={img} className="w-full h-full object-cover" />
+                        <button onClick={() => removeImage(idx, 'product')} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                      </>
                     ) : (
                       <>
-                        <input type="file" onChange={(e) => handleUploadProduct(idx, e)} className="absolute inset-0 opacity-0 cursor-pointer" />
-                        <svg className="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                        <input type="file" onChange={(e) => handleUpload(idx, e, 'product')} className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" />
+                        <svg className="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
                       </>
                     )}
                   </div>
                 ))}
               </div>
             </div>
+
             <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-100">
-              <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-6">Uslub</h3>
-              <div className="grid grid-cols-3 gap-2">
-                {[0, 1, 2].map(idx => (
-                  <div key={idx} className="relative aspect-square rounded-xl border-2 border-dashed border-slate-200 overflow-hidden flex items-center justify-center bg-slate-50 transition-all">
-                    {styleImages[idx] ? (
-                      <img src={styleImages[idx]!} className="w-full h-full object-cover" />
+              <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-6">Uslub Rasmlari (Referens)</h3>
+              <div className="flex flex-wrap gap-3">
+                {styleImages.map((img, idx) => (
+                  <div key={idx} className="relative w-20 h-20 rounded-2xl border-2 border-dashed border-slate-200 overflow-hidden flex items-center justify-center bg-slate-50 transition-all hover:border-[#0055b8] group">
+                    {img ? (
+                      <>
+                        <img src={img} className="w-full h-full object-cover" />
+                        <button onClick={() => removeImage(idx, 'style')} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                      </>
                     ) : (
                       <>
-                        <input type="file" onChange={(e) => handleUploadStyle(idx, e)} className="absolute inset-0 opacity-0 cursor-pointer" />
-                        <svg className="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                        <input type="file" onChange={(e) => handleUpload(idx, e, 'style')} className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" />
+                        <svg className="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
                       </>
                     )}
                   </div>
@@ -118,28 +162,46 @@ const MarketplaceStudio: React.FC = () => {
           </div>
 
           <div className="bg-white p-8 rounded-[3rem] shadow-2xl space-y-6">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Prompt</label>
+            <div className="space-y-2 relative">
+              <div className="flex justify-between items-center px-4">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Prompt</label>
+                <button 
+                  onClick={handleMagicWand} 
+                  disabled={enhancing || !prompt.trim()}
+                  className={`flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full transition-all ${
+                    enhancing ? 'bg-blue-100 text-blue-500' : 'bg-[#0055b8]/10 text-[#0055b8] hover:bg-[#0055b8]/20'
+                  }`}
+                >
+                  <svg className={`w-3 h-3 ${enhancing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                  {enhancing ? 'Yaxshilanmoqda...' : 'Magic Prompt'}
+                </button>
+              </div>
               <textarea 
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                className="w-full p-6 bg-slate-50 rounded-[2rem] text-sm border-none focus:ring-4 focus:ring-blue-50 h-32 resize-none transition-all shadow-inner"
-                placeholder="Mahsulot tavsifini yozing..."
+                className="w-full p-6 bg-slate-50 rounded-[2rem] text-sm font-bold border-none focus:ring-4 focus:ring-blue-50 h-32 resize-none transition-all shadow-inner"
+                placeholder="Mahsulot haqida qisqacha yozing, AI uni professional promptga aylantiradi..."
               />
             </div>
             
-            <div className="flex gap-4">
-              <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} className="flex-1 p-4 bg-slate-50 rounded-2xl text-xs font-black border-none cursor-pointer">
-                <option value="3:4">3:4</option>
-                <option value="1:1">1:1</option>
-                <option value="16:9">16:9</option>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} className="sm:flex-1 p-5 bg-slate-50 rounded-2xl text-xs font-black border-none cursor-pointer">
+                <option value="3:4">O'lcham: 3:4 (Portrait)</option>
+                <option value="4:3">O'lcham: 4:3 (Landscape)</option>
+                <option value="1:1">O'lcham: 1:1 (Kvadrat)</option>
+                <option value="16:9">O'lcham: 16:9 (Cinematic)</option>
               </select>
               <button 
                 onClick={handleGenerate}
                 disabled={loading}
-                className="flex-[2] bg-[#0055b8] text-white p-4 rounded-[1.5rem] font-black uppercase tracking-widest shadow-xl active:scale-95 disabled:opacity-50"
+                className="sm:flex-[2] bg-[#0055b8] text-white p-5 rounded-[1.5rem] font-black uppercase tracking-widest shadow-xl active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {loading ? "AI yaratmoqda..." : "Rasmni Yaratish"}
+                {loading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Yaratilmoqda...
+                  </>
+                ) : "Rasmni Yaratish"}
               </button>
             </div>
           </div>
@@ -152,14 +214,21 @@ const MarketplaceStudio: React.FC = () => {
           
           <div className="flex-1 bg-[#f1f5f9] rounded-[3rem] overflow-hidden flex items-center justify-center border-2 border-dashed border-slate-200 relative">
             {loading ? (
-              <div className="text-center space-y-4">
-                <div className="animate-spin w-16 h-16 border-4 border-[#0055b8] border-t-transparent rounded-full mx-auto"></div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Processing...</p>
+              <div className="text-center space-y-6">
+                <div className="relative">
+                  <div className="animate-spin w-24 h-24 border-8 border-[#0055b8]/10 border-t-[#0055b8] rounded-full mx-auto"></div>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-2xl font-black text-[#0055b8] italic">{countdown}</span>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[12px] font-black text-slate-800 uppercase tracking-widest animate-pulse">Tayyorlanmoqda, iltimos kuting</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Processing Image...</p>
+                </div>
               </div>
             ) : generatedImage ? (
               <div className="w-full h-full relative group">
-                <img src={generatedImage} className="w-full h-full object-contain pointer-events-none animate-fadeIn" alt="Result" />
-                <div className="absolute inset-0 pointer-events-none"></div>
+                <img src={generatedImage} className="w-full h-full object-contain animate-fadeIn" alt="Result" />
               </div>
             ) : (
               <div className="text-center opacity-30">
@@ -170,15 +239,13 @@ const MarketplaceStudio: React.FC = () => {
           </div>
           
           {generatedImage && (
-            <a href={generatedImage} download="umari_result.png" className="mt-8 w-full py-6 bg-[#22c55e] text-white rounded-[2rem] text-center font-black uppercase italic text-xl tracking-widest shadow-2xl hover:bg-green-600 transition-all">Yuklab Olish</a>
+            <a href={generatedImage} download="umari_result.png" className="mt-8 w-full py-6 bg-[#22c55e] text-white rounded-[2rem] text-center font-black uppercase italic text-xl tracking-widest shadow-2xl hover:bg-green-600 transition-all flex items-center justify-center gap-3">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              Yuklab Olish
+            </a>
           )}
         </div>
       </div>
-      
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
-        .animate-fadeIn { animation: fadeIn 0.5s ease-out; }
-      `}</style>
     </div>
   );
 };

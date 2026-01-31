@@ -1,65 +1,97 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GeminiService } from '../services/gemini';
 
-interface ParsedResult {
-  titleUz: string;
-  titleRu: string;
-  category: string;
-  descUz: string;
-  descRu: string;
-  specs: string;
-  seo: string;
-}
+const MARKETPLACES = ['Uzum Market', 'ANAMARKET', 'Yandex', 'Ozon', 'WB'];
+
+const FIELD_LABELS: Record<string, string> = {
+  CAT: '1. Kategoriya / Категория',
+  NAME: '2. Mahsulot nomi / Название',
+  COUNTRY: '3. Ishlab chiqarilgan davlat / Страна',
+  BRAND: '4. Brend / Brend',
+  MODEL: '5. Model / Модель',
+  WARRANTY: '6. Kafolat / Гарантия',
+  SHORT_DESC: '7. Qisqa tavsif / Краткое описание',
+  FULL_DESC: '8. To\'liq tavsif / Полное описание',
+  PHOTOS_INFO: '9. Rasmlar bo\'yicha tavsiya / Фотографии',
+  VIDEO_REC: '10. Video tavsiyalar / Видео',
+  SPECS: '11. Xususiyatlar / Характеристики',
+  PROPS: '12. Mahsulot afzalliklari / Свойства',
+  INSTR: '13. Yo\'riqnoma / Инструкция',
+  SIZE: '14. O\'lchamlar / Размерная сетка',
+  COMP: '15. Tarkibi / Состав',
+  CARE: '16. Parvarishlash / Уход',
+  SKU: '17. SKU KOD',
+  IKPU: '18. IKPU (ИКПУ)'
+};
+
+const TECHNICAL_DESC: Record<string, string> = {
+  SKU: "Mahsulotni inventarizatsiya qilish va omborda aniqlash uchun ishlatiladigan noyob identifikator.",
+  IKPU: "O'zbekiston Respublikasi mahsulot va xizmatlarning yagona elektron tasniflagichi (Soliq tizimi uchun zarur)."
+};
 
 const CopywriterStudio: React.FC = () => {
-  const [images, setImages] = useState<(string | null)[]>([null, null, null]);
-  const [parsedResult, setParsedResult] = useState<ParsedResult | null>(null);
+  const [selectedMarketplace, setSelectedMarketplace] = useState(MARKETPLACES[0]);
+  const [images, setImages] = useState<string[]>([]);
+  const [categoryRef, setCategoryRef] = useState('');
+  const [results, setResults] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const [copiedSection, setCopiedSection] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(10);
+  const accumulatedText = useRef('');
 
-  const handleUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const newImages = [...images];
-        newImages[index] = reader.result as string;
-        setImages(newImages);
-      };
-      reader.readAsDataURL(file);
+  useEffect(() => {
+    let timer: any;
+    if (loading) {
+      timer = setInterval(() => setCountdown(prev => (prev > 1 ? prev - 1 : 1)), 1000);
+    } else {
+      setCountdown(10);
+    }
+    return () => clearInterval(timer);
+  }, [loading]);
+
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      const remaining = 3 - images.length;
+      const fileList = Array.from(files).slice(0, remaining) as File[];
+      fileList.forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => setImages(prev => [...prev, reader.result as string].slice(0, 3));
+        reader.readAsDataURL(file);
+      });
     }
   };
 
-  const parseText = (text: string): ParsedResult => {
-    const getSection = (key: string) => {
-      const regex = new RegExp(`---${key}---([\\s\\S]*?)(?=---[A-Z_]+---|$)`);
-      return text.match(regex)?.[1]?.trim() || '';
-    };
-
-    return {
-      titleUz: getSection('SARLAVHA_UZ'),
-      titleRu: getSection('SARLAVHA_RU'),
-      category: getSection('KATEGORIYA'),
-      descUz: getSection('TAVSIF_UZ'),
-      descRu: getSection('TAVSIF_RU'),
-      specs: getSection('XUSUSIYATLAR'),
-      seo: getSection('SEO'),
-    };
+  const parseIncremental = (text: string) => {
+    const data: Record<string, string> = {};
+    const keys = Object.keys(FIELD_LABELS);
+    keys.forEach((key, index) => {
+      const nextKey = keys[index + 1];
+      const regex = new RegExp(`---${key}---([\\s\\S]*?)(?=---${nextKey}---|$)`);
+      const match = text.match(regex);
+      if (match) {
+        data[key] = match[1].trim();
+      }
+    });
+    return data;
   };
 
   const handleGenerate = async () => {
-    const activeImages = images.filter(img => img !== null) as string[];
-    if (activeImages.length === 0) {
-      alert("Iltimos, kamida bitta mahsulot rasmini yuklang.");
-      return;
-    }
-
+    if (images.length === 0) return alert("Iltimos, rasm yuklang.");
+    
     setLoading(true);
-    setParsedResult(null);
+    setResults({});
+    accumulatedText.current = '';
+    
     try {
-      const text = await GeminiService.generateMarketplaceDescription(activeImages);
-      setParsedResult(parseText(text));
+      const stream = GeminiService.generateMarketplaceDescriptionStream(images, selectedMarketplace, categoryRef);
+      for await (const chunk of stream) {
+        if (chunk) {
+          accumulatedText.current += chunk;
+          setResults(parseIncremental(accumulatedText.current));
+        }
+      }
     } catch (error) {
       alert("Xatolik: " + (error as Error).message);
     } finally {
@@ -67,126 +99,167 @@ const CopywriterStudio: React.FC = () => {
     }
   };
 
-  const copySection = (text: string, sectionId: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedSection(sectionId);
-    setTimeout(() => setCopiedSection(null), 2000);
+  const cleanLangText = (text: string, lang: 'UZ' | 'RU') => {
+    if (!text) return '';
+    const uzPart = text.split(/RU:/i)[0].replace(/UZ:/i, '').trim();
+    const ruPart = (text.split(/RU:/i)[1] || '').trim();
+    return (lang === 'UZ' ? uzPart : ruPart).replace(/[*#_~]/g, '');
   };
 
-  const ResultCard = ({ title, content, sectionId }: { title: string, content: string, sectionId: string }) => (
-    <div className="bg-slate-50 border border-slate-100 rounded-3xl p-6 relative group transition-all hover:shadow-md">
-      <div className="flex justify-between items-center mb-3">
-        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{title}</h4>
-        <button 
-          onClick={() => copySection(content, sectionId)}
-          className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-full transition-all ${
-            copiedSection === sectionId ? 'bg-green-500 text-white' : 'bg-white text-[#0055b8] shadow-sm hover:scale-105'
-          }`}
-        >
-          {copiedSection === sectionId ? 'Nusxalandi!' : 'Nusxa olish'}
-        </button>
-      </div>
-      <div className="text-sm font-semibold text-slate-700 whitespace-pre-wrap leading-relaxed">
-        {content || 'Ma'lumot topilmadi'}
-      </div>
-    </div>
-  );
+  const copyToClipboard = (text: string, key: string, lang?: 'UZ' | 'RU') => {
+    let final = text;
+    if (lang) {
+      final = cleanLangText(text, lang);
+    } else {
+      // For technical fields, just take the first meaningful line or the whole thing
+      final = text.replace(/UZ:|RU:/gi, '').trim().split('\n')[0];
+    }
+    
+    if (!final) return;
+    navigator.clipboard.writeText(final);
+    setCopiedKey(lang ? `${key}-${lang}` : key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
   return (
-    <div className="space-y-10 animate-fadeIn">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100">
-        <div className="flex items-center gap-6">
-          <div className="p-4 bg-[#0055b8] rounded-[1.5rem] shadow-xl">
-             <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
-          </div>
-          <div>
-            <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase italic">Copywriter Studio</h2>
-            <p className="text-slate-400 font-bold text-[10px] tracking-[0.3em] uppercase mt-1">Nusxa olishga tayyor tovar kartalari</p>
-          </div>
+    <div className="space-y-10 max-w-6xl mx-auto pb-40 animate-fadeIn">
+      <section className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="flex flex-wrap gap-2">
+          {MARKETPLACES.map(mp => (
+            <button 
+              key={mp} 
+              onClick={() => setSelectedMarketplace(mp)}
+              className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                selectedMarketplace === mp ? 'bg-[#0055b8] text-white shadow-lg scale-105' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+              }`}
+            >
+              {mp}
+            </button>
+          ))}
         </div>
-        <div className="flex items-center gap-4 bg-blue-50 px-8 py-4 rounded-3xl border border-blue-100">
-          <span className="text-xs font-black text-[#0055b8] uppercase tracking-widest italic animate-pulse">Ultra SEO Mode ON</span>
+        <div className="flex items-center gap-3 bg-blue-50 px-6 py-3 rounded-2xl border border-blue-100">
+          <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+          <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Streaming AI faol</span>
         </div>
-      </header>
+      </section>
 
-      <div className="grid lg:grid-cols-12 gap-10">
+      <div className="grid lg:grid-cols-12 gap-8">
         <div className="lg:col-span-4 space-y-6">
-          <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-100">
-            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-6">Mahsulot Rasmlari</h3>
+          <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Rasmlar</h3>
+              <span className="text-xs font-black text-[#0055b8]">{images.length}/3</span>
+            </div>
             <div className="grid grid-cols-3 gap-3">
-              {[0, 1, 2].map(idx => (
-                <div key={idx} className="relative aspect-square rounded-2xl border-2 border-dashed border-slate-200 overflow-hidden flex items-center justify-center bg-slate-50 transition-all hover:border-[#0055b8] group">
-                  {images[idx] ? (
-                    <>
-                      <img src={images[idx]!} className="w-full h-full object-cover" alt={`Product ${idx}`} />
-                      <button onClick={() => {
-                        const n = [...images]; n[idx] = null; setImages(n);
-                      }} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"></path></svg>
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <input type="file" onChange={(e) => handleUpload(idx, e)} className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" />
-                      <svg className="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
-                    </>
-                  )}
+              {images.map((img, idx) => (
+                <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden shadow-md group">
+                  <img src={img} className="w-full h-full object-cover" />
+                  <button onClick={() => setImages(prev => prev.filter((_, i) => i !== idx))} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"/></svg>
+                  </button>
                 </div>
               ))}
+              {images.length < 3 && (
+                <div className="relative aspect-square rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center hover:bg-slate-50 cursor-pointer">
+                  <input type="file" onChange={handleUpload} multiple accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" />
+                  <svg className="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"/></svg>
+                </div>
+              )}
             </div>
+          </div>
+
+          <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100">
+            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Ma'lumotlar</h3>
+            <textarea 
+              value={categoryRef} 
+              onChange={(e) => setCategoryRef(e.target.value)}
+              placeholder="Mahsulot haqida ma'lumot kiriting..."
+              className="w-full p-5 bg-slate-50 rounded-2xl text-xs font-bold border-none h-40 resize-none outline-none focus:ring-4 focus:ring-blue-50 transition-all"
+            />
           </div>
 
           <button 
-            onClick={handleGenerate}
+            onClick={handleGenerate} 
             disabled={loading}
             className="w-full bg-[#0055b8] text-white py-6 rounded-[2rem] font-black uppercase tracking-[0.2em] shadow-2xl active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
           >
-            {loading ? "Tahlil ketyapti..." : "Karta Yaratish"}
+            {loading ? `GENERATSIYA: ${countdown}` : "MA'LUMOTLARNI YARATISH"}
           </button>
         </div>
 
-        <div className="lg:col-span-8 space-y-6">
-          {loading ? (
-            <div className="bg-white p-20 rounded-[4rem] shadow-2xl border border-slate-100 flex flex-col items-center justify-center text-center">
-              <div className="relative mb-8">
-                <div className="w-24 h-24 border-8 border-[#0055b8]/10 rounded-full"></div>
-                <div className="absolute inset-0 w-24 h-24 border-8 border-[#0055b8] border-t-transparent rounded-full animate-spin"></div>
-              </div>
-              <h3 className="text-xl font-black text-slate-800 uppercase italic tracking-tighter mb-2">AI Tovar Kartasini Yozmoqda</h3>
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-[0.3em]">Marketplace SEO & Kategoriyalash</p>
-            </div>
-          ) : parsedResult ? (
-            <div className="grid gap-6 animate-fadeIn pb-20">
-              <div className="bg-[#0055b8] p-8 rounded-[3rem] text-white shadow-2xl">
-                <div className="flex justify-between items-center mb-4">
-                   <h3 className="text-xs font-black uppercase tracking-[0.3em] opacity-70">Tavsiya etilgan Kategoriya</h3>
-                   <button 
-                     onClick={() => copySection(parsedResult.category, 'cat')}
-                     className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest backdrop-blur-md transition-all"
-                   >
-                     {copiedSection === 'cat' ? 'Nusxalandi!' : 'Kategoriyani nusxalash'}
-                   </button>
+        <div className="lg:col-span-8">
+          {Object.keys(results).length > 0 ? (
+            <div className="space-y-6">
+              {Object.keys(FIELD_LABELS).filter(k => k !== 'SKU' && k !== 'IKPU').map(key => (
+                results[key] && (
+                  <div key={key} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm transition-all animate-fadeIn">
+                    <div className="flex justify-between items-center mb-6">
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">{FIELD_LABELS[key]}</h4>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => copyToClipboard(results[key], key, 'UZ')}
+                          className={`px-4 py-2 rounded-full text-[9px] font-black uppercase transition-all ${
+                            copiedKey === `${key}-UZ` ? 'bg-green-500 text-white' : 'bg-blue-50 text-[#0055b8] hover:bg-blue-100'
+                          }`}
+                        >
+                          {copiedKey === `${key}-UZ` ? 'OK!' : 'Nusxa olish'}
+                        </button>
+                        <button 
+                          onClick={() => copyToClipboard(results[key], key, 'RU')}
+                          className={`px-4 py-2 rounded-full text-[9px] font-black uppercase transition-all ${
+                            copiedKey === `${key}-RU` ? 'bg-green-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {copiedKey === `${key}-RU` ? 'OK!' : 'Копировать'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-sm font-bold text-slate-700 whitespace-pre-wrap leading-relaxed">
+                      <div className="mb-4 pb-4 border-b border-slate-50">
+                        {cleanLangText(results[key], 'UZ')}
+                      </div>
+                      <div className="text-slate-400 italic font-medium">
+                        {cleanLangText(results[key], 'RU')}
+                      </div>
+                    </div>
+                  </div>
+                )
+              ))}
+
+              {(results['SKU'] || results['IKPU']) && (
+                <div className="mt-16 pt-16 border-t-4 border-double border-slate-200 grid md:grid-cols-2 gap-6">
+                  {['SKU', 'IKPU'].map(key => (
+                    results[key] && (
+                      <div key={key} className="bg-slate-900 p-10 rounded-[3rem] text-white border-4 border-slate-800 shadow-2xl animate-fadeIn relative overflow-hidden">
+                        <div className="flex justify-between items-start mb-6">
+                          <div>
+                            <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">{FIELD_LABELS[key]}</span>
+                            <p className="text-[9px] text-blue-300/60 font-medium mt-1 leading-tight max-w-[160px]">
+                              {TECHNICAL_DESC[key]}
+                            </p>
+                          </div>
+                          <button 
+                            onClick={() => copyToClipboard(results[key], key)} 
+                            className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all whitespace-nowrap ${
+                              copiedKey === key ? 'bg-green-500 text-white' : 'bg-white/10 text-white hover:bg-white/20 border border-white/5'
+                            }`}
+                          >
+                            {copiedKey === key ? 'OK!' : 'Nusxa olish'}
+                          </button>
+                        </div>
+                        <div className="text-2xl font-black text-blue-400 font-mono tracking-tighter break-all">
+                          {results[key].replace(/UZ:|RU:/gi, '').trim().split('\n')[0]}
+                        </div>
+                      </div>
+                    )
+                  ))}
                 </div>
-                <p className="text-2xl font-black italic tracking-tighter">{parsedResult.category}</p>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <ResultCard title="Sarlavha (UZ)" content={parsedResult.titleUz} sectionId="tUz" />
-                <ResultCard title="Название (RU)" content={parsedResult.titleRu} sectionId="tRu" />
-              </div>
-
-              <ResultCard title="Tavsif (UZ)" content={parsedResult.descUz} sectionId="dUz" />
-              <ResultCard title="Описание (RU)" content={parsedResult.descRu} sectionId="dRu" />
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <ResultCard title="Xususiyatlar" content={parsedResult.specs} sectionId="specs" />
-                <ResultCard title="SEO Kalit So'zlar" content={parsedResult.seo} sectionId="seo" />
-              </div>
+              )}
             </div>
           ) : (
-            <div className="bg-white p-20 rounded-[4rem] shadow-xl border border-slate-100 flex flex-col items-center justify-center text-center opacity-40">
-              <svg className="w-24 h-24 text-slate-200 mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-              <p className="text-sm font-black text-slate-400 uppercase tracking-widest italic">Rasm yuklang va karta yaratish tugmasini bosing</p>
+            <div className="bg-white p-24 rounded-[4rem] shadow-xl border border-slate-100 flex flex-col items-center justify-center text-center opacity-40">
+              <svg className="w-20 h-20 text-slate-200 mb-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-[0.3em] italic">Generatsiyani boshlash uchun rasm yuklang</p>
             </div>
           )}
         </div>
