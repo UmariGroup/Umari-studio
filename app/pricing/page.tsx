@@ -37,12 +37,12 @@ const PLANS: PlanConfig[] = [
     name: 'Starter',
     nameUz: 'Boshlang\'ich',
     price: 9,
-    tokens: 100,
+    tokens: 150,
     description: "Boshlang'ich foydalanuvchilar uchun",
     features: {
       imageBasic: { model: 'gemini-2.5-flash-image', tokenCost: 2 },
       imagePro: { model: 'gemini-3-pro-image-preview', tokenCost: 7 },
-      videoBasic: { model: 'veo-3.0-fast-generate-001', tokenCost: 15, duration: 5 },
+      videoBasic: { model: 'veo-2.0-generate-001', tokenCost: 15, duration: 5 },
       videoPro: null,
       videoPremium: null,
       copywriter: { tokenCost: 3 },
@@ -50,10 +50,10 @@ const PLANS: PlanConfig[] = [
       videoLimit: 10,
     },
     benefits: [
-      '100 token / oy',
+      '150 token / oy',
       'Oddiy rasm (2 token)',
       'Pro rasm (7 token)',
-      'Veo 3 Fast video (15 token)',
+      'Veo 2.0 video (15 token)',
       'Copywriter (3 token)',
       'Oy davomida 50 ta rasm',
       'Oy davomida 10 ta video',
@@ -65,25 +65,25 @@ const PLANS: PlanConfig[] = [
     name: 'Pro',
     nameUz: 'Professional',
     price: 19,
-    tokens: 250,
+    tokens: 400,
     description: 'Faol foydalanuvchilar uchun',
     popular: true,
     features: {
       imageBasic: { model: 'gemini-2.5-flash-image', tokenCost: 1.5 },
       imagePro: { model: 'gemini-3-pro-image-preview', tokenCost: 6 },
-      videoBasic: { model: 'veo-3.0-fast-generate-001', tokenCost: 25, duration: 6 },
-      videoPro: { model: 'veo-3.0-generate-001', tokenCost: 35, duration: 6 },
+      videoBasic: { model: 'veo-2.0-generate-001', tokenCost: 25, duration: 6 },
+      videoPro: { model: 'veo-3.0-fast-generate-001', tokenCost: 35, duration: 6 },
       videoPremium: null,
       copywriter: { tokenCost: 2 },
       imageLimit: 120,
       videoLimit: 10,
     },
     benefits: [
-      '250 token / oy',
+      '400 token / oy',
       'Oddiy rasm (1.5 token)',
       'Pro rasm (6 token)',
-      'Veo 3 Fast video (25 token)',
-      'Veo 3 Pro video (35 token)',
+      'Veo 2.0 video (25 token)',
+      'Pro video (35 token)',
       'Copywriter (2 token)',
       'Oy davomida 120 ta rasm',
       'Oy davomida 10 ta video',
@@ -95,24 +95,24 @@ const PLANS: PlanConfig[] = [
     name: 'Business+',
     nameUz: 'Biznes+',
     price: 29,
-    tokens: 500,
+    tokens: 700,
     description: 'Biznes va korxonalar uchun',
     features: {
       imageBasic: { model: 'gemini-2.5-flash-image', tokenCost: 1 },
       imagePro: { model: 'gemini-3-pro-image-preview', tokenCost: 5 },
-      videoBasic: { model: 'veo-3.0-fast-generate-001', tokenCost: 20, duration: 5 },
-      videoPro: { model: 'veo-3.0-generate-001', tokenCost: 30, duration: 7 },
+      videoBasic: { model: 'veo-2.0-generate-001', tokenCost: 20, duration: 5 },
+      videoPro: { model: 'veo-3.0-fast-generate-001', tokenCost: 30, duration: 7 },
       videoPremium: { model: 'veo3_upsampler_video_generation', tokenCost: 45, duration: 10 },
       copywriter: { tokenCost: 1 },
       imageLimit: 300,
       videoLimit: 22,
     },
     benefits: [
-      '500 token / oy',
+      '700 token / oy',
       'Oddiy rasm (1 token)',
       'Pro rasm (5 token)',
-      'Veo 3 Fast video (20 token)',
-      'Veo 3 Pro video (30 token)',
+      'Veo 2.0 video (20 token)',
+      'Pro video (30 token)',
       'Premium Upscale video (45 token)',
       'Copywriter (1 token)',
       'Oy davomida 300 ta rasm',
@@ -163,8 +163,10 @@ export default function PricingPage() {
   };
 
   const handleSubscribe = (planId: string) => {
-    // Open Telegram bot with plan info
-    window.open(`https://t.me/umari_studio_bot?start=subscribe_${planId}`, '_blank');
+    // Open Telegram user chat with a ready message
+    import('@/lib/telegram').then(({ getTelegramSubscribeUrl }) => {
+      window.open(getTelegramSubscribeUrl(planId), '_blank');
+    });
   };
 
   const currentPlan = user?.subscription_plan || 'free';

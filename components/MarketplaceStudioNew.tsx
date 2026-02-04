@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useToast } from './ToastProvider';
+import { getTelegramSubscribeUrl } from '@/lib/telegram';
 
 // ============ TYPES ============
 type ImageMode = 'basic' | 'pro';
@@ -30,9 +31,9 @@ const PLAN_CONFIGS: Record<SubscriptionPlan, PlanConfig> = {
     maxProductImages: 1,
     maxStyleImages: 0,
     outputCount: 1,
-    basicTokenCost: 999,
+    basicTokenCost: 2,
     proTokenCost: 999,
-    basicModel: '',
+    basicModel: 'gemini-2.5-flash-image',
     proModels: [],
   },
   starter: {
@@ -93,6 +94,10 @@ const MarketplaceStudio: React.FC = () => {
   const tokensRemaining = isAdmin ? 999999 : (user?.tokens_remaining || 0);
   const currentTokenCost = imageMode === 'basic' ? config.basicTokenCost : config.proTokenCost;
   const canGenerate = tokensRemaining >= currentTokenCost && plan !== 'free';
+
+  const openSubscribe = (targetPlan: SubscriptionPlan) => {
+    window.open(getTelegramSubscribeUrl(targetPlan), '_blank');
+  };
 
   // Fetch user data
   useEffect(() => {
@@ -315,9 +320,13 @@ const MarketplaceStudio: React.FC = () => {
               <h3 className="font-bold text-amber-800">Premium obuna kerak!</h3>
               <p className="text-amber-700 text-sm">Marketplace Studio dan foydalanish uchun Starter yoki undan yuqori obunaga o'ting.</p>
             </div>
-            <a href="/pricing" className="ml-auto px-6 py-3 bg-amber-500 text-white rounded-xl font-semibold hover:bg-amber-600 transition-colors">
+            <button
+              type="button"
+              onClick={() => openSubscribe('starter')}
+              className="ml-auto px-6 py-3 bg-amber-500 text-white rounded-xl font-semibold hover:bg-amber-600 transition-colors"
+            >
               Obuna olish
-            </a>
+            </button>
           </div>
         </div>
       )}
@@ -358,7 +367,7 @@ const MarketplaceStudio: React.FC = () => {
               </svg>
               <span>Pro</span>
               <span className={`px-2 py-0.5 rounded-full text-xs ${imageMode === 'pro' ? 'bg-white/20' : 'bg-blue-100 text-blue-700'}`}>
-                {config.proTokenCost} token
+                {config.proModels.length === 0 ? 'Premium' : `${config.proTokenCost} token`}
               </span>
             </div>
           </button>

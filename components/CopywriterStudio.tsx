@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useToast } from './ToastProvider';
+import { getTelegramSubscribeUrl } from '@/lib/telegram';
 import {
   SUBSCRIPTION_PLANS,
   type SubscriptionPlan,
@@ -312,9 +313,13 @@ const CopywriterStudio: React.FC = () => {
               <h3 className="font-bold text-amber-800">Premium obuna kerak!</h3>
               <p className="text-amber-700 text-sm">Copywriter Studio dan foydalanish uchun Starter yoki undan yuqori obunaga oting.</p>
             </div>
-            <a href="/pricing" className="ml-auto px-6 py-3 bg-amber-500 text-white rounded-xl font-semibold hover:bg-amber-600 transition-colors">
+            <button
+              type="button"
+              onClick={() => window.open(getTelegramSubscribeUrl('starter'), '_blank')}
+              className="ml-auto px-6 py-3 bg-amber-500 text-white rounded-xl font-semibold hover:bg-amber-600 transition-colors"
+            >
               Obuna olish
-            </a>
+            </button>
           </div>
         </div>
       )}

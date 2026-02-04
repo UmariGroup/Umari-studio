@@ -1,0 +1,21 @@
+import { SubscriptionPlan, SUBSCRIPTION_PLANS, normalizeSubscriptionPlan } from './subscription-plans';
+
+const DEFAULT_TELEGRAM_USERNAME = 'umari_studio_admin';
+
+export function getTelegramUsername(): string {
+  const configured = process.env.NEXT_PUBLIC_TELEGRAM_SUPPORT_USERNAME;
+  const username = String(configured || DEFAULT_TELEGRAM_USERNAME).trim().replace(/^@/, '');
+  return username || DEFAULT_TELEGRAM_USERNAME;
+}
+
+export function getSubscribeMessage(plan: SubscriptionPlan): string {
+  const label = SUBSCRIPTION_PLANS[plan]?.labelUz || SUBSCRIPTION_PLANS[plan]?.label || plan;
+  return `Assalomu alaykum men Umari ai da ${label} tarifini sotib olmoqchi edim`;
+}
+
+export function getTelegramSubscribeUrl(planInput: unknown): string {
+  const plan = normalizeSubscriptionPlan(planInput);
+  const username = getTelegramUsername();
+  const text = encodeURIComponent(getSubscribeMessage(plan));
+  return `https://t.me/${username}?text=${text}`;
+}
