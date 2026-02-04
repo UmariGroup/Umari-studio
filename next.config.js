@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
+
   // Avoid dev cross-origin issues when running in Docker and opening via 127.0.0.1
   allowedDevOrigins: ['http://127.0.0.1:3000', 'http://localhost:3000'],
 

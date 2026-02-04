@@ -6,8 +6,6 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
-      # Security settings
-      POSTGRES_INITDB_ARGS: "-c ssl=on -c ssl_cert_file=/var/lib/postgresql/server.crt -c ssl_key_file=/var/lib/postgresql/server.key"
     ports:
       - "127.0.0.1:5432:5432"  # 🔐 Bind only to localhost
     volumes:
@@ -46,6 +44,8 @@ services:
       context: .
       dockerfile: docker/Dockerfile.prod
     container_name: umari_nextjs_prod
+    env_file:
+      - .env
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
@@ -62,7 +62,7 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       NODE_ENV: production
     ports:
-      - "0.0.0.0:80:3000"  # 🔐 Only expose port 80
+      - "127.0.0.1:3000:3000"  # 🔐 Expose only to localhost (Nginx will face public)
     depends_on:
       postgres:
         condition: service_healthy
