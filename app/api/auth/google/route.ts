@@ -1,17 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { generateToken } from '@/lib/auth';
+import { OAuth2Client } from 'google-auth-library';
+import { FREE_TRIAL_TOKENS } from '@/lib/subscription-plans';
 
 export async function POST(req: NextRequest) {
   try {
-    const { google_id, email, first_name, last_name, avatar_url } = await req.json();
+    const body = await req.json();
+    const credential: string | undefined = body?.credential;
 
-    if (!google_id || !email) {
+    if (!credential) {
+      return NextResponse.json({ error: 'Missing credential' }, { status: 400 });
+    }
+
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+    if (!clientId) {
       return NextResponse.json(
-        { error: 'Google ID and email required' },
-        { status: 400 }
+        { error: 'Google OAuth is not configured on server' },
+        { status: 500 }
       );
     }
+
+    const oauthClient = new OAuth2Client(clientId);
+    const ticket = await oauthClient.verifyIdToken({
+      idToken: credential,
+      audience: clientId,
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload?.sub || !payload.email) {
+      return NextResponse.json({ error: 'Invalid Google token' }, { status: 401 });
+    }
+
+    const google_id = payload.sub;
+    const email = payload.email;
+    const first_name = payload.given_name || '';
+    const last_name = payload.family_name || '';
+    const avatar_url = payload.picture || null;
 
     // Check if user exists
     let result = await query(
@@ -32,9 +57,9 @@ export async function POST(req: NextRequest) {
         // Create new user with Google OAuth
         const createResult = await query(
           `INSERT INTO users (google_id, email, first_name, last_name, avatar_url, role, subscription_status, tokens_remaining)
-           VALUES ($1, $2, $3, $4, $5, 'user', 'free', 0)
+           VALUES ($1, $2, $3, $4, $5, 'user', 'free', $6)
            RETURNING id, email, first_name, role, subscription_status`,
-          [google_id, email, first_name || '', last_name || '', avatar_url || null]
+          [google_id, email, first_name || '', last_name || '', avatar_url || null, FREE_TRIAL_TOKENS]
         );
         user = createResult.rows[0];
       } else {
