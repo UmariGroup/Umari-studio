@@ -193,9 +193,6 @@ export default function LoginPage() {
             </div>
 
             <div className="mt-6 pt-6 border-t border-white/20">
-              <p className="text-xs text-gray-500 text-center">
-                Demo: admin@umari.com / Admin@123
-              </p>
             </div>
           </div>
         </div>
