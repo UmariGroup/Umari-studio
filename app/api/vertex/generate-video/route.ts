@@ -202,7 +202,13 @@ export async function POST(req: NextRequest) {
     console.log(`[GenerateVideo] Plan=${plan}, Mode=${mode}, Model=${selectedModel}`);
 
     const rawVideoUrl = await generateMarketplaceVideo(safePrompt, safeImages, selectedModel, aspectRatio);
-    const persisted = await tryPersistVideoDataUrlToPublic(rawVideoUrl);
+    let persisted: string | null = null;
+    try {
+      persisted = await tryPersistVideoDataUrlToPublic(rawVideoUrl);
+    } catch {
+      // best-effort only (containers can be read-only)
+      persisted = null;
+    }
     const videoUrl = persisted || rawVideoUrl;
 
     let upscaleJobId: string | null = null;
@@ -233,7 +239,12 @@ export async function POST(req: NextRequest) {
         try {
           // Prefer upsampling the generated video output if it's a data URL / GCS URI.
           const upscaledRaw = await generateMarketplaceVideoUpsampled(safePrompt, safeImages, aspectRatio, rawVideoUrl);
-          const upscaledPersisted = await tryPersistVideoDataUrlToPublic(upscaledRaw);
+          let upscaledPersisted: string | null = null;
+          try {
+            upscaledPersisted = await tryPersistVideoDataUrlToPublic(upscaledRaw);
+          } catch {
+            upscaledPersisted = null;
+          }
           const upscaledUrl = upscaledPersisted || upscaledRaw;
 
           await query(
