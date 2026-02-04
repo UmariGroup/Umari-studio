@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import GoogleLoginButton from '../../components/GoogleLoginButton';
@@ -17,14 +18,14 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
     });
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -63,13 +64,6 @@ export default function RegisterPage() {
 
   return (
     <>
-      {/* Google Identity Services Script */}
-      <script 
-        src="https://accounts.google.com/gsi/client" 
-        async 
-        defer
-      ></script>
-    
       <div className="min-h-screen bg-white flex items-center justify-center px-4">
         <div className="max-w-md w-full">
           <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-lg">

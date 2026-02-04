@@ -1,11 +1,9 @@
 'use client';
 
-import React, { useEffect } from 'react';
-
-import { useState } from 'react';
-import Link from 'next/link';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from './ToastProvider';
+import { loadGoogleIdentityScript } from '../lib/googleIdentity';
 
 declare global {
   interface Window {
@@ -17,6 +15,8 @@ export default function GoogleLoginButton({ onSuccess }: { onSuccess?: () => voi
   const router = useRouter();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const renderedRef = useRef(false);
 
   const handleCredentialResponse = async (response: any) => {
     setLoading(true);
@@ -51,42 +51,57 @@ export default function GoogleLoginButton({ onSuccess }: { onSuccess?: () => voi
   };
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.google) {
-      window.google.accounts.id.initialize({
-        client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
-        callback: handleCredentialResponse,
-      });
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+    const el = containerRef.current;
+    if (!el) return;
 
-      window.google.accounts.id.renderButton(
-        document.getElementById('google-signin-button'),
-        {
+    if (!clientId) {
+      toast.error('Google OAuth sozlanmagan: NEXT_PUBLIC_GOOGLE_CLIENT_ID yo\'q.');
+      return;
+    }
+
+    if (renderedRef.current) return;
+
+    let cancelled = false;
+    loadGoogleIdentityScript()
+      .then(() => {
+        if (cancelled) return;
+        if (!window.google?.accounts?.id) throw new Error('Google Identity Services is not available');
+
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: handleCredentialResponse,
+        });
+
+        // Ensure clean re-render in dev/strict mode.
+        el.innerHTML = '';
+        window.google.accounts.id.renderButton(el, {
           theme: 'outline',
           size: 'large',
           width: '100%',
           text: 'signin_with',
           locale: 'en',
-        }
-      );
-    }
-  }, []);
+        });
+
+        renderedRef.current = true;
+      })
+      .catch((err) => {
+        console.error('Failed to init Google login:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [toast]);
 
   return (
-    <>
-      {/* Google Identity Services Script */}
-      <script 
-        src="https://accounts.google.com/gsi/client" 
-        async 
-        defer
-      ></script>
-      
-      <div className="w-full">
-        <div id="google-signin-button" className="w-full"></div>
-        {loading && (
-          <div className="text-center text-sm text-gray-600 mt-2">
-            Google orqali kirish...
-          </div>
-        )}
-      </div>
-    </>
+    <div className="w-full">
+      <div ref={containerRef} className="w-full" />
+      {loading && (
+        <div className="text-center text-sm text-gray-600 mt-2">
+          Google orqali kirish...
+        </div>
+      )}
+    </div>
   );
 }

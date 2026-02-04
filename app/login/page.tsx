@@ -1,14 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-
-declare global {
-  interface Window {
-    google: any;
-  }
-}
+import GoogleLoginButton from '../../components/GoogleLoginButton';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,7 +13,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -32,6 +28,7 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (data.success) {
+        window.location.reload();
         if (data.user.role === 'admin') {
           router.push('/admin');
         } else {
@@ -47,61 +44,8 @@ export default function LoginPage() {
     }
   };
 
-  const handleCredentialResponse = async (response: any) => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/auth/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential: response.credential }),
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        if (data.user.role === 'admin') {
-          router.push('/admin');
-        } else {
-          router.push('/dashboard');
-        }
-      } else {
-        throw new Error(data.error || 'Google authentication failed');
-      }
-    } catch (error) {
-      console.error('Google login error:', error);
-      setError('Google login failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.google) {
-      window.google.accounts.id.initialize({
-        client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
-        callback: handleCredentialResponse,
-      });
-
-      window.google.accounts.id.renderButton(
-        document.getElementById('google-signin-button'),
-        {
-          theme: 'outline',
-          size: 'large',
-          width: '100%',
-          text: 'signin_with',
-        }
-      );
-    }
-  }, []);
-
   return (
     <>
-      <script 
-        src="https://accounts.google.com/gsi/client" 
-        async 
-        defer
-      ></script>
-    
       <div className="min-h-screen bg-white flex items-center justify-center px-4">
         <div className="max-w-md w-full">
           <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-lg">
@@ -128,12 +72,7 @@ export default function LoginPage() {
 
             {/* Google Login */}
             <div className="mb-6">
-              <div id="google-signin-button" className="w-full"></div>
-              {loading && (
-                <div className="text-center text-sm text-gray-400 mt-2">
-                  Google orqali kirish...
-                </div>
-              )}
+              <GoogleLoginButton />
             </div>
 
             <div className="relative mb-6">

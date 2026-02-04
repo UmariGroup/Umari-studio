@@ -53,6 +53,7 @@ services:
       dockerfile: docker/Dockerfile.prod
       args:
         NODE_ENV: production
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
         DB_USER: ${DB_USER}
         DB_PASSWORD: ${DB_PASSWORD}
         DB_NAME: ${DB_NAME}
