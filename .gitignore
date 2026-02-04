@@ -11,6 +11,18 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.test
+
+# Dependency directories
+node_modules/
+.pnp
+.pnp.js
+.next
+.out
+
+# Local secrets (never commit)
+.secrets/
 
 # Editor directories and files
 .vscode/*

@@ -1,8 +1,0 @@
-{
-  "name": "Umari Studio AI",
-  "description": "Professional marketplace mahsulotlari uchun rasm va video yaratish xizmati.",
-  "requestFramePermissions": [
-    "camera",
-    "microphone"
-  ]
-}

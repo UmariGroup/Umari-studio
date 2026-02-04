@@ -1,79 +1,308 @@
+/**
+ * Gemini API Service (Generative Language API)
+ * Uses API key auth (no Vertex / service account).
+ */
 
-import { GoogleGenAI, GenerateContentResponse, Modality } from "@google/genai";
+import axios from 'axios';
 
-export class GeminiService {
-  static async checkApiKey(): Promise<boolean> {
-    if (typeof window !== 'undefined' && (window as any).aistudio) {
-      return await (window as any).aistudio.hasSelectedApiKey();
-    }
-    return true;
+type ChatMessage = { role: string; content: string };
+
+const GEMINI_API_KEY =
+  process.env.GEMINI_API_KEY ||
+  process.env.GOOGLE_API_KEY ||
+  process.env.API_KEY ||
+  '';
+
+const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash';
+const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
+
+function requireApiKey(): void {
+  if (!GEMINI_API_KEY) {
+    throw new Error(
+      'Gemini API key is missing. Set GEMINI_API_KEY (or GOOGLE_API_KEY / API_KEY) in .env.local'
+    );
+  }
+}
+
+function assertGeminiModelName(model: string): void {
+  const trimmed = (model || '').trim();
+  if (!trimmed) {
+    throw new Error('Gemini model is empty. Set GEMINI_TEXT_MODEL / GEMINI_IMAGE_MODEL in .env.local');
   }
 
-  static async openKeySelector(): Promise<void> {
-    if (typeof window !== 'undefined' && (window as any).aistudio) {
-      await (window as any).aistudio.openSelectKey();
-    }
+  // Common misconfig: using Vertex/Imagen IDs with the Gemini API.
+  // Validation removed to allow using new models if they become available or hybrid usage.
+  /*
+  if (trimmed.toLowerCase().startsWith('imagen-')) {
+    throw new Error(
+      `GEMINI_IMAGE_MODEL is set to '${trimmed}', which is a Vertex/Imagen model id. ` +
+      `Gemini API requires Gemini image models like 'gemini-2.5-flash-image' or 'gemini-3-pro-image-preview'.`
+    );
+  }
+  */
+}
+
+function normalizeAspectRatio(aspectRatio: string): string {
+  const allowed = new Set([
+    '1:1',
+    '2:3',
+    '3:2',
+    '3:4',
+    '4:3',
+    '4:5',
+    '5:4',
+    '9:16',
+    '16:9',
+    '21:9',
+  ]);
+  return allowed.has(aspectRatio) ? aspectRatio : '1:1';
+}
+
+function parseDataUrl(dataUrl: string): { mimeType: string; data: string } | null {
+  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+  if (!match) return null;
+
+  let mimeType = match[1];
+  const data = match[2];
+
+  // Normalize common variants.
+  if (mimeType === 'image/jpg') mimeType = 'image/jpeg';
+
+  return { mimeType, data };
+}
+
+function validateInlineImage(mimeType: string, base64: string): void {
+  const allowed = new Set(['image/png', 'image/jpeg', 'image/webp']);
+  if (!allowed.has(mimeType)) {
+    throw new Error(
+      `Unsupported image type '${mimeType}'. Please upload PNG/JPEG/WebP images (HEIC/HEIF/AVIF are not supported).`
+    );
   }
 
-  static async enhancePrompt(userPrompt: string): Promise<string> {
-    try {
-      // Create a new instance right before making an API call to ensure it always uses the most up-to-date API key.
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-      const model = 'gemini-3-flash-preview';
-      const response = await ai.models.generateContent({
-        model,
-        contents: `Quyidagi qisqa mahsulot tavsifini professional marketplace promptiga aylantirib ber. Faqat prompt matnini ingliz tilida qaytar: "${userPrompt}"`,
-      });
-      return response.text || userPrompt;
-    } catch (error) {
-      console.error("Enhance Prompt Error:", error);
-      return userPrompt;
-    }
+  // Best-effort size check
+  // Relaxed validation: 75KB is definitely fine. Only warn/block if > 9MB (API limit is usually ~10MB for some, 4MB for others).
+  // Let's stick to a safe 9MB, but don't throw if small.
+  const approxBytes = Math.floor((base64.length * 3) / 4);
+  const maxBytesPerImage = 9 * 1024 * 1024;
+  if (approxBytes > maxBytesPerImage) {
+    throw new Error(
+      `Image is too large. Please upload an image under 9MB.`
+    );
   }
+}
 
-  static async generateMarketplaceImage(
-    prompt: string,
-    productImages: string[],
-    styleImages: string[],
-    aspectRatio: string
-  ): Promise<string> {
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-      // Use explicit type or spread to avoid narrowing issues with heterogeneous parts.
-      const parts: any[] = [
-        ...productImages.filter(img => img).map(img => ({
-          inlineData: { data: img.split(',')[1], mimeType: 'image/png' }
-        })),
-        ...styleImages.filter(img => img).map(img => ({
-          inlineData: { data: img.split(',')[1], mimeType: 'image/png' }
-        })),
-        { 
-          text: `Task: Generate a high-quality professional marketplace product image. Background/Setting: ${prompt}. Focus: Keep products as primary subject. Style: Commercial studio lighting.` 
-        }
-      ];
+function toInlineDataPart(image: string): { inlineData: { mimeType: string; data: string } } | null {
+  const parsed = parseDataUrl(image);
+  if (!parsed) return null;
+  validateInlineImage(parsed.mimeType, parsed.data);
+  return { inlineData: { mimeType: parsed.mimeType, data: parsed.data } };
+}
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: { parts },
-        config: { imageConfig: { aspectRatio: aspectRatio as any } }
-      });
+async function geminiGenerateContent(model: string, body: unknown): Promise<any> {
+  requireApiKey();
+  assertGeminiModelName(model);
 
-      if (response.candidates?.[0]?.content?.parts) {
-        for (const part of response.candidates[0].content.parts) {
-          if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
-        }
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    model
+  )}:generateContent`;
+
+  try {
+    const res = await axios.post(url, body, {
+      params: { key: GEMINI_API_KEY },
+      timeout: 120_000,
+    });
+
+    return res.data;
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      const statusText = error.response?.statusText;
+      const data = error.response?.data;
+
+      let details = '';
+      try {
+        details = typeof data === 'string' ? data : JSON.stringify(data);
+      } catch {
+        details = '';
       }
-      throw new Error("No image data found.");
-    } catch (error: any) {
-      throw new Error("Rasm yaratishda xatolik.");
+      if (details.length > 2500) details = details.slice(0, 2500) + '…';
+
+      const suffix = details ? `\nGemini response: ${details}` : '';
+      throw new Error(
+        `Gemini API error${status ? ` (${status}${statusText ? ` ${statusText}` : ''})` : ''}: ${error.message}${suffix}`
+      );
+    }
+
+    throw error;
+  }
+}
+
+function extractText(response: any): string {
+  if (!response) return '';
+  if (typeof response.text === 'string') return response.text;
+
+  const parts = response?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return '';
+
+  return parts
+    .map((p: any) => (typeof p?.text === 'string' ? p.text : ''))
+    .filter(Boolean)
+    .join('');
+}
+
+function extractFirstImageDataUrl(response: any): string | null {
+  const parts = response?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return null;
+
+  for (const part of parts) {
+    const inlineData = part?.inlineData || part?.inline_data;
+    const mimeType = inlineData?.mimeType || inlineData?.mime_type;
+    const data = inlineData?.data;
+
+    if (typeof mimeType === 'string' && typeof data === 'string' && mimeType.startsWith('image/')) {
+      return `data:${mimeType};base64,${data}`;
     }
   }
 
-  static async *generateMarketplaceDescriptionStream(images: string[], marketplace: string, additionalInfo?: string) {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-    const model = 'gemini-3-pro-preview';
-    
-    const systemInstruction = `Siz professional marketplace-copywriter va SEO mutaxassisiz.
+  return null;
+}
+
+async function generateText(model: string, systemInstruction: string | null, userText: string): Promise<string> {
+  const body: any = {
+    contents: [
+      {
+        role: 'user',
+        parts: [{ text: userText }],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 2500,
+      topP: 0.95,
+    },
+  };
+
+  if (systemInstruction) {
+    body.systemInstruction = { parts: [{ text: systemInstruction }] };
+  }
+
+  const response = await geminiGenerateContent(model, body);
+  return extractText(response).trim();
+}
+
+export async function enhancePrompt(prompt: string, options?: { model?: string }): Promise<string> {
+  const model = (options?.model || GEMINI_TEXT_MODEL).trim();
+
+  const systemInstruction =
+    'You are an expert ecommerce prompt engineer. Return ONLY the final prompt text, in English. No quotes, no markdown, no extra commentary.';
+
+  const userText =
+    `Quyidagi qisqa mahsulot tavsifini professional marketplace promptiga aylantirib ber. ` +
+    `Faqat prompt matnini ingliz tilida qaytar:\n\n${prompt}`;
+
+  return generateText(model, systemInstruction, userText);
+}
+
+export async function generateMarketplaceImage(
+  prompt: string,
+  productImages: string[] = [],
+  styleImages: string[] = [],
+  aspectRatio: string = '1:1',
+  options?: { model?: string }
+): Promise<string> {
+  const model = (options?.model || GEMINI_IMAGE_MODEL).trim();
+  const parts: any[] = [];
+
+  // 1. Instructions
+  const hasStyleImages = styleImages.length > 0;
+
+  let finalPrompt = `Task: Generate a high-quality professional marketplace product image.\n`;
+  finalPrompt += `Goal: Place the object described in 'Main Product' section into the context/style of 'Style Reference' section.\n`;
+  finalPrompt += `CRITICAL: You MUST preserve the identity of the MAIN PRODUCT exactly. \n`;
+  finalPrompt += `CRITICAL: Do NOT generate the object shown in the STYLE REFERENCE. Only copy the background, lighting, and composition/pose from the reference.\n`;
+  finalPrompt += `User Prompt/Setting: ${prompt}.\n`;
+
+  parts.push({ text: finalPrompt });
+
+  // 2. Add Product Images with explicit label
+  if (productImages.length > 0) {
+    parts.push({ text: "\n[[MAIN PRODUCT IMAGES - The Object to Generate]]\n" });
+    for (const img of productImages) {
+      const inlinePart = toInlineDataPart(img);
+      if (inlinePart) parts.push(inlinePart);
+    }
+  }
+
+  // 3. Add Style Images with explicit label
+  if (hasStyleImages) {
+    parts.push({ text: "\n[[STYLE REFERENCE IMAGES - Copy only background/lighting/context/pose, IGNORE the object itself]]\n" });
+    for (const img of styleImages) {
+      const inlinePart = toInlineDataPart(img);
+      if (inlinePart) parts.push(inlinePart);
+    }
+  }
+
+  const body = {
+    contents: [{ role: 'user', parts }],
+    generationConfig: {
+      imageConfig: {
+        aspectRatio: normalizeAspectRatio(aspectRatio),
+      },
+    },
+  };
+
+  const response = await geminiGenerateContent(model, body);
+  const dataUrl = extractFirstImageDataUrl(response);
+
+  if (!dataUrl) {
+    const finishReason = response?.candidates?.[0]?.finishReason;
+    if (finishReason === 'NO_IMAGE') {
+      throw new Error('Model did not return an image (NO_IMAGE). Try a different image model.');
+    }
+    throw new Error('No image returned from Gemini API.');
+  }
+
+  return dataUrl;
+}
+
+export async function* generateMarketplaceDescriptionStream(
+  images: string[],
+  marketplace: string = 'uzum',
+  additionalInfo: string = '',
+  options?: { model?: string; plan?: string }
+): AsyncGenerator<string, void, unknown> {
+  const plan = (options?.plan || '').toString().trim().toLowerCase();
+  const model = (options?.model || GEMINI_TEXT_MODEL).trim();
+
+  let planRules = '';
+  if (plan === 'starter') {
+    planRules = `
+QO‘SHIMCHA TALABLAR (STARTER):
+- Matn qisqa va sodda bo‘lsin (marketplace uchun tayyor).
+- FULL_DESC: taxminan 600–900 belgi (UZ va RU alohida).
+- SPECS: 6–8 ta band.
+- PROPS: 6–8 ta band.
+- VIDEO_REC: 1–2 ta qisqa g‘oya.`;
+  } else if (plan === 'pro') {
+    planRules = `
+QO‘SHIMCHA TALABLAR (PRO):
+- Matn to‘liq va SEO kuchli bo‘lsin.
+- FULL_DESC: taxminan 1200–1800 belgi (UZ va RU alohida).
+- SPECS: 10–12 ta band.
+- PROPS: 8–12 ta band.
+- VIDEO_REC: 3–5 ta g‘oya.`;
+  } else if (plan === 'business_plus' || plan === 'business+') {
+    planRules = `
+QO‘SHIMCHA TALABLAR (BUSINESS+):
+- Maksimal detal: agency/katalog darajasida yozing.
+- NAME: 2 ta variant bering (1) Short (2) SEO (UZ va RU ichida ham).
+- FULL_DESC: taxminan 2000–3500 belgi (UZ va RU alohida).
+- SPECS: 15–20 ta band.
+- PROPS: 8–12 ta band.
+- VIDEO_REC: 4–6 ta g‘oya.`;
+  }
+
+  const systemInstruction = `Siz professional marketplace-copywriter va SEO mutaxassisiz.
 Vazifa: Yuklangan rasmlar asosida ${marketplace} platformasi uchun 18 ta blokdan iborat kartani yaratish.
 
 MUHIM QOIDALAR:
@@ -81,90 +310,105 @@ MUHIM QOIDALAR:
 2. Har bir band ichida "UZ:" va "RU:" prefikslaridan foydalaning.
 3. Toza matn: markdown (#, *, _) ishlatmang.
 4. KAFOLAT: FAQAT "10 kun (ishlab chiqaruvchi nuqsonlari uchun)" deb yozing.
+${planRules}
 
 MARKERLAR:
 ---CAT---, ---NAME---, ---COUNTRY---, ---BRAND---, ---MODEL---, ---WARRANTY---, ---SHORT_DESC---, ---FULL_DESC---, ---PHOTOS_INFO---, ---VIDEO_REC---, ---SPECS---, ---PROPS---, ---INSTR---, ---SIZE---, ---COMP---, ---CARE---, ---SKU---, ---IKPU---`;
 
-    // Construct parts array carefully to avoid TypeScript narrowing errors that prevent mixing inlineData and text.
-    const parts: any[] = [
-      ...images.map(img => ({
-        inlineData: { data: img.split(',')[1], mimeType: 'image/png' }
-      })),
-      { text: `Ushbu mahsulot uchun ${marketplace} standartida 18 banddan iborat professional kartani tayyorlang. Qo'shimcha ma'lumot: ${additionalInfo || 'Yo\'q'}` }
-    ];
-
-    const stream = await ai.models.generateContentStream({
-      model,
-      contents: { parts },
-      config: { systemInstruction, temperature: 0.1 }
-    });
-
-    for await (const chunk of stream) {
-      if (chunk.text) {
-        yield chunk.text;
-      }
-    }
+  const parts: any[] = [];
+  for (const img of (images || []).slice(0, 3)) {
+    const inlinePart = toInlineDataPart(img);
+    if (inlinePart) parts.push(inlinePart);
   }
 
-  static async chat(message: string, images: string[] = []): Promise<string> {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-    const parts: any[] = [
-      ...images.map(img => ({ inlineData: { data: img.split(',')[1], mimeType: 'image/png' } })),
-      { text: message }
-    ];
-    
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: { parts },
-      config: { systemInstruction: "Siz Umari Studio AI mutaxassisisiz.", temperature: 0.7 }
-    });
-    return response.text || "";
+  parts.push({
+    text:
+      `Ushbu mahsulot uchun ${marketplace} standartida 18 banddan iborat professional kartani tayyorlang. ` +
+      `Qo'shimcha ma'lumot: ${additionalInfo || "Yo'q"}`,
+  });
+
+  const body: any = {
+    contents: [{ role: 'user', parts }],
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: plan === 'business_plus' || plan === 'business+' ? 6500 : plan === 'pro' ? 5000 : 4000,
+      topP: 0.95,
+    },
+  };
+
+  const response = await geminiGenerateContent(model, body);
+  const text = extractText(response).trim();
+  yield text;
+}
+
+export async function generateVideoScript(
+  topic: string,
+  platform: string = 'youtube',
+  duration: string = '1-3',
+  tone: string = 'professional'
+): Promise<string> {
+  const systemInstruction =
+    'You are a senior video script writer. Output a structured script with hook, body, CTA, and on-screen text suggestions. Keep it practical and audience-friendly.';
+
+  const userText = `Topic: ${topic}\nPlatform: ${platform}\nDuration: ${duration} minutes\nTone: ${tone}`;
+  return generateText(GEMINI_TEXT_MODEL, systemInstruction, userText);
+}
+
+export async function generateCopywriterContent(
+  contentType: string,
+  topic: string,
+  tone: string = 'professional',
+  length: string = 'medium',
+  keywords: string[] = []
+): Promise<string> {
+  const systemInstruction =
+    'You are a direct-response copywriter. Produce conversion-focused Uzbek copy. Avoid vague advice; write the actual copy.';
+
+  const userText =
+    `Content type: ${contentType}\n` +
+    `Topic/product: ${topic}\n` +
+    `Tone: ${tone}\nLength: ${length}\n` +
+    `Keywords (if any): ${keywords.join(', ')}`;
+
+  return generateText(GEMINI_TEXT_MODEL, systemInstruction, userText);
+}
+
+export async function analyzeMarketingMetrics(
+  metrics: string,
+  analysisType: string = 'marketing-metrics'
+): Promise<string> {
+  const systemInstruction =
+    'You are a performance marketing analyst. Analyze the metrics and provide specific actions, calculations, and prioritized recommendations.';
+
+  const userText = `Analysis type: ${analysisType}\n\nMetrics:\n${metrics}`;
+  return generateText(GEMINI_TEXT_MODEL, systemInstruction, userText);
+}
+
+export async function chat(message: string, history: ChatMessage[] = []): Promise<string> {
+  const systemInstruction =
+    'You are Umari Studio assistant. Reply in Uzbek by default. Be concise, practical, and helpful for ecommerce and content creation.';
+
+  const contents: any[] = [];
+  for (const h of history) {
+    const role = h?.role === 'assistant' || h?.role === 'model' ? 'model' : 'user';
+    const content = typeof h?.content === 'string' ? h.content : '';
+    if (!content) continue;
+    contents.push({ role, parts: [{ text: content }] });
   }
 
-  /**
-   * Generates a video from an image using the Veo model.
-   * Implements mandatory polling and error handling for API keys.
-   */
-  static async generateVideoFromImage(image: string, prompt: string, isPortrait: boolean): Promise<string> {
-    try {
-      // Always create a new instance right before the call to ensure up-to-date API key.
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-      let operation = await ai.models.generateVideos({
-        model: 'veo-3.1-fast-generate-preview',
-        prompt,
-        image: {
-          imageBytes: image.split(',')[1],
-          mimeType: 'image/png',
-        },
-        config: {
-          numberOfVideos: 1,
-          resolution: '720p',
-          aspectRatio: isPortrait ? '9:16' : '16:9'
-        }
-      });
+  contents.push({ role: 'user', parts: [{ text: message }] });
 
-      while (!operation.done) {
-        await new Promise(resolve => setTimeout(resolve, 10000));
-        // Re-initialize for each poll to ensure correct key context.
-        const pollAi = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-        operation = await pollAi.operations.getVideosOperation({ operation: operation });
-      }
+  const body: any = {
+    contents,
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 2500,
+      topP: 0.95,
+    },
+  };
 
-      const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
-      if (!downloadLink) throw new Error("Video generation failed.");
-      
-      const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
-      if (!response.ok) throw new Error("Failed to download video.");
-      
-      const videoBlob = await response.blob();
-      return URL.createObjectURL(videoBlob);
-    } catch (error: any) {
-      // If requested entity not found, reset key selection as per Veo guidelines.
-      if (error.message?.includes("Requested entity was not found.")) {
-        await this.openKeySelector();
-        throw new Error("Iltimos, API kalitni qayta tanlang.");
-      }
-      throw error;
-    }
-  }
+  const response = await geminiGenerateContent(GEMINI_TEXT_MODEL, body);
+  return extractText(response) || '';
 }

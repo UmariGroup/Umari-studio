@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: umari_postgres_dev
+    env_file:
+      - .env.local
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-umari_studio}
+    ports:
+      - "127.0.0.1:5432:5432"  # 🔐 Bind only to localhost
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/seed.sql
+    networks:
+      - umari_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Security: no superuser access to postgres
+    command: 
+      - "postgres"
+      - "-c"
+      - "max_connections=100"
+      - "-c"
+      - "shared_buffers=256MB"
+
+  nextjs:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: umari_nextjs_dev
+    env_file:
+      - .env.local
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-umari_studio}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key}
+      # Gemini API key is loaded via env_file (.env.local)
+      NODE_ENV: development
+    ports:
+      - "3000:3000"  # 🔐 Bind only to localhost
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - umari_network
+    command: npm run dev
+    # Security: no privileged access
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  postgres_data_dev:
+    driver: local
+
+networks:
+  umari_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16  # 🔐 Isolated network
+
