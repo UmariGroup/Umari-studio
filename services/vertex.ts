@@ -24,7 +24,7 @@ const VERTEX_LOCATION =
   'us-central1';
 
 const DEFAULT_VERTEX_IMAGE_MODEL =
-  process.env.VERTEX_IMAGE_MODEL || 'imagen-4.0-fast-generate-001';
+  process.env.VERTEX_IMAGE_MODEL || '' ;
 
 const GOOGLE_APPLICATION_CREDENTIALS_JSON =
   process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON || '';
@@ -308,11 +308,12 @@ async function vertexPredictVeo(
   prompt: string,
   aspectRatio: string,
   modelOverride?: string,
-  image?: string | null
+  image?: string | null,
+  video?: string | null
 ): Promise<string> {
 
   // Use a default Veo model if none provided
-  const modelId = (modelOverride || 'veo-2.0-generate-001').trim();
+  const modelId = (modelOverride || 'veo-3.0-fast-generate-001').trim();
   const location = VERTEX_LOCATION.trim();
 
   // Veo video generation uses `:predictLongRunning`, then polling via `:fetchPredictOperation`.
@@ -324,6 +325,20 @@ async function vertexPredictVeo(
   )}:predictLongRunning`;
 
   const instance: any = { prompt };
+
+  if (video) {
+    if (typeof video === 'string' && video.trim().startsWith('gs://')) {
+      instance.video = { gcsUri: video.trim() };
+    } else {
+      const parsedVideo = parseDataUrl(video);
+      if (parsedVideo && parsedVideo.mimeType.startsWith('video/')) {
+        instance.video = {
+          bytesBase64Encoded: parsedVideo.data,
+          mimeType: parsedVideo.mimeType,
+        };
+      }
+    }
+  }
 
   if (image) {
     const parsed = parseDataUrl(image);
@@ -423,11 +438,27 @@ async function vertexPredictVeo(
 export async function generateMarketplaceVideo(
   prompt: string,
   image?: string | string[],
-  model = 'veo-2.0-generate-001',
+  model = 'veo-3.0-fast-generate-001',
   aspectRatio = '16:9'
 ): Promise<string> {
   const firstImage = Array.isArray(image) ? image.find(Boolean) : image;
-  return vertexPredictVeo(prompt, aspectRatio, model, firstImage || undefined);
+  return vertexPredictVeo(prompt, aspectRatio, model, firstImage || undefined, null);
+}
+
+export async function generateMarketplaceVideoUpsampled(
+  prompt: string,
+  image?: string | string[],
+  aspectRatio: string = '16:9',
+  sourceVideoUrl?: string | null
+): Promise<string> {
+  const firstImage = Array.isArray(image) ? image.find(Boolean) : image;
+  return vertexPredictVeo(
+    prompt,
+    aspectRatio,
+    'veo3_upsampler_video_generation',
+    firstImage || undefined,
+    sourceVideoUrl || null
+  );
 }
 
 export async function generateMarketplaceImage(

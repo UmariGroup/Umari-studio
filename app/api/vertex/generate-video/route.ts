@@ -1,6 +1,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { generateMarketplaceVideo } from '@/services/vertex';
+import { generateMarketplaceVideo, generateMarketplaceVideoUpsampled } from '@/services/vertex';
 import {
   BillingError,
   getAuthenticatedUserAccount,
@@ -12,6 +12,8 @@ import {
   VideoMode,
 } from '@/lib/subscription';
 import { query } from '@/lib/db';
+import { promises as fs } from 'fs';
+import path from 'path';
 
 export const maxDuration = 60; // Allow longer timeout for video generation (Vercel/Next.js limit)
 
@@ -24,9 +26,9 @@ function inferVideoMode(requestedMode: unknown, model: string): VideoMode {
   if (raw === 'basic' || raw === 'pro' || raw === 'premium') return raw as VideoMode;
 
   const m = (model || '').toLowerCase();
-  if (m.includes('veo-3.1-fast')) return 'premium';
-  if (m.includes('veo-3.1')) return 'premium';
-  if (m.includes('veo-3.0-fast')) return 'pro';
+  if (m.includes('upsampler')) return 'premium';
+  if (m.includes('veo-3.0-generate')) return 'pro';
+  if (m.includes('veo-3.0-fast')) return 'basic';
   if (m.includes('veo-3.0')) return 'pro';
   return 'basic';
 }
@@ -48,6 +50,66 @@ function getMonthlyVideoLimit(plan: string, mode: VideoMode): number | null {
     return 10;
   }
   return null; // Starter: token-limited only (no hard cap in spec)
+}
+
+async function ensureVideoJobsTable(): Promise<void> {
+  await query(
+    `CREATE TABLE IF NOT EXISTS video_jobs (
+      id UUID PRIMARY KEY,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status VARCHAR(32) NOT NULL CHECK (status IN ('processing','succeeded','failed')),
+      original_video_url TEXT,
+      upscaled_video_url TEXT,
+      base_model VARCHAR(128),
+      upscale_model VARCHAR(128),
+      aspect_ratio VARCHAR(16),
+      error_text TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`
+  );
+  await query(`CREATE INDEX IF NOT EXISTS idx_video_jobs_user ON video_jobs(user_id)`);
+}
+
+function parseDataUrl(dataUrl: string): { mimeType: string; data: string } | null {
+  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+  if (!match) return null;
+  return { mimeType: match[1], data: match[2] };
+}
+
+function extensionForMime(mimeType: string): string {
+  switch (mimeType) {
+    case 'video/mp4':
+      return 'mp4';
+    case 'video/webm':
+      return 'webm';
+    case 'video/quicktime':
+      return 'mov';
+    default:
+      return 'mp4';
+  }
+}
+
+async function tryPersistVideoDataUrlToPublic(videoUrl: string): Promise<string | null> {
+  const parsed = parseDataUrl(videoUrl);
+  if (!parsed) return null;
+  if (!parsed.mimeType.startsWith('video/')) return null;
+
+  const ext = extensionForMime(parsed.mimeType);
+  const dir = path.join(process.cwd(), 'public', 'generated', 'videos');
+  await fs.mkdir(dir, { recursive: true });
+
+  let fileName = '';
+  try {
+    fileName = `${crypto.randomUUID()}.${ext}`;
+  } catch {
+    fileName = `${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
+  }
+
+  const filePath = path.join(dir, fileName);
+  const buffer = Buffer.from(parsed.data, 'base64');
+  await fs.writeFile(filePath, buffer);
+  return `/generated/videos/${fileName}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -139,14 +201,76 @@ export async function POST(req: NextRequest) {
 
     console.log(`[GenerateVideo] Plan=${plan}, Mode=${mode}, Model=${selectedModel}`);
 
-    const videoUrl = await generateMarketplaceVideo(safePrompt, safeImages, selectedModel, aspectRatio);
+    const rawVideoUrl = await generateMarketplaceVideo(safePrompt, safeImages, selectedModel, aspectRatio);
+    const persisted = await tryPersistVideoDataUrlToPublic(rawVideoUrl);
+    const videoUrl = persisted || rawVideoUrl;
+
+    let upscaleJobId: string | null = null;
+    if (plan === 'business_plus' && mode === 'premium' && policy.upsamplerModel) {
+      await ensureVideoJobsTable();
+
+      try {
+        upscaleJobId = crypto.randomUUID();
+      } catch {
+        upscaleJobId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      }
+
+      await query(
+        `INSERT INTO video_jobs (id, user_id, status, original_video_url, base_model, upscale_model, aspect_ratio, updated_at)
+         VALUES ($1, $2, 'processing', $3, $4, $5, $6, NOW())`,
+        [
+          upscaleJobId,
+          user.id,
+          videoUrl,
+          selectedModel,
+          policy.upsamplerModel,
+          aspectRatio,
+        ]
+      );
+
+      // Fire-and-forget background upscale
+      void (async () => {
+        try {
+          // Prefer upsampling the generated video output if it's a data URL / GCS URI.
+          const upscaledRaw = await generateMarketplaceVideoUpsampled(safePrompt, safeImages, aspectRatio, rawVideoUrl);
+          const upscaledPersisted = await tryPersistVideoDataUrlToPublic(upscaledRaw);
+          const upscaledUrl = upscaledPersisted || upscaledRaw;
+
+          await query(
+            `UPDATE video_jobs
+             SET status = 'succeeded',
+                 upscaled_video_url = $1,
+                 updated_at = NOW()
+             WHERE id = $2 AND user_id = $3`,
+            [upscaledUrl, upscaleJobId, user.id]
+          );
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          try {
+            await query(
+              `UPDATE video_jobs
+               SET status = 'failed',
+                   error_text = $1,
+                   updated_at = NOW()
+               WHERE id = $2 AND user_id = $3`,
+              [msg.slice(0, 5000), upscaleJobId, user.id]
+            );
+          } catch {
+            // ignore
+          }
+        }
+      })();
+    }
 
     if (user.role !== 'admin') {
       await recordTokenUsage({
         userId: user.id,
         tokensUsed: reservedTokens,
         serviceType: getVideoServiceType(mode),
-        modelUsed: selectedModel,
+        modelUsed:
+          plan === 'business_plus' && mode === 'premium' && policy.upsamplerModel
+            ? `${selectedModel} + ${policy.upsamplerModel}`
+            : selectedModel,
         prompt: safePrompt,
       });
     }
@@ -154,6 +278,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       videoUrl,
+      upscaleJobId,
       tokens_charged: reservedTokens,
       tokens_remaining: user.role === 'admin' ? 999999 : Number(tokensRemaining.toFixed(2)),
     });

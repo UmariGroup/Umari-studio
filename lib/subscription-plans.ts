@@ -281,7 +281,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
       maxImages: 4,
       maxTextInput: 150,
       allowedModes: ['basic', 'pro', 'premium'],
-      allowedModels: ['veo-3.0-fast-generate-001', 'veo-3.0-generate-001', 'veo3_upsampler_video_generation'],
+      allowedModels: ['veo-3.0-fast-generate-001', 'veo3_upsampler_video_generation'],
       monthlyLimits: { basic: 10, pro: 7, premium: 5 },
     },
     copywriter: {
@@ -293,7 +293,9 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
       '700 token / oy',
       'Oddiy: 1 token/rasm',
       'Pro: 5 token/rasm',
-      'Premium video: 45 token',
+      'Oddiy video: 20 token',
+      'Pro video: 30 token',
+      'Premium (Upscale): 45 token',
     ],
   },
 };

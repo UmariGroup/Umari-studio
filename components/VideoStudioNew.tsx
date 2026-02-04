@@ -75,30 +75,31 @@ const getVideoModesForPlan = (plan: SubscriptionPlan): VideoModeConfig[] => {
         duration: 5,
         tokenCost: 20,
         monthlyLimit: 10,
-        description: 'Tez va arzon',
-        features: ['5 soniya', 'Tez rendering'],
+        description: 'Tez, arzon, ko‘p ishlatish uchun',
+        features: ['5 soniya', 'Tez rendering', '2 ta rasm', 'Text: 80'],
         available: true,
       },
       {
         id: 'pro',
         name: 'Pro Video',
-        model: 'veo-3.0-generate-001',
+        model: 'veo-3.0-fast-generate-001',
         duration: 7,
         tokenCost: 30,
         monthlyLimit: 7,
-        description: 'Yuqori sifat',
-        features: ['7 soniya', 'Silliq kamera', 'Reklama uslubi'],
+        description: 'Silliq kamera, reklama uslub',
+        features: ['7 soniya', '3 ta rasm', 'Text: 120', 'Reklama uslubi'],
         available: true,
       },
       {
         id: 'premium',
-        name: 'Premium Video',
-        model: 'veo3_upsampler_video_generation',
+        name: 'Premium (Upscale)',
+        // Note: base generation stays FAST; upscale runs in background server-side
+        model: 'veo-3.0-fast-generate-001',
         duration: 10,
         tokenCost: 45,
         monthlyLimit: 5,
-        description: 'Eng yuqori sifat + Upscaler',
-        features: ['10 soniya', 'Upscale qilingan', 'Studio sifati', 'Reels/Ads uchun'],
+        description: 'Avval FAST video chiqadi, keyin upsampler bilan yaxshilanadi',
+        features: ['10 soniya', 'Max 4 ta rasm', 'Text: 150', 'Background upscale'],
         available: true,
       },
     ],
@@ -125,6 +126,8 @@ const VideoStudio: React.FC = () => {
 
   // Output
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [upscaleJobId, setUpscaleJobId] = useState<string | null>(null);
+  const [upscaling, setUpscaling] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
 
@@ -206,6 +209,8 @@ const VideoStudio: React.FC = () => {
 
     setGenerating(true);
     setVideoUrl(null);
+    setUpscaleJobId(null);
+    setUpscaling(false);
     setProgress(0);
 
     // Simulate progress
@@ -241,6 +246,12 @@ const VideoStudio: React.FC = () => {
         setVideoUrl(data.videoUrl);
         toast.success('Video muvaffaqiyatli yaratildi!');
 
+        if (data.upscaleJobId) {
+          setUpscaleJobId(data.upscaleJobId);
+          setUpscaling(true);
+          toast.info('Business+ uchun upscale backgroundda ketayapti...', 'Upscale');
+        }
+
         // Refresh user data
         const userRes = await fetch('/api/auth/me');
         if (userRes.ok) {
@@ -261,6 +272,43 @@ const VideoStudio: React.FC = () => {
       setGenerating(false);
     }
   };
+
+  // Poll upscale job (Business+)
+  useEffect(() => {
+    if (!upscaleJobId) return;
+
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/video-jobs/${encodeURIComponent(upscaleJobId)}`);
+        if (!res.ok) return;
+        const payload = await res.json();
+        const job = payload?.job;
+
+        if (!job || cancelled) return;
+
+        if (job.status === 'succeeded' && job.upscaledVideoUrl) {
+          setVideoUrl(job.upscaledVideoUrl);
+          setUpscaling(false);
+          toast.success('Upscale tugadi! Video yaxshilandi.', 'Upscale');
+          clearInterval(interval);
+        }
+
+        if (job.status === 'failed') {
+          setUpscaling(false);
+          toast.error(job.error || 'Upscale xatolik bilan tugadi.', 'Upscale');
+          clearInterval(interval);
+        }
+      } catch {
+        // ignore
+      }
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [upscaleJobId, toast]);
 
   if (loading) {
     return (
@@ -338,6 +386,13 @@ const VideoStudio: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {upscaling && (
+        <div className="rounded-2xl border border-purple-200 bg-purple-50 px-4 py-3 text-purple-800">
+          <div className="text-sm font-semibold">Upscale backgroundda ketayapti…</div>
+          <div className="text-xs text-purple-700/80">Tayyor bo‘lsa video avtomatik yangilanadi.</div>
+        </div>
+      )}
 
       {/* Video Mode Tabs */}
       <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">

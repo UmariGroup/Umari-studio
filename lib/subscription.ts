@@ -327,14 +327,23 @@ export function getImagePolicy(plan: SubscriptionPlan, mode: ImageMode): ImagePo
         };
   }
 
-  // Free (no access by default)
+  // Free: allow ONLY basic model (no pro)
+  if (mode !== 'basic') {
+    throw new BillingError({
+      status: 403,
+      code: 'PLAN_RESTRICTED',
+      message: "Free tarifida faqat Basic rasm mavjud. Pullik tarifga o'ting.",
+      recommendedPlan: 'starter',
+    });
+  }
+
   return {
-    costPerImage: 0,
-    outputCount: 0,
-    maxProductImages: 0,
+    costPerImage: 2,
+    outputCount: 1,
+    maxProductImages: 1,
     maxStyleImages: 0,
-    maxPromptChars: 0,
-    allowedModels: [],
+    maxPromptChars: 50,
+    allowedModels: ['gemini-2.5-flash-image'],
   };
 }
 
@@ -343,6 +352,7 @@ export interface VideoPolicy {
   maxImages: number;
   maxPromptChars: number;
   allowedModels: string[];
+  upsamplerModel?: string;
 }
 
 export function getVideoPolicy(plan: SubscriptionPlan, mode: VideoMode): VideoPolicy {
@@ -351,7 +361,7 @@ export function getVideoPolicy(plan: SubscriptionPlan, mode: VideoMode): VideoPo
       throw new BillingError({
         status: 403,
         code: 'PLAN_RESTRICTED',
-        message: "Starter tarifida faqat oddiy video (Veo 2.0) mavjud. Pro tarifga o'ting.",
+        message: "Starter tarifida faqat tez video (Veo 3 Fast) mavjud. Pro tarifga o'ting.",
         recommendedPlan: 'pro',
       });
     }
@@ -359,7 +369,7 @@ export function getVideoPolicy(plan: SubscriptionPlan, mode: VideoMode): VideoPo
       costPerVideo: 15,
       maxImages: 2,
       maxPromptChars: 60,
-      allowedModels: ['veo-2.0-generate-001'],
+      allowedModels: ['veo-3.0-fast-generate-001'],
     };
   }
 
@@ -369,7 +379,7 @@ export function getVideoPolicy(plan: SubscriptionPlan, mode: VideoMode): VideoPo
         costPerVideo: 35,
         maxImages: 3,
         maxPromptChars: 120,
-        allowedModels: ['veo-3.0-fast-generate-001'],
+        allowedModels: ['veo-3.0-generate-001'],
       };
     }
     if (mode === 'basic') {
@@ -377,7 +387,7 @@ export function getVideoPolicy(plan: SubscriptionPlan, mode: VideoMode): VideoPo
         costPerVideo: 25,
         maxImages: 2,
         maxPromptChars: 80,
-        allowedModels: ['veo-2.0-generate-001'],
+        allowedModels: ['veo-3.0-fast-generate-001'],
       };
     }
     throw new BillingError({
@@ -391,10 +401,12 @@ export function getVideoPolicy(plan: SubscriptionPlan, mode: VideoMode): VideoPo
   if (plan === 'business_plus') {
     if (mode === 'premium') {
       return {
+        // Business+ premium pipeline: FAST generate, then background upsampler
         costPerVideo: 45,
         maxImages: 4,
         maxPromptChars: 150,
-        allowedModels: ['veo-3.1-fast-generate-preview'],
+        allowedModels: ['veo-3.0-fast-generate-001'],
+        upsamplerModel: 'veo3_upsampler_video_generation',
       };
     }
     if (mode === 'pro') {
@@ -409,7 +421,7 @@ export function getVideoPolicy(plan: SubscriptionPlan, mode: VideoMode): VideoPo
       costPerVideo: 20,
       maxImages: 2,
       maxPromptChars: 80,
-      allowedModels: ['veo-2.0-generate-001'],
+      allowedModels: ['veo-3.0-fast-generate-001'],
     };
   }
 

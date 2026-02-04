@@ -62,7 +62,7 @@ texture / detail focus
 
 🪙 Narx: 15 token
 
-🤖 Model: veo-2.0-generate-001
+🤖 Model: veo-3.0-fast-generate-001
 (fast va nisbatan arzon)
 
 🖼 Input:
@@ -154,7 +154,7 @@ detail
 VIDEO GENERATION (PRO TARIFNING YURAGI)
 ⚪️ Oddiy video
 
-🤖 Model: veo-2.0-generate-001
+🤖 Model: veo-3.0-fast-generate-001
 
 ⏱️ 6 soniya
 
@@ -264,7 +264,7 @@ lifestyle / angle
 VIDEO GENERATION — Business+’ning ASOSIY USTUNLIGI
 ⚪️ Oddiy video
 
-🤖 Model: veo-2.0-generate-001
+🤖 Model: veo-3.0-fast-generate-001
 
 ⏱️ 5 soniya
 

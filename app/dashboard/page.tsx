@@ -28,7 +28,7 @@ interface TokenCostInfo {
 }
 
 const TOKEN_COSTS: Record<string, TokenCostInfo> = {
-  free: { basic: 3, pro: 10, videoBasic: 20, copywriter: 4 },
+  free: { basic: 2, pro: 999, videoBasic: 999, copywriter: 999 },
   starter: { basic: 2, pro: 7, videoBasic: 15, copywriter: 3 },
   pro: { basic: 1.5, pro: 6, videoBasic: 25, videoPro: 35, copywriter: 2 },
   business_plus: { basic: 1, pro: 5, videoBasic: 20, videoPro: 30, videoPremium: 45, copywriter: 1 },
