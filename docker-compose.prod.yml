@@ -6,6 +6,7 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
+      
     ports:
       - "127.0.0.1:5432:5432"  # 🔐 Bind only to localhost
     volumes:
@@ -14,7 +15,7 @@ services:
     networks:
       - umari_network_prod
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -33,20 +34,36 @@ services:
     command:
       - "postgres"
       - "-c"
+      - "shared_buffers=128MB"
+      - "-c"
+      - "work_mem=4MB"
+      - "-c"
+      - "maintenance_work_mem=32MB"
+      - "-c"
       - "max_connections=50"
-      - "-c"
-      - "shared_buffers=256MB"
-      - "-c"
-      - "effective_cache_size=512MB"
+
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   nextjs:
     build:
       context: .
       dockerfile: docker/Dockerfile.prod
+      args:
+        NODE_ENV: production
+        DB_USER: ${DB_USER}
+        DB_PASSWORD: ${DB_PASSWORD}
+        DB_NAME: ${DB_NAME}
+        DB_HOST: ${DB_HOST}
+        DB_PORT: ${DB_PORT}
+
     container_name: umari_nextjs_prod
     env_file:
       - .env
     environment:
+      NODE_ENV: production
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: ${DB_USER}
@@ -86,6 +103,11 @@ services:
     tmpfs:
       - /app/.next/cache
       - /tmp
+    deploy: 
+      resources:
+        limits:
+          memory: 800M
+          cpus: '1.0'
 
 volumes:
   postgres_data_prod:
