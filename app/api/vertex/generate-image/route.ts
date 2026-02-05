@@ -1,7 +1,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { generateMarketplaceImage as generateGeminiMarketplaceImage } from '../../../../services/gemini';
-import { generateMarketplaceImage as generateVertexMarketplaceImage } from '../../../../services/vertex';
 import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -13,15 +12,6 @@ import {
   refundTokens,
   reserveTokens,
 } from '@/lib/subscription';
-
-const VERTEX_IMAGE_MODELS = new Set([
-  'imagen-3.0-generate-001',
-  'imagen-4.0-generate-001',
-  'imagen-4.0-ultra-generate-001',
-  'imagen-4.0-fast-generate-001',
-  'imagen-4.0-generate-preview-06-06',
-  'imagen-4.0-ultra-generate-preview-06-06',
-]);
 
 function extFromMime(mime: string): string {
   switch (mime) {
@@ -87,19 +77,19 @@ export async function POST(request: NextRequest) {
     const backImagesRaw = Array.isArray(body?.backImages) ? body.backImages.filter(Boolean) : [];
     const sideImagesRaw = Array.isArray(body?.sideImages) ? body.sideImages.filter(Boolean) : [];
     const styleImages = Array.isArray(body?.styleImages) ? body.styleImages.filter(Boolean) : [];
-    const aspectRatio = typeof body?.aspectRatio === 'string' && body.aspectRatio ? body.aspectRatio : '1:1';
-    const provider = typeof body?.provider === 'string' ? body.provider.trim().toLowerCase() : 'gemini';
+    // Marketplace images must be 3:4 (1080×1440). We enforce the aspect ratio server-side.
+    const aspectRatio = '3:4';
+    // We no longer support Vertex for image generation; Gemini-only.
+    const provider = 'gemini';
     const model = typeof body?.model === 'string' ? body.model.trim() : '';
     const requestedMode = typeof body?.mode === 'string' ? body.mode.trim().toLowerCase() : '';
 
     const inferredMode =
       requestedMode === 'basic' || requestedMode === 'pro'
         ? requestedMode
-        : provider === 'vertex'
-          ? 'pro'
-          : model.toLowerCase().includes('flash-image')
-            ? 'basic'
-            : 'pro';
+        : model.toLowerCase().includes('flash-image')
+          ? 'basic'
+          : 'pro';
 
     const plan = user.role === 'admin' ? 'business_plus' : user.subscription_plan;
     const policy = getImagePolicy(plan, inferredMode as any);
@@ -113,18 +103,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (provider === 'vertex') {
-      if (model) {
-        const selectedModel = model.trim();
-        const allowed = VERTEX_IMAGE_MODELS.has(selectedModel) || selectedModel.toLowerCase().startsWith('imagen-');
-        if (!allowed) {
-          return NextResponse.json(
-            { error: `Vertex uchun noto‘g‘ri model: ${selectedModel}` },
-            { status: 400 }
-          );
-        }
-      }
-    } else if (policy.allowedModels.length > 0) {
+    if (policy.allowedModels.length > 0) {
       const selectedModel = (model || policy.allowedModels[0]).trim();
       if (!policy.allowedModels.includes(selectedModel)) {
         throw new BillingError({
@@ -138,7 +117,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`[GenerateImage] Provider: ${provider}, Requested Model: ${model || '(default from env)'}`);
+    console.log(`[GenerateImage] Provider: gemini, Requested Model: ${model || '(default from env)'}`);
 
     const hasAnyProductImage =
       productImages.length > 0 || frontImagesRaw.length > 0 || backImagesRaw.length > 0 || sideImagesRaw.length > 0;
@@ -316,7 +295,6 @@ export async function POST(request: NextRequest) {
     })();
 
     const requestedModel = model || undefined;
-    const geminiFallbackModel = provider === 'vertex' ? policy.allowedModels[0] : requestedModel;
 
     // Reserve tokens upfront; refund any unused on partial failures
     costPerImage = policy.costPerImage;
@@ -331,34 +309,8 @@ export async function POST(request: NextRequest) {
     // Run in parallel
     const results = await Promise.allSettled(
       variations.map(async (v) => {
-        const fullPrompt = `${safePrompt}${v.suffix}`;
+        const fullPrompt = `${safePrompt}${v.suffix}\n\nOUTPUT REQUIREMENT: The final image must be exactly 1080x1440 pixels (3:4).`;
         const productImagesForVariation = v.productImages?.length ? v.productImages : safeProductImages;
-
-        if (provider === 'vertex') {
-          try {
-            return await generateVertexMarketplaceImage(fullPrompt, productImagesForVariation, safeStyleImages, aspectRatio, {
-              model: requestedModel,
-            });
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            const isUpstream5xx =
-              msg.includes('Vertex AI error (500') ||
-              msg.includes('Vertex AI error (502') ||
-              msg.includes('Vertex AI error (503') ||
-              msg.includes('Vertex AI error (504') ||
-              msg.includes('Internal error encountered');
-
-            if (!isUpstream5xx) throw err;
-
-            console.warn(
-              `[GenerateImage] Vertex failed (variation=${v.id}), falling back to Gemini. Error: ${msg.slice(0, 300)}`
-            );
-
-            return generateGeminiMarketplaceImage(fullPrompt, productImagesForVariation, safeStyleImages, aspectRatio, {
-              model: geminiFallbackModel,
-            });
-          }
-        }
 
         return generateGeminiMarketplaceImage(fullPrompt, productImagesForVariation, safeStyleImages, aspectRatio, {
           model: requestedModel,
@@ -404,7 +356,7 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         tokensUsed: Number((imagesSucceeded * costPerImage).toFixed(2)),
         serviceType: 'image_generate',
-        modelUsed: model || (provider === 'vertex' ? 'vertex' : 'gemini'),
+        modelUsed: model || 'gemini',
         prompt: safePrompt,
       });
     }

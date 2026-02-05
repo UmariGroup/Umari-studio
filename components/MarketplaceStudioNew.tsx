@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useToast } from './ToastProvider';
 import { getTelegramSubscribeUrl } from '@/lib/telegram';
+import { FiZap } from 'react-icons/fi';
 
 // ============ TYPES ============
 type ImageMode = 'basic' | 'pro';
@@ -84,8 +85,94 @@ const MarketplaceStudio: React.FC = () => {
   // UI state
   const [generating, setGenerating] = useState(false);
   const [prompt, setPrompt] = useState('');
-  const [aspectRatio, setAspectRatio] = useState('3:4');
   const [countdown, setCountdown] = useState(15);
+
+  const MARKETPLACE_ASPECT_RATIO = '3:4' as const;
+  const TARGET_W = 1080;
+  const TARGET_H = 1440;
+
+  const normalizeTo1080x1440 = useCallback(async (src: string): Promise<string> => {
+    const toDataUrl = async (input: string): Promise<string> => {
+      if (input.startsWith('data:image/')) return input;
+
+      const res = await fetch(input);
+      if (!res.ok) throw new Error('Rasmni yuklab bo‘lmadi');
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      try {
+        return await new Promise<string>((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = TARGET_W;
+              canvas.height = TARGET_H;
+              const ctx = canvas.getContext('2d');
+              if (!ctx) throw new Error('Canvas context topilmadi');
+
+              const iw = img.naturalWidth || img.width;
+              const ih = img.naturalHeight || img.height;
+              if (!iw || !ih) throw new Error('Rasm o‘lchami noma’lum');
+
+              // "cover" scale + center crop
+              const scale = Math.max(TARGET_W / iw, TARGET_H / ih);
+              const dw = iw * scale;
+              const dh = ih * scale;
+              const dx = (TARGET_W - dw) / 2;
+              const dy = (TARGET_H - dh) / 2;
+
+              ctx.clearRect(0, 0, TARGET_W, TARGET_H);
+              ctx.drawImage(img, dx, dy, dw, dh);
+              resolve(canvas.toDataURL('image/png'));
+            } catch (e) {
+              reject(e);
+            }
+          };
+          img.onerror = () => reject(new Error('Rasmni o‘qib bo‘lmadi'));
+          img.src = blobUrl;
+        });
+      } finally {
+        URL.revokeObjectURL(blobUrl);
+      }
+    };
+
+    // If it's already a data URL, we can draw it directly.
+    if (src.startsWith('data:image/')) {
+      return await new Promise<string>((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = TARGET_W;
+            canvas.height = TARGET_H;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) throw new Error('Canvas context topilmadi');
+
+            const iw = img.naturalWidth || img.width;
+            const ih = img.naturalHeight || img.height;
+            const scale = Math.max(TARGET_W / iw, TARGET_H / ih);
+            const dw = iw * scale;
+            const dh = ih * scale;
+            const dx = (TARGET_W - dw) / 2;
+            const dy = (TARGET_H - dh) / 2;
+
+            ctx.clearRect(0, 0, TARGET_W, TARGET_H);
+            ctx.drawImage(img, dx, dy, dw, dh);
+            resolve(canvas.toDataURL('image/png'));
+          } catch (e) {
+            reject(e);
+          }
+        };
+        img.onerror = () => reject(new Error('Rasmni o‘qib bo‘lmadi'));
+        img.src = src;
+      });
+    }
+
+    // Same-origin public URL
+    return await toDataUrl(src);
+  }, []);
 
   // Derived values
   const plan = user?.subscription_plan || 'free';
@@ -219,7 +306,7 @@ const MarketplaceStudio: React.FC = () => {
           productImages: validProductImages,
           styleImages: styleImages.filter((img): img is string => img !== null),
           prompt,
-          aspectRatio,
+          aspectRatio: MARKETPLACE_ASPECT_RATIO,
           model,
           outputCount: config.outputCount,
           tokenCost,
@@ -232,7 +319,15 @@ const MarketplaceStudio: React.FC = () => {
       }
 
       if (data.images && data.images.length > 0) {
-        setGeneratedImages(data.images);
+        try {
+          const normalized = await Promise.all(
+            (data.images as string[]).map((img: string) => normalizeTo1080x1440(img))
+          );
+          setGeneratedImages(normalized);
+        } catch {
+          // If normalization fails for any reason, still show originals.
+          setGeneratedImages(data.images);
+        }
         // Update tokens
         if (user) {
           setUser({
@@ -251,10 +346,16 @@ const MarketplaceStudio: React.FC = () => {
   };
 
   // Download image
-  const downloadImage = (base64: string, index: number) => {
+  const downloadImage = async (base64: string, index: number) => {
+    let finalDataUrl = base64;
+    try {
+      finalDataUrl = await normalizeTo1080x1440(base64);
+    } catch {
+      // ignore
+    }
     const link = document.createElement('a');
-    link.href = base64;
-    link.download = `marketplace-image-${index + 1}.png`;
+    link.href = finalDataUrl;
+    link.download = `marketplace-image-${index + 1}-1080x1440.png`;
     link.click();
   };
 
@@ -509,22 +610,10 @@ const MarketplaceStudio: React.FC = () => {
 
           {/* Aspect Ratio */}
           <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-            <h3 className="font-bold text-gray-800 mb-4">Nisbat</h3>
-            <div className="grid grid-cols-4 gap-2">
-              {['1:1', '3:4', '4:3', '16:9'].map((ratio) => (
-                <button
-                  key={ratio}
-                  onClick={() => setAspectRatio(ratio)}
-                  className={`py-3 rounded-xl font-semibold transition-all ${
-                    aspectRatio === ratio
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {ratio}
-                </button>
-              ))}
-            </div>
+            <h3 className="font-bold text-gray-800 mb-2">Nisbat</h3>
+            <p className="text-sm text-gray-600">
+              Marketplace uchun format doimiy: <strong>3:4 (1080×1440)</strong>
+            </p>
           </div>
 
           {/* Generate Button */}
@@ -544,9 +633,7 @@ const MarketplaceStudio: React.FC = () => {
               </div>
             ) : (
               <div className="flex items-center justify-center gap-3">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
+                <FiZap className="w-6 h-6" aria-hidden />
                 <span>Yaratish ({currentTokenCost} token)</span>
               </div>
             )}
