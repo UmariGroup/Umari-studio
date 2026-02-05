@@ -16,6 +16,62 @@ const GEMINI_API_KEY =
 const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash';
 const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
 
+const GEMINI_RETRY_ATTEMPTS = Math.max(1, Number(process.env.GEMINI_RETRY_ATTEMPTS || 3));
+const GEMINI_MAX_CONCURRENT = Math.max(1, Number(process.env.GEMINI_MAX_CONCURRENT || 4));
+
+class Semaphore {
+  private available: number;
+  private queue: Array<() => void> = [];
+
+  constructor(count: number) {
+    this.available = count;
+  }
+
+  async acquire(): Promise<void> {
+    if (this.available > 0) {
+      this.available -= 1;
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      this.queue.push(resolve);
+    });
+  }
+
+  release(): void {
+    const next = this.queue.shift();
+    if (next) {
+      next();
+      return;
+    }
+    this.available += 1;
+  }
+
+  async use<T>(fn: () => Promise<T>): Promise<T> {
+    await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      this.release();
+    }
+  }
+}
+
+const geminiSemaphore = new Semaphore(GEMINI_MAX_CONCURRENT);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseRetryAfterMs(value: unknown): number | null {
+  if (!value) return null;
+  const raw = Array.isArray(value) ? value[0] : value;
+  const s = String(raw).trim();
+  const seconds = Number(s);
+  if (Number.isFinite(seconds) && seconds > 0) return Math.min(60_000, Math.floor(seconds * 1000));
+  return null;
+}
+
 function requireApiKey(): void {
   if (!GEMINI_API_KEY) {
     throw new Error(
@@ -106,35 +162,61 @@ async function geminiGenerateContent(model: string, body: unknown): Promise<any>
     model
   )}:generateContent`;
 
-  try {
-    const res = await axios.post(url, body, {
-      params: { key: GEMINI_API_KEY },
-      timeout: 120_000,
-    });
+  return geminiSemaphore.use(async () => {
+    let lastErr: unknown;
 
-    return res.data;
-  } catch (error: unknown) {
-    if (axios.isAxiosError(error)) {
-      const status = error.response?.status;
-      const statusText = error.response?.statusText;
-      const data = error.response?.data;
-
-      let details = '';
+    for (let attempt = 1; attempt <= GEMINI_RETRY_ATTEMPTS; attempt++) {
       try {
-        details = typeof data === 'string' ? data : JSON.stringify(data);
-      } catch {
-        details = '';
-      }
-      if (details.length > 2500) details = details.slice(0, 2500) + '…';
+        const res = await axios.post(url, body, {
+          params: { key: GEMINI_API_KEY },
+          timeout: 120_000,
+        });
 
-      const suffix = details ? `\nGemini response: ${details}` : '';
-      throw new Error(
-        `Gemini API error${status ? ` (${status}${statusText ? ` ${statusText}` : ''})` : ''}: ${error.message}${suffix}`
-      );
+        return res.data;
+      } catch (error: unknown) {
+        lastErr = error;
+
+        if (!axios.isAxiosError(error)) {
+          throw error;
+        }
+
+        const status = error.response?.status;
+        const retryable =
+          status === 429 ||
+          status === 500 ||
+          status === 502 ||
+          status === 503 ||
+          status === 504;
+
+        if (retryable && attempt < GEMINI_RETRY_ATTEMPTS) {
+          const retryAfterMs = parseRetryAfterMs((error.response?.headers as any)?.['retry-after']);
+          const expBackoffMs = Math.min(15_000, 750 * Math.pow(2, attempt - 1));
+          const jitterMs = Math.floor(Math.random() * 250);
+          const waitMs = Math.max(retryAfterMs || 0, expBackoffMs) + jitterMs;
+          await sleep(waitMs);
+          continue;
+        }
+
+        const statusText = error.response?.statusText;
+        const data = error.response?.data;
+
+        let details = '';
+        try {
+          details = typeof data === 'string' ? data : JSON.stringify(data);
+        } catch {
+          details = '';
+        }
+        if (details.length > 2500) details = details.slice(0, 2500) + '…';
+
+        const suffix = details ? `\nGemini response: ${details}` : '';
+        throw new Error(
+          `Gemini API error${status ? ` (${status}${statusText ? ` ${statusText}` : ''})` : ''}: ${error.message}${suffix}`
+        );
+      }
     }
 
-    throw error;
-  }
+    throw lastErr;
+  });
 }
 
 function extractText(response: any): string {

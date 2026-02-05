@@ -78,11 +78,11 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       # Vertex (Veo/Imagen) service account JSON inside container
-      GOOGLE_APPLICATION_CREDENTIALS: /app/.secrets/vertex-sa.json
+      GOOGLE_APPLICATION_CREDENTIALS: /.secrets/vertex-sa.json
       NODE_ENV: production
     volumes:
       # Mount secrets into container (read-only). Ensure host file is readable by UID 1001.
-      - ./.secrets:/app/.secrets:ro
+      - ./.secrets:/.secrets:ro
     ports:
       - "127.0.0.1:3000:3000"  # 🔐 Expose only to localhost (Nginx will face public)
     depends_on:
