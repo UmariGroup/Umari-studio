@@ -30,9 +30,9 @@ export const IMAGE_TOKEN_COSTS: Record<SubscriptionPlan, ImageTokenCost> = {
 };
 
 export const VIDEO_TOKEN_COSTS: Record<SubscriptionPlan, VideoTokenCost> = {
-  free: { basic: 999, pro: 999, premium: 999 },
-  starter: { basic: 15, pro: 999, premium: 999 },
-  pro: { basic: 25, pro: 35, premium: 999 },
+  free: { basic: false as unknown as number, pro: false as unknown as number, premium: false  as unknown as number }, // Video mavjud emas
+  starter: { basic: 15, pro: false as unknown as number, premium: false as unknown as number },
+  pro: { basic: 25, pro: 35, premium: false as unknown as number },
   business_plus: { basic: 20, pro: 30, premium: 45 },
 };
 

@@ -28,6 +28,7 @@ CREATE TABLE subscription_plans (
   tokens_included INT NOT NULL,
   features JSONB,
   description TEXT,
+  is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

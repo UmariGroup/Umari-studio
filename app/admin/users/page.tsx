@@ -3,7 +3,19 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useToast } from '@/components/ToastProvider';
-import { FREE_TRIAL_TOKENS } from '@/lib/subscription-plans';
+import { FREE_TRIAL_TOKENS, SUBSCRIPTION_PLANS } from '@/lib/subscription-plans';
+import type { IconType } from 'react-icons';
+import {
+  FiAlertTriangle,
+  FiArrowLeft,
+  FiCheckCircle,
+  FiChevronDown,
+  FiInfo,
+  FiPackage,
+  FiSearch,
+  FiStar,
+} from 'react-icons/fi';
+import { FaRocket } from 'react-icons/fa';
 
 interface User {
   id: string;
@@ -18,13 +30,43 @@ interface User {
   created_at: string;
 }
 
-const PLAN_OPTIONS = [
-  { id: 'starter', label: 'Starter', tokens: 100, price: 9, color: 'emerald', icon: '🟢' },
-  { id: 'pro', label: 'Pro', tokens: 250, price: 19, color: 'blue', icon: '💎' },
-  { id: 'business_plus', label: 'Business+', tokens: 500, price: 29, color: 'purple', icon: '🚀' },
-] as const;
+type PlanId = 'starter' | 'pro' | 'business_plus';
 
-type PlanId = (typeof PLAN_OPTIONS)[number]['id'];
+type PlanOption = {
+  id: PlanId;
+  label: string;
+  tokens: number;
+  price: number;
+  color: string;
+  Icon: IconType;
+};
+
+const PLAN_OPTIONS: PlanOption[] = [
+  {
+    id: 'starter',
+    label: 'Starter',
+    tokens: SUBSCRIPTION_PLANS.starter.monthlyTokens,
+    price: SUBSCRIPTION_PLANS.starter.monthlyPriceUsd,
+    color: 'emerald',
+    Icon: FiPackage,
+  },
+  {
+    id: 'pro',
+    label: 'Pro',
+    tokens: SUBSCRIPTION_PLANS.pro.monthlyTokens,
+    price: SUBSCRIPTION_PLANS.pro.monthlyPriceUsd,
+    color: 'blue',
+    Icon: FiStar,
+  },
+  {
+    id: 'business_plus',
+    label: 'Business+',
+    tokens: SUBSCRIPTION_PLANS.business_plus.monthlyTokens,
+    price: SUBSCRIPTION_PLANS.business_plus.monthlyPriceUsd,
+    color: 'purple',
+    Icon: FaRocket,
+  },
+];
 
 function normalizePlan(plan: unknown): PlanId {
   const raw = String(plan || '').trim().toLowerCase().replace(/\s+/g, '_');
@@ -141,9 +183,7 @@ export default function AdminUsersPage() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
             <Link href="/admin" className="p-2 bg-white/10 rounded-xl hover:bg-white/20 transition-colors">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
+              <FiArrowLeft className="w-5 h-5 text-white" aria-hidden />
             </Link>
             <div>
               <h1 className="text-xl font-bold text-white">Foydalanuvchilar boshqaruvi</h1>
@@ -158,9 +198,7 @@ export default function AdminUsersPage() {
         <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="relative">
-              <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+              <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" aria-hidden />
               <input
                 type="text"
                 placeholder="Email yoki ism qidirish..."
@@ -296,16 +334,19 @@ export default function AdminUsersPage() {
                           >
                             {PLAN_OPTIONS.map((p) => (
                               <option key={p.id} value={p.id} className="bg-slate-800">
-                                {p.icon} {p.label} — ${p.price}
+                                {p.label} — ${p.price} • {p.tokens} token
                               </option>
                             ))}
                           </select>
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">
-                            {currentPlanOption?.icon || '🟢'}
-                          </span>
-                          <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                          </svg>
+                          {(() => {
+                            const CurrentIcon = currentPlanOption?.Icon ?? FiPackage;
+                            return (
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70">
+                                <CurrentIcon className="w-5 h-5" aria-hidden />
+                              </span>
+                            );
+                          })()}
+                          <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" aria-hidden />
                         </div>
 
                         {/* Activate Button */}
@@ -343,21 +384,37 @@ export default function AdminUsersPage() {
         {/* Info Card */}
         <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-2xl p-6 border border-purple-500/20">
           <h3 className="font-bold text-white mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+            <FiInfo className="w-5 h-5 text-purple-400" aria-hidden />
             Tarif belgilash bo'yicha
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-white/70 text-sm">
             <div className="space-y-2">
-              <p>✅ Tarifni tanlang va <strong className="text-white">Faollashtirish</strong> tugmasini bosing</p>
-              <p>✅ Tarif 1 oyga faollashadi va tokenlar yangilanadi</p>
-              <p>✅ Free foydalanuvchiga {FREE_TRIAL_TOKENS} token sinov beriladi</p>
+              <p className="flex gap-2">
+                <FiCheckCircle className="w-5 h-5 text-emerald-300 mt-0.5 flex-shrink-0" aria-hidden />
+                <span>Tarifni tanlang va <strong className="text-white">Faollashtirish</strong> tugmasini bosing</span>
+              </p>
+              <p className="flex gap-2">
+                <FiCheckCircle className="w-5 h-5 text-emerald-300 mt-0.5 flex-shrink-0" aria-hidden />
+                <span>Tarif 1 oyga faollashadi va tokenlar yangilanadi</span>
+              </p>
+              <p className="flex gap-2">
+                <FiCheckCircle className="w-5 h-5 text-emerald-300 mt-0.5 flex-shrink-0" aria-hidden />
+                <span>Free foydalanuvchiga {FREE_TRIAL_TOKENS} token sinov beriladi</span>
+              </p>
             </div>
             <div className="space-y-2">
-              <p>⚠️ <strong className="text-white">Tugatish</strong> - obunani toxtatadi va tokenlarni 0 qiladi</p>
-              <p>⚠️ Muddat tugagan lekin token qolgan bolsa - tokenlar yoqoladi</p>
-              <p>⚠️ Admin foydalanuvchilarni ozgartirish mumkin emas</p>
+              <p className="flex gap-2">
+                <FiAlertTriangle className="w-5 h-5 text-yellow-300 mt-0.5 flex-shrink-0" aria-hidden />
+                <span><strong className="text-white">Tugatish</strong> - obunani toxtatadi va tokenlarni 0 qiladi</span>
+              </p>
+              <p className="flex gap-2">
+                <FiAlertTriangle className="w-5 h-5 text-yellow-300 mt-0.5 flex-shrink-0" aria-hidden />
+                <span>Muddat tugagan lekin token qolgan bolsa - tokenlar yoqoladi</span>
+              </p>
+              <p className="flex gap-2">
+                <FiAlertTriangle className="w-5 h-5 text-yellow-300 mt-0.5 flex-shrink-0" aria-hidden />
+                <span>Admin foydalanuvchilarni ozgartirish mumkin emas</span>
+              </p>
             </div>
           </div>
         </div>

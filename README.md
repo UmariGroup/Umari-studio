@@ -83,6 +83,31 @@ npm run docker:prod
 - `GET /api/subscriptions/plans`
 - `POST /api/subscriptions` (subscribe)
 
+## ⏰ Cron (Obuna tugashini tekshirish)
+
+Obuna muddati tugagan userlarni avtomatik `expired` qilish uchun endpoint bor:
+
+- `GET /api/cron/subscriptions`
+
+Bu endpoint **majburiy** `CRON_SECRET` bilan himoyalangan.
+
+1) `.env` (production) ga qo'shing:
+
+```env
+CRON_SECRET=your_long_random_secret
+```
+
+2) Cronjobs saytingizda (cron-job.org / EasyCron / boshqalar) quyidagini chaqiring:
+
+- URL: `https://umaristudio.uz/api/cron/subscriptions?secret=CRON_SECRET`
+- Method: `GET`
+
+Muqobil variant (query o'rniga header):
+
+- Header: `Authorization: Bearer CRON_SECRET`
+
+Javobda nechta user/subscription `expired` bo'lganini qaytaradi.
+
 ## 🎯 Protected Routes
 
 ```

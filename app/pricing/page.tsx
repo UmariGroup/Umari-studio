@@ -2,7 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { normalizeSubscriptionPlan } from '@/lib/subscription-plans';
+import {
+  IMAGE_TOKEN_COSTS,
+  SUBSCRIPTION_PLANS,
+  VIDEO_TOKEN_COSTS,
+  normalizeSubscriptionPlan,
+} from '@/lib/subscription-plans';
+import { FiCheck, FiChevronDown, FiStar } from 'react-icons/fi';
+import { FaCoins, FaTelegramPlane } from 'react-icons/fa';
 
 interface UserData {
   subscription_plan: string;
@@ -31,105 +38,90 @@ interface PlanConfig {
   benefits: string[];
 }
 
-const PLANS: PlanConfig[] = [
-  {
-    id: 'starter',
-    name: 'Starter',
-    nameUz: 'Boshlang\'ich',
-    price: 9,
-    tokens: 150,
-    description: "Boshlang'ich foydalanuvchilar uchun",
+type ApiPlan = {
+  id: string;
+  name: string;
+  duration_months: number;
+  price: number;
+  tokens_included: number;
+  features: unknown;
+  description: string | null;
+  is_active?: boolean;
+};
+
+const COPYWRITER_TOKEN_COST: Record<string, number> = {
+  starter: 3,
+  pro: 2,
+  business_plus: 1,
+};
+
+function featuresToList(features: unknown): string[] {
+  if (!features) return [];
+  if (Array.isArray(features)) return features.map(String);
+  if (typeof features === 'string') {
+    try {
+      const parsed = JSON.parse(features);
+      if (Array.isArray(parsed)) return parsed.map(String);
+    } catch {
+      return features
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+  }
+  return [];
+}
+
+function buildPlanConfig(slug: string, dbPlan?: ApiPlan): PlanConfig | null {
+  if (slug !== 'starter' && slug !== 'pro' && slug !== 'business_plus') return null;
+  const meta = SUBSCRIPTION_PLANS[slug as keyof typeof SUBSCRIPTION_PLANS];
+  if (!meta) return null;
+
+  const imageCosts = IMAGE_TOKEN_COSTS[slug as keyof typeof IMAGE_TOKEN_COSTS];
+  const videoCosts = VIDEO_TOKEN_COSTS[slug as keyof typeof VIDEO_TOKEN_COSTS];
+
+  const proImage = imageCosts.pro >= 900 ? null : { model: 'gemini-3-pro-image-preview', tokenCost: imageCosts.pro };
+  const proVideo = videoCosts.pro >= 900 ? null : { model: 'veo-3.0-generate-001', tokenCost: videoCosts.pro, duration: 6 };
+  const premiumVideo =
+    videoCosts.premium >= 900
+      ? null
+      : { model: 'veo3_upsampler_video_generation', tokenCost: videoCosts.premium, duration: 10 };
+
+  const benefitsFromDb = dbPlan ? featuresToList(dbPlan.features) : [];
+  const benefits = benefitsFromDb.length > 0 ? benefitsFromDb : meta.highlights;
+
+  return {
+    id: slug,
+    name: meta.label,
+    nameUz: meta.labelUz,
+    price: dbPlan?.price ?? meta.monthlyPriceUsd,
+    tokens: dbPlan?.tokens_included ?? meta.monthlyTokens,
+    description: dbPlan?.description || 'Tarif',
+    popular: slug === 'pro',
     features: {
-      imageBasic: { model: 'gemini-2.5-flash-image', tokenCost: 2 },
-      imagePro: { model: 'gemini-3-pro-image-preview', tokenCost: 7 },
-      videoBasic: { model: 'veo-3.0-fast-generate-001', tokenCost: 15, duration: 5 },
-      videoPro: null,
-      videoPremium: null,
-      copywriter: { tokenCost: 3 },
-      imageLimit: 50,
-      videoLimit: 10,
+      imageBasic: { model: 'gemini-2.5-flash-image', tokenCost: imageCosts.basic },
+      imagePro: proImage,
+      videoBasic: { model: 'veo-3.0-fast-generate-001', tokenCost: videoCosts.basic, duration: 5 },
+      videoPro: proVideo,
+      videoPremium: premiumVideo,
+      copywriter: { tokenCost: COPYWRITER_TOKEN_COST[slug] ?? 0 },
+      imageLimit: slug === 'starter' ? 50 : slug === 'pro' ? 120 : 300,
+      videoLimit: slug === 'starter' ? 10 : slug === 'pro' ? 10 : 22,
     },
-    benefits: [
-      '150 token / oy',
-      'Oddiy rasm (2 token)',
-      'Pro rasm (7 token)',
-      'Veo 3 Fast video (15 token)',
-      'Copywriter (3 token)',
-      'Oy davomida 50 ta rasm',
-      'Oy davomida 10 ta video',
-      'Email qo\'llab-quvvatlash',
-    ],
-  },
-  {
-    id: 'pro',
-    name: 'Pro',
-    nameUz: 'Professional',
-    price: 19,
-    tokens: 400,
-    description: 'Faol foydalanuvchilar uchun',
-    popular: true,
-    features: {
-      imageBasic: { model: 'gemini-2.5-flash-image', tokenCost: 1.5 },
-      imagePro: { model: 'gemini-3-pro-image-preview', tokenCost: 6 },
-      videoBasic: { model: 'veo-3.0-fast-generate-001', tokenCost: 25, duration: 6 },
-      videoPro: { model: 'veo-3.0-generate-001', tokenCost: 35, duration: 6 },
-      videoPremium: null,
-      copywriter: { tokenCost: 2 },
-      imageLimit: 120,
-      videoLimit: 10,
-    },
-    benefits: [
-      '400 token / oy',
-      'Oddiy rasm (1.5 token)',
-      'Pro rasm (6 token)',
-      'Veo 3 Fast video (25 token)',
-      'Veo 3 Pro video (35 token)',
-      'Copywriter (2 token)',
-      'Oy davomida 120 ta rasm',
-      'Oy davomida 10 ta video',
-      'Ustuvor qo\'llab-quvvatlash',
-    ],
-  },
-  {
-    id: 'business_plus',
-    name: 'Business+',
-    nameUz: 'Biznes+',
-    price: 29,
-    tokens: 700,
-    description: 'Biznes va korxonalar uchun',
-    features: {
-      imageBasic: { model: 'gemini-2.5-flash-image', tokenCost: 1 },
-      imagePro: { model: 'gemini-3-pro-image-preview', tokenCost: 5 },
-      videoBasic: { model: 'veo-3.0-fast-generate-001', tokenCost: 20, duration: 5 },
-      videoPro: { model: 'veo-3.0-fast-generate-001', tokenCost: 30, duration: 7 },
-      videoPremium: { model: 'veo3_upsampler_video_generation', tokenCost: 45, duration: 10 },
-      copywriter: { tokenCost: 1 },
-      imageLimit: 300,
-      videoLimit: 22,
-    },
-    benefits: [
-      '700 token / oy',
-      'Oddiy rasm (1 token)',
-      'Pro rasm (5 token)',
-      'Oddiy video (20 token)',
-      'Pro video (30 token)',
-      'Premium Upscale video (45 token)',
-      'Copywriter (1 token)',
-      'Oy davomida 300 ta rasm',
-      'Oy davomida 22 ta video',
-      '24/7 VIP qo\'llab-quvvatlash',
-    ],
-  },
-];
+    benefits,
+  };
+}
 
 export default function PricingPage() {
   const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [plans, setPlans] = useState<PlanConfig[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [showComparison, setShowComparison] = useState(false);
 
   useEffect(() => {
     fetchUser();
+    fetchPlans();
 
     // Check URL params for pre-selected plan
     const params = new URLSearchParams(window.location.search);
@@ -141,6 +133,27 @@ export default function PricingPage() {
       }
     }
   }, []);
+
+  const fetchPlans = async () => {
+    try {
+      const res = await fetch('/api/subscriptions/plans');
+      const data = await res.json();
+      const dbPlans: ApiPlan[] = data?.plans || [];
+      const mapped: PlanConfig[] = [];
+      for (const p of dbPlans) {
+        const slug = normalizeSubscriptionPlan(p.name);
+        const cfg = slug ? buildPlanConfig(slug, p) : null;
+        if (cfg) mapped.push(cfg);
+      }
+
+      // Ensure stable order
+      const order = ['starter', 'pro', 'business_plus'];
+      mapped.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+      if (mapped.length > 0) setPlans(mapped);
+    } catch {
+      // ignore; fall back to metadata
+    }
+  };
 
   const fetchUser = async () => {
     try {
@@ -170,6 +183,12 @@ export default function PricingPage() {
   };
 
   const currentPlan = user?.subscription_plan || 'free';
+  const displayPlans =
+    plans.length > 0
+      ? plans
+      : (['starter', 'pro', 'business_plus']
+          .map((slug) => buildPlanConfig(slug))
+          .filter(Boolean) as PlanConfig[]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50/30 to-pink-50/30">
@@ -198,7 +217,7 @@ export default function PricingPage() {
       <div className="max-w-7xl mx-auto px-4 py-12 -mt-8">
         {/* Pricing Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {PLANS.map((plan) => {
+          {displayPlans.map((plan) => {
             const isCurrentPlan = currentPlan === plan.id;
             const isUpgrade = 
               (currentPlan === 'free') ||
@@ -215,7 +234,9 @@ export default function PricingPage() {
                 {/* Popular Badge */}
                 {plan.popular && (
                   <div className="absolute top-0 right-0 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-bold px-4 py-2 rounded-bl-2xl">
-                    ⭐ Eng Mashhur
+                    <span className="inline-flex items-center gap-1">
+                      <FiStar /> Eng mashhur
+                    </span>
                   </div>
                 )}
 
@@ -245,10 +266,7 @@ export default function PricingPage() {
                         ? 'bg-purple-100 text-purple-700'
                         : 'bg-amber-100 text-amber-700'
                   }`}>
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z" />
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.51-1.31c-.562-.649-1.413-1.076-2.353-1.253V5z" clipRule="evenodd" />
-                    </svg>
+                    <FaCoins className="w-5 h-5" />
                     {plan.tokens} token / oy
                   </div>
                 </div>
@@ -257,18 +275,14 @@ export default function PricingPage() {
                 <div className="px-8 py-6">
                   <h4 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center">
-                      <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                      </svg>
+                      <FiCheck className="w-4 h-4 text-green-600" />
                     </span>
                     Xususiyatlar
                   </h4>
                   <ul className="space-y-3">
                     {plan.benefits.map((benefit, idx) => (
                       <li key={idx} className="flex items-start gap-3 text-sm">
-                        <svg className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
+                        <FiCheck className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
                         <span className="text-gray-700">{benefit}</span>
                       </li>
                     ))}
@@ -281,19 +295,19 @@ export default function PricingPage() {
                     <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Token narxlari</h5>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div className="flex justify-between">
-                        <span className="text-gray-500">🖼️ Oddiy rasm:</span>
+                        <span className="text-gray-500">Oddiy rasm:</span>
                         <span className="font-bold text-gray-700">{plan.features.imageBasic.tokenCost}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">✨ Pro rasm:</span>
+                        <span className="text-gray-500">Pro rasm:</span>
                         <span className="font-bold text-gray-700">{plan.features.imagePro?.tokenCost || '—'}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">🎬 Video:</span>
+                        <span className="text-gray-500">Video:</span>
                         <span className="font-bold text-gray-700">{plan.features.videoBasic.tokenCost}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">✍️ Matn:</span>
+                        <span className="text-gray-500">Matn:</span>
                         <span className="font-bold text-gray-700">{plan.features.copywriter.tokenCost}</span>
                       </div>
                     </div>
@@ -335,9 +349,7 @@ export default function PricingPage() {
             onClick={() => setShowComparison(!showComparison)}
             className="inline-flex items-center gap-2 px-6 py-3 bg-white rounded-xl shadow-lg hover:shadow-xl transition-all text-gray-700 font-medium"
           >
-            <svg className={`w-5 h-5 transition-transform ${showComparison ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-            </svg>
+            <FiChevronDown className={`w-5 h-5 transition-transform ${showComparison ? 'rotate-180' : ''}`} />
             {showComparison ? "Solishtiruvni yopish" : "Tariflarni solishtirish"}
           </button>
         </div>
@@ -358,57 +370,57 @@ export default function PricingPage() {
                 <tbody className="divide-y divide-gray-100">
                   <tr>
                     <td className="px-6 py-4 text-gray-600">Oylik token</td>
-                    <td className="px-6 py-4 text-center font-bold">100</td>
-                    <td className="px-6 py-4 text-center font-bold">250</td>
-                    <td className="px-6 py-4 text-center font-bold">500</td>
+                    <td className="px-6 py-4 text-center font-bold">{displayPlans.find((p) => p.id === 'starter')?.tokens ?? '—'}</td>
+                    <td className="px-6 py-4 text-center font-bold">{displayPlans.find((p) => p.id === 'pro')?.tokens ?? '—'}</td>
+                    <td className="px-6 py-4 text-center font-bold">{displayPlans.find((p) => p.id === 'business_plus')?.tokens ?? '—'}</td>
                   </tr>
                   <tr className="bg-gray-50/50">
-                    <td className="px-6 py-4 text-gray-600">🖼️ Oddiy rasm (token)</td>
-                    <td className="px-6 py-4 text-center">2</td>
-                    <td className="px-6 py-4 text-center">1.5</td>
-                    <td className="px-6 py-4 text-center">1</td>
+                    <td className="px-6 py-4 text-gray-600">Oddiy rasm (token)</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'starter')?.features.imageBasic.tokenCost ?? '—'}</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'pro')?.features.imageBasic.tokenCost ?? '—'}</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'business_plus')?.features.imageBasic.tokenCost ?? '—'}</td>
                   </tr>
                   <tr>
-                    <td className="px-6 py-4 text-gray-600">✨ Pro rasm (token)</td>
-                    <td className="px-6 py-4 text-center">7</td>
-                    <td className="px-6 py-4 text-center">6</td>
-                    <td className="px-6 py-4 text-center">5</td>
+                    <td className="px-6 py-4 text-gray-600">Pro rasm (token)</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'starter')?.features.imagePro?.tokenCost ?? '—'}</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'pro')?.features.imagePro?.tokenCost ?? '—'}</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'business_plus')?.features.imagePro?.tokenCost ?? '—'}</td>
                   </tr>
                   <tr className="bg-gray-50/50">
-                    <td className="px-6 py-4 text-gray-600">🎬 Veo 3 Fast video</td>
-                    <td className="px-6 py-4 text-center">✓ (15 token)</td>
-                    <td className="px-6 py-4 text-center">✓ (25 token)</td>
-                    <td className="px-6 py-4 text-center">✓ (20 token)</td>
+                    <td className="px-6 py-4 text-gray-600">Veo 3 Fast video</td>
+                    <td className="px-6 py-4 text-center">✓ ({displayPlans.find((p) => p.id === 'starter')?.features.videoBasic.tokenCost ?? '—'} token)</td>
+                    <td className="px-6 py-4 text-center">✓ ({displayPlans.find((p) => p.id === 'pro')?.features.videoBasic.tokenCost ?? '—'} token)</td>
+                    <td className="px-6 py-4 text-center">✓ ({displayPlans.find((p) => p.id === 'business_plus')?.features.videoBasic.tokenCost ?? '—'} token)</td>
                   </tr>
                   <tr>
-                    <td className="px-6 py-4 text-gray-600">🎥 Veo 3 Pro video</td>
+                    <td className="px-6 py-4 text-gray-600">Veo 3 Pro video</td>
                     <td className="px-6 py-4 text-center text-gray-400">—</td>
-                    <td className="px-6 py-4 text-center">✓ (35 token)</td>
-                    <td className="px-6 py-4 text-center">✓ (30 token)</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'pro')?.features.videoPro ? `✓ (${displayPlans.find((p) => p.id === 'pro')?.features.videoPro?.tokenCost} token)` : '—'}</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'business_plus')?.features.videoPro ? `✓ (${displayPlans.find((p) => p.id === 'business_plus')?.features.videoPro?.tokenCost} token)` : '—'}</td>
                   </tr>
                   <tr className="bg-gray-50/50">
-                    <td className="px-6 py-4 text-gray-600">💎 Premium Upscale video</td>
+                    <td className="px-6 py-4 text-gray-600">Premium Upscale video</td>
                     <td className="px-6 py-4 text-center text-gray-400">—</td>
                     <td className="px-6 py-4 text-center text-gray-400">—</td>
-                    <td className="px-6 py-4 text-center">✓ (45 token)</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'business_plus')?.features.videoPremium ? `✓ (${displayPlans.find((p) => p.id === 'business_plus')?.features.videoPremium?.tokenCost} token)` : '—'}</td>
                   </tr>
                   <tr>
-                    <td className="px-6 py-4 text-gray-600">✍️ Copywriter (token)</td>
-                    <td className="px-6 py-4 text-center">3</td>
-                    <td className="px-6 py-4 text-center">2</td>
-                    <td className="px-6 py-4 text-center">1</td>
+                    <td className="px-6 py-4 text-gray-600">Copywriter (token)</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'starter')?.features.copywriter.tokenCost ?? '—'}</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'pro')?.features.copywriter.tokenCost ?? '—'}</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'business_plus')?.features.copywriter.tokenCost ?? '—'}</td>
                   </tr>
                   <tr className="bg-gray-50/50">
                     <td className="px-6 py-4 text-gray-600">Oylik rasm limiti</td>
-                    <td className="px-6 py-4 text-center">50 ta</td>
-                    <td className="px-6 py-4 text-center">120 ta</td>
-                    <td className="px-6 py-4 text-center">300 ta</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'starter')?.features.imageLimit ?? '—'} ta</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'pro')?.features.imageLimit ?? '—'} ta</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'business_plus')?.features.imageLimit ?? '—'} ta</td>
                   </tr>
                   <tr>
                     <td className="px-6 py-4 text-gray-600">Oylik video limiti</td>
-                    <td className="px-6 py-4 text-center">10 ta</td>
-                    <td className="px-6 py-4 text-center">10 ta</td>
-                    <td className="px-6 py-4 text-center">22 ta</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'starter')?.features.videoLimit ?? '—'} ta</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'pro')?.features.videoLimit ?? '—'} ta</td>
+                    <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'business_plus')?.features.videoLimit ?? '—'} ta</td>
                   </tr>
                 </tbody>
               </table>
@@ -430,9 +442,7 @@ export default function PricingPage() {
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-purple-600 rounded-xl font-bold hover:shadow-xl transition-all"
               >
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
-                </svg>
+                <FaTelegramPlane className="w-6 h-6" />
                 Telegram orqali bog'lanish
               </a>
               <Link

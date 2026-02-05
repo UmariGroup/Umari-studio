@@ -312,6 +312,23 @@ export async function POST(req: NextRequest) {
     }
 
     const message = error?.message || 'Internal Server Error';
+
+    // Vertex safety policy / sensitive words block
+    if (
+      typeof message === 'string' &&
+      (message.toLowerCase().includes('sensitive words') ||
+        message.toLowerCase().includes('responsible ai') ||
+        message.toLowerCase().includes('violat') && message.toLowerCase().includes('practices'))
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Prompt Google Responsible AI qoidalariga mos kelmadi. Iltimos, promptni yumshoqroq/neytral qilib qayta yozing (taqiqlangan yoki sezgir so'zlarsiz).",
+          code: 'PROMPT_POLICY_BLOCKED',
+        },
+        { status: 400 }
+      );
+    }
     const status =
       message.includes('(400') ? 400 :
         message.includes('(401') ? 401 :

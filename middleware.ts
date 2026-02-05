@@ -13,11 +13,34 @@ async function verifyEdgeJwt(token: string) {
 }
 
 export async function middleware(request: NextRequest) {
-  const authToken = request.cookies.get('auth_token')?.value;
   const pathname = request.nextUrl.pathname;
 
-  // Parse token payload
-  const userPayload = authToken ? await verifyEdgeJwt(authToken) : null;
+  // Block Next.js Server Action calls early.
+  // We currently don't use Server Actions in this app; these requests are most often
+  // from stale deployments (cached HTML) or automated probes, and they spam logs with:
+  // "Failed to find Server Action ...".
+  const nextAction = request.headers.get('next-action');
+  if (request.method === 'POST' && nextAction) {
+    return new NextResponse('Bad Request', {
+      status: 400,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    });
+  }
+
+  const authToken = request.cookies.get('auth_token')?.value;
+
+  const needsAuthPayload =
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/dashboard') ||
+    pathname === '/pricing' ||
+    pathname === '/login' ||
+    pathname === '/register';
+
+  // Parse token payload only when needed
+  const userPayload = needsAuthPayload && authToken ? await verifyEdgeJwt(authToken) : null;
 
   // ============================================
   // ADMIN ROUTES - Strict Protection
@@ -88,12 +111,9 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/admin/:path*',
-    '/dashboard/:path*',
-    '/pricing',
-    '/login',
-    '/register',
-    '/api/:path*',
+    // Run middleware on all non-static routes so we can block invalid Server Action calls
+    // and still apply auth redirects where needed.
+    '/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)',
   ],
 };
 

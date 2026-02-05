@@ -70,6 +70,8 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
       JWT_SECRET: ${JWT_SECRET}
+      # Cron (subscription expiry sweeper)
+      CRON_SECRET: ${CRON_SECRET}
       # Gemini (Generative Language API)
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       GEMINI_TEXT_MODEL: ${GEMINI_TEXT_MODEL:-gemini-2.0-flash}
