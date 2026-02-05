@@ -179,7 +179,7 @@ export default function Header() {
                 <Link href="/copywriter" className="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">
                   Copywriter
                 </Link>
-                <Link href="/analytics" className="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">
+                <Link href="https://sellway.uz" target="_blank" rel="noopener noreferrer" className="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">
                   Analytics
                 </Link>
                 {user.role === 'admin' && (

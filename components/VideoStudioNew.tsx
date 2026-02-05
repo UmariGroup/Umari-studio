@@ -3,6 +3,24 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from './ToastProvider';
 import { parseApiErrorResponse, toUzbekErrorMessage } from '@/lib/uzbek-errors';
+import {
+  FiArrowRight,
+  FiAward,
+  FiDownload,
+  FiEdit3,
+  FiFilm,
+  FiImage,
+  FiInfo,
+  FiMonitor,
+  FiPlayCircle,
+  FiPlus,
+  FiSmartphone,
+  FiStar,
+  FiVideo,
+  FiX,
+  FiZap,
+} from 'react-icons/fi';
+import { FaCoins } from 'react-icons/fa';
 
 // ============ TYPES ============
 type VideoMode = 'basic' | 'pro' | 'premium';
@@ -323,9 +341,7 @@ const VideoStudio: React.FC = () => {
       <div className="max-w-4xl mx-auto p-8">
         <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-3xl p-12 text-center">
           <div className="w-20 h-20 bg-purple-200 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg className="w-10 h-10 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
+            <FiVideo className="w-10 h-10 text-purple-600" aria-hidden />
           </div>
           <h2 className="text-2xl font-bold text-gray-800 mb-4">Video Studiyosi</h2>
           <p className="text-gray-600 mb-6">
@@ -336,9 +352,7 @@ const VideoStudio: React.FC = () => {
             className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-bold rounded-xl hover:shadow-lg transition-all"
           >
             Tariflarni ko'rish
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
+            <FiArrowRight className="w-5 h-5" aria-hidden />
           </a>
         </div>
       </div>
@@ -352,9 +366,7 @@ const VideoStudio: React.FC = () => {
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="flex items-center gap-5">
             <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
-              <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
+              <FiVideo className="w-10 h-10" aria-hidden />
             </div>
             <div>
               <h1 className="text-3xl font-black tracking-tight">Video Studio</h1>
@@ -367,10 +379,7 @@ const VideoStudio: React.FC = () => {
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl px-6 py-4 border border-white/20">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-yellow-400/20 rounded-xl">
-                  <svg className="w-6 h-6 text-yellow-300" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z" />
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.51-1.31c-.562-.649-1.413-1.076-2.353-1.253V5z" clipRule="evenodd" />
-                  </svg>
+                  <FaCoins className="w-6 h-6 text-yellow-300" aria-hidden />
                 </div>
                 <div>
                   <p className="text-xs text-white/60 uppercase tracking-wider font-medium">Qolgan Token</p>
@@ -423,19 +432,13 @@ const VideoStudio: React.FC = () => {
                       : 'bg-gray-100'
                   }`}>
                     {mode.id === 'basic' && (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
+                      <FiZap className="w-5 h-5" aria-hidden />
                     )}
                     {mode.id === 'pro' && (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                      </svg>
+                      <FiStar className="w-5 h-5" aria-hidden />
                     )}
                     {mode.id === 'premium' && (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                      </svg>
+                      <FiAward className="w-5 h-5" aria-hidden />
                     )}
                   </div>
                   <div className="text-left">
@@ -485,8 +488,8 @@ const VideoStudio: React.FC = () => {
                     : currentConfig.id === 'pro'
                       ? 'bg-blue-100 text-blue-700'
                       : 'bg-purple-100 text-purple-700'
-                }`}>
-                  🎬 {currentConfig.model}
+                } inline-flex items-center gap-2`}>
+                  <FiFilm aria-hidden className="w-4 h-4" /> {currentConfig.model}
                 </span>
                 <span className="text-sm text-gray-600">{currentConfig.description}</span>
               </div>
@@ -511,9 +514,7 @@ const VideoStudio: React.FC = () => {
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-bold text-gray-800 flex items-center gap-2">
                     <span className="p-1.5 bg-pink-100 rounded-lg">
-                      <svg className="w-4 h-4 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
+                      <FiImage className="w-4 h-4 text-pink-600" aria-hidden />
                     </span>
                     Asosiy rasmlar
                   </h3>
@@ -529,9 +530,7 @@ const VideoStudio: React.FC = () => {
                         onClick={() => removeImage(idx)}
                         className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
                       >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        <FiX className="w-3 h-3" aria-hidden />
                       </button>
                     </div>
                   ))}
@@ -544,9 +543,7 @@ const VideoStudio: React.FC = () => {
                         accept="image/*"
                         multiple
                       />
-                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                      </svg>
+                      <FiPlus className="w-8 h-8 text-gray-400" aria-hidden />
                     </div>
                   )}
                 </div>
@@ -556,9 +553,7 @@ const VideoStudio: React.FC = () => {
               <div className="bg-gray-50 rounded-2xl p-6">
                 <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
                   <span className="p-1.5 bg-amber-100 rounded-lg">
-                    <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                    </svg>
+                    <FiEdit3 className="w-4 h-4 text-amber-600" aria-hidden />
                   </span>
                   Harakat tavsifi
                 </h3>
@@ -588,7 +583,10 @@ const VideoStudio: React.FC = () => {
                           : 'bg-white text-gray-500 border border-gray-200'
                       }`}
                     >
-                      🖥️ 16:9
+                      <span className="inline-flex items-center justify-center gap-2">
+                        <FiMonitor aria-hidden className="w-4 h-4" />
+                        <span>16:9</span>
+                      </span>
                     </button>
                     <button
                       onClick={() => setIsPortrait(true)}
@@ -598,7 +596,10 @@ const VideoStudio: React.FC = () => {
                           : 'bg-white text-gray-500 border border-gray-200'
                       }`}
                     >
-                      📱 9:16
+                      <span className="inline-flex items-center justify-center gap-2">
+                        <FiSmartphone aria-hidden className="w-4 h-4" />
+                        <span>9:16</span>
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -623,10 +624,7 @@ const VideoStudio: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
+                      <FiPlayCircle className="w-5 h-5" aria-hidden />
                       Video yaratish ({tokenCost} token)
                     </>
                   )}
@@ -638,9 +636,7 @@ const VideoStudio: React.FC = () => {
             <div className="bg-gray-900 rounded-2xl p-6 min-h-[400px] flex flex-col">
               <h3 className="font-bold text-white mb-4 flex items-center gap-2">
                 <span className="p-1.5 bg-purple-500/20 rounded-lg">
-                  <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
+                  <FiVideo className="w-4 h-4 text-purple-400" aria-hidden />
                 </span>
                 Natija
               </h3>
@@ -686,9 +682,7 @@ const VideoStudio: React.FC = () => {
                   <video src={videoUrl} controls autoPlay loop className="w-full h-full object-contain" />
                 ) : (
                   <div className="text-center text-gray-600">
-                    <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
+                    <FiVideo className="w-16 h-16 mx-auto mb-4 opacity-50" aria-hidden />
                     <p className="text-sm">Video kutilmoqda</p>
                   </div>
                 )}
@@ -700,9 +694,7 @@ const VideoStudio: React.FC = () => {
                   download="umari-video.mp4"
                   className="mt-4 w-full py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:shadow-lg transition-all"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
+                  <FiDownload className="w-5 h-5" aria-hidden />
                   Yuklab olish
                 </a>
               )}
@@ -714,9 +706,7 @@ const VideoStudio: React.FC = () => {
       {/* Token Info */}
       <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-2xl p-6 border border-gray-200">
         <h4 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
-          <svg className="w-5 h-5 text-purple-500" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-          </svg>
+          <FiInfo className="w-5 h-5 text-purple-500" aria-hidden />
           Video narxlari ({plan === 'business_plus' ? 'Business+' : plan} tarif)
         </h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
