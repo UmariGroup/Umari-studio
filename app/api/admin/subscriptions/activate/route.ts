@@ -42,6 +42,12 @@ export async function POST(req: NextRequest) {
   try {
     await client.query('BEGIN');
 
+    // Backward-compatible DB migration
+    await client.query(
+      `ALTER TABLE subscription_plans
+       ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`
+    );
+
     const userRes = await client.query(`SELECT id, email FROM users WHERE id = $1 FOR UPDATE`, [userId]);
     if (userRes.rows.length === 0) {
       await client.query('ROLLBACK');
@@ -56,46 +62,63 @@ export async function POST(req: NextRequest) {
       [userId]
     );
 
-    // Activate subscription: always (re)starts 1 month from NOW (per product rules)
-    const updateUserRes = await client.query(
-      `UPDATE users
-       SET subscription_status = 'active',
-           subscription_plan = $1,
-           subscription_expires_at = NOW() + INTERVAL '1 month',
-           tokens_remaining = $2,
-           updated_at = NOW()
-       WHERE id = $3
-       RETURNING id, email, role, subscription_status, subscription_plan, subscription_expires_at, tokens_remaining`,
-      [plan, meta.monthlyTokens, userId]
-    );
-
     const planName = PLAN_DB_NAME[plan];
     let planId: string | null = null;
 
-    const planIdRes = await client.query(
-      `SELECT id FROM subscription_plans
-       WHERE lower(name) = lower($1) AND duration_months = 1
+    // Prefer DB as source of truth (price/tokens) to avoid stale constants.
+    const dbPlanRes = await client.query(
+      `SELECT id, duration_months, price, tokens_included
+       FROM subscription_plans
+       WHERE lower(name) = lower($1)
+         AND COALESCE(is_active, true) = true
        ORDER BY created_at DESC
        LIMIT 1`,
       [planName]
     );
-    planId = planIdRes.rows[0]?.id || null;
 
-    if (!planId) {
+    let durationMonths = 1;
+    let pricePaid = meta.monthlyPriceUsd;
+    let tokensAllocated = meta.monthlyTokens;
+
+    if (dbPlanRes.rows.length > 0) {
+      const row = dbPlanRes.rows[0];
+      planId = row.id || null;
+      durationMonths = Number(row.duration_months) || 1;
+      pricePaid = Number(row.price) || pricePaid;
+      tokensAllocated = Number(row.tokens_included) || tokensAllocated;
+    } else {
       const insertPlanRes = await client.query(
-        `INSERT INTO subscription_plans (name, duration_months, price, tokens_included, features, description)
-         VALUES ($1, 1, $2, $3, $4, $5)
+        `INSERT INTO subscription_plans (name, duration_months, price, tokens_included, features, description, is_active)
+         VALUES ($1, 1, $2, $3, $4, $5, true)
          RETURNING id`,
         [planName, meta.monthlyPriceUsd, meta.monthlyTokens, JSON.stringify([]), '']
       );
       planId = insertPlanRes.rows[0]?.id || null;
     }
 
+    if (!planId) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+    }
+
+    // Activate subscription: always (re)starts 1 month from NOW (per product rules)
+    const updateUserRes = await client.query(
+      `UPDATE users
+       SET subscription_status = 'active',
+           subscription_plan = $1,
+           subscription_expires_at = NOW() + ($2 * INTERVAL '1 month'),
+           tokens_remaining = $3,
+           updated_at = NOW()
+       WHERE id = $4
+       RETURNING id, email, role, subscription_status, subscription_plan, subscription_expires_at, tokens_remaining`,
+      [plan, durationMonths, tokensAllocated, userId]
+    );
+
     const historyRes = await client.query(
       `INSERT INTO subscriptions_history (user_id, plan_id, started_at, expires_at, price_paid, tokens_allocated, status)
-       VALUES ($1, $2, NOW(), NOW() + INTERVAL '1 month', $3, $4, 'active')
+       VALUES ($1, $2, NOW(), NOW() + ($3 * INTERVAL '1 month'), $4, $5, 'active')
        RETURNING id`,
-      [userId, planId, meta.monthlyPriceUsd, meta.monthlyTokens]
+      [userId, planId, durationMonths, pricePaid, tokensAllocated]
     );
 
     await client.query(
@@ -106,8 +129,11 @@ export async function POST(req: NextRequest) {
         userId,
         JSON.stringify({
           plan,
+          plan_id: planId,
           expires_at: updateUserRes.rows[0]?.subscription_expires_at,
-          tokens_allocated: meta.monthlyTokens,
+          duration_months: durationMonths,
+          price_paid: pricePaid,
+          tokens_allocated: tokensAllocated,
         }),
       ]
     );
@@ -131,4 +157,3 @@ export async function POST(req: NextRequest) {
     client.release();
   }
 }
-

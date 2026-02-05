@@ -3,6 +3,10 @@
  * Based on tarif.md specifications
  */
 
+import type { IconType } from 'react-icons';
+import { FiGift, FiPackage, FiStar } from 'react-icons/fi';
+import { FaRocket } from 'react-icons/fa';
+
 export type SubscriptionStatus = 'free' | 'active' | 'expired';
 export type SubscriptionPlan = 'free' | 'starter' | 'pro' | 'business_plus';
 
@@ -24,9 +28,9 @@ export interface VideoTokenCost {
 
 export const IMAGE_TOKEN_COSTS: Record<SubscriptionPlan, ImageTokenCost> = {
   free: { basic: 2, pro: 999 },      // Faqat basic, pro mavjud emas
-  starter: { basic: 2, pro: 7 },     // $9/oy - 100 token
-  pro: { basic: 1.5, pro: 6 },       // $19/oy - 250 token
-  business_plus: { basic: 1, pro: 5 }, // $29/oy - 500 token
+  starter: { basic: 2, pro: 7 },     // $9/oy - 140 token
+  pro: { basic: 1.5, pro: 6 },       // $19/oy - 350 token
+  business_plus: { basic: 1, pro: 5 }, // $29/oy - 600 token
 };
 
 export const VIDEO_TOKEN_COSTS: Record<SubscriptionPlan, VideoTokenCost> = {
@@ -141,7 +145,7 @@ export interface SubscriptionPlanMeta {
   monthlyTokens: number;
   color: string;
   gradient: string;
-  icon: string;
+  icon: IconType;
   badge?: string;
   image: PlanImageConfig;
   video: PlanVideoConfig;
@@ -161,7 +165,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
     monthlyTokens: FREE_TRIAL_TOKENS,
     color: 'gray',
     gradient: 'from-gray-400 to-gray-600',
-    icon: '🆓',
+    icon: FiGift,
     image: {
       maxProductImages: 1,
       maxStyleImages: 0,
@@ -189,10 +193,10 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
     label: 'Starter',
     labelUz: 'Starter',
     monthlyPriceUsd: 9,
-    monthlyTokens: 150,
+    monthlyTokens: 140,
     color: 'emerald',
     gradient: 'from-emerald-400 to-teal-600',
-    icon: '🟢',
+    icon: FiPackage,
     badge: 'Ommabop',
     image: {
       maxProductImages: 3,
@@ -215,7 +219,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
       features: ['Mahsulot nomi', 'Tavsifi', 'Xususiyatlar'],
     },
     highlights: [
-      '150 token / oy',
+      '140 token / oy',
       'Oddiy rasm: 2 token',
       'Pro rasm: 7 token',
       'Video: 15 token (5 sek)',
@@ -227,10 +231,10 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
     label: 'Pro',
     labelUz: 'Pro',
     monthlyPriceUsd: 19,
-    monthlyTokens: 400,
+    monthlyTokens: 350,
     color: 'blue',
     gradient: 'from-blue-500 to-indigo-600',
-    icon: '💎',
+    icon: FiStar,
     badge: 'Tavsiya etiladi',
     image: {
       maxProductImages: 4,
@@ -253,7 +257,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
       features: ['Marketplace copy', 'SEO tavsif', 'Uzun matn'],
     },
     highlights: [
-      '400 token / oy',
+      '350 token / oy',
       'Oddiy: 1.5 token/rasm',
       'Pro: 6 token/rasm',
       'Pro video: 35 token',
@@ -264,10 +268,10 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
     label: 'Business+',
     labelUz: 'Business+',
     monthlyPriceUsd: 29,
-    monthlyTokens: 700,
+    monthlyTokens: 600,
     color: 'purple',
     gradient: 'from-purple-500 to-pink-600',
-    icon: '🚀',
+    icon: FaRocket,
     badge: 'Eng kuchli',
     image: {
       maxProductImages: 5,
@@ -290,7 +294,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
       features: ['Product copy', 'Marketing/Ads', 'Long description', 'SEO Pro'],
     },
     highlights: [
-      '700 token / oy',
+      '600 token / oy',
       'Oddiy: 1 token/rasm',
       'Pro: 5 token/rasm',
       'Oddiy video: 20 token',
@@ -381,4 +385,3 @@ export function getPlanColor(plan: SubscriptionPlan): string {
 export function getPlanGradient(plan: SubscriptionPlan): string {
   return SUBSCRIPTION_PLANS[plan]?.gradient ?? 'from-gray-400 to-gray-600';
 }
-

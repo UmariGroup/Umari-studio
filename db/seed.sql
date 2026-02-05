@@ -59,7 +59,7 @@ ON CONFLICT DO NOTHING;
 -- Insert pricing tiers for admin panel
 INSERT INTO pricing_tiers (tier_name, monthly_price, tokens_included, features, is_active)
 VALUES
-  ('Starter', 9.00, 150, '{"description": "Tez va arzon boshlash uchun", "features": ["150 token/oy", "Basic+Pro image", "Veo 2.0 video"]}', true),
-  ('Pro', 19.00, 400, '{"description": "Marketplace va reklama uchun", "features": ["400 token/oy", "Pro image", "Pro video"]}', true),
-  ('Business+', 29.00, 700, '{"description": "Agency / SMM / katalog uchun", "features": ["700 token/oy", "Premium video", "Ko\u02bbp rakurs"]}', true)
+  ('Starter', 9.00, 140, '{"description": "Tez va arzon boshlash uchun", "features": ["140 token/oy", "Image: Basic+Pro", "Video: Veo 3 Fast", "Copywriter: 18 blok (qisqa)"]}', true),
+  ('Pro', 19.00, 350, '{"description": "Marketplace va reklama uchun", "features": ["400 token/oy", "Pro image + pro video", "Marketplace/katalog uchun"]}', true),
+  ('Business+', 29.00, 600, '{"description": "Agency / SMM / katalog uchun", "features": ["600 token/oy", "Eng kuchli image rejim", "Ko\u02bbb video va rakurs"]}', true)
 ON CONFLICT DO NOTHING;

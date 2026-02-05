@@ -56,7 +56,7 @@ export default function SubscriptionPlansAdminPage() {
   const [formName, setFormName] = useState('');
   const [formDuration, setFormDuration] = useState(1);
   const [formPrice, setFormPrice] = useState(9);
-  const [formTokens, setFormTokens] = useState(150);
+  const [formTokens, setFormTokens] = useState(140);
   const [formDescription, setFormDescription] = useState('');
   const [formFeaturesText, setFormFeaturesText] = useState('');
 
@@ -70,10 +70,10 @@ export default function SubscriptionPlansAdminPage() {
     try {
       const response = await fetch('/api/subscriptions/plans?all=1');
       const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || 'Failed to fetch plans');
+      if (!response.ok) throw new Error(data?.error || 'Tariflarni olishda xatolik');
       setPlans(data.plans || []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to fetch plans');
+      setError(e instanceof Error ? e.message : 'Tariflarni olishda xatolik');
     } finally {
       setLoading(false);
     }
@@ -84,7 +84,7 @@ export default function SubscriptionPlansAdminPage() {
     setFormName('');
     setFormDuration(1);
     setFormPrice(9);
-    setFormTokens(150);
+    setFormTokens(140);
     setFormDescription('');
     setFormFeaturesText('');
     setShowForm(true);
@@ -104,10 +104,10 @@ export default function SubscriptionPlansAdminPage() {
   const save = async () => {
     setError(null);
     try {
-      if (!formName.trim()) throw new Error('Name required');
-      if (!formDuration || formDuration < 0) throw new Error('Duration invalid');
-      if (formPrice < 0) throw new Error('Price invalid');
-      if (!formTokens || formTokens < 0) throw new Error('Tokens invalid');
+      if (!formName.trim()) throw new Error('Nomi kiritilishi shart');
+      if (!formDuration || formDuration < 0) throw new Error('Muddat noto‘g‘ri');
+      if (formPrice < 0) throw new Error('Narx noto‘g‘ri');
+      if (!formTokens || formTokens < 0) throw new Error('Token soni noto‘g‘ri');
 
       const payload = {
         name: formName.trim(),
@@ -124,13 +124,13 @@ export default function SubscriptionPlansAdminPage() {
         body: JSON.stringify(editing ? { id: editing.id, ...payload } : payload),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Save failed');
+      if (!res.ok) throw new Error(data?.error || 'Saqlashda xatolik');
 
       setShowForm(false);
       setEditing(null);
       await fetchPlans();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(e instanceof Error ? e.message : 'Saqlashda xatolik');
     }
   };
 
@@ -143,10 +143,10 @@ export default function SubscriptionPlansAdminPage() {
         body: JSON.stringify({ id: plan.id, is_active: active }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Update failed');
+      if (!res.ok) throw new Error(data?.error || 'Yangilashda xatolik');
       await fetchPlans();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Update failed');
+      setError(e instanceof Error ? e.message : 'Yangilashda xatolik');
     }
   };
 
@@ -169,7 +169,7 @@ export default function SubscriptionPlansAdminPage() {
             </Link>
             <div>
               <h1 className="text-2xl font-black">Tariflar (DB)</h1>
-              <p className="text-white/50 text-sm">Pricing page shu jadvaldan oladi</p>
+              <p className="text-white/50 text-sm">Pricing sahifasi shu jadvaldan oladi</p>
             </div>
           </div>
 
@@ -201,7 +201,7 @@ export default function SubscriptionPlansAdminPage() {
           </div>
 
           {loading ? (
-            <div className="p-6 text-white/60">Yuklanmoqda...</div>
+            <div className="p-6 text-white/60">Yuklanmoqda…</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -236,7 +236,7 @@ export default function SubscriptionPlansAdminPage() {
                             }`}
                           >
                             <FiCheck className="opacity-80" />
-                            {active ? 'Active' : 'Disabled'}
+                            {active ? 'Faol' : 'Nofaol'}
                           </span>
                         </td>
                         <td className="px-6 py-4">
@@ -285,7 +285,7 @@ export default function SubscriptionPlansAdminPage() {
                     setEditing(null);
                   }}
                   className="p-2 hover:bg-white/10 rounded-xl transition"
-                  aria-label="Close"
+                  aria-label="Yopish"
                 >
                   <FiX />
                 </button>
@@ -333,7 +333,7 @@ export default function SubscriptionPlansAdminPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs text-white/60">Description</label>
+                  <label className="text-xs text-white/60">Tavsif</label>
                   <input
                     value={formDescription}
                     onChange={(e) => setFormDescription(e.target.value)}
@@ -343,12 +343,12 @@ export default function SubscriptionPlansAdminPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs text-white/60">Features (har qatorda bitta)</label>
+                  <label className="text-xs text-white/60">Xususiyatlar (har qatorda bittadan)</label>
                   <textarea
                     value={formFeaturesText}
                     onChange={(e) => setFormFeaturesText(e.target.value)}
                     className="mt-1 w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[140px]"
-                    placeholder="150 token/oy\nImage: Basic+Pro\nVideo: Veo 3 Fast"
+                    placeholder="140 token/oy\nRasm: Basic+Pro\nVideo: Veo 3 Fast"
                   />
                 </div>
               </div>
