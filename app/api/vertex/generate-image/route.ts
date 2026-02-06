@@ -405,8 +405,10 @@ export async function POST(request: NextRequest) {
             v?.label || v?.id || `Image ${i + 1}`,
             safePrompt || null,
             fullPrompt,
-            productImagesForVariation,
-            safeStyleImages,
+            // IMPORTANT: pg serializes JS arrays as Postgres arrays (`{"..."}`),
+            // which is invalid JSON for a JSONB column. Store real JSON.
+            JSON.stringify(productImagesForVariation || []),
+            JSON.stringify(safeStyleImages || []),
             priority,
             user.role === 'admin' ? 0 : i === 0 ? reservedTokens : 0,
           ]
