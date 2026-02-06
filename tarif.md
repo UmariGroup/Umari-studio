@@ -1,6 +1,6 @@
 🟢 Starter tarif – 9$
 
-150 token
+140 token
 
 Ichida 2 rejim bor:
 
@@ -12,7 +12,7 @@ Ichida 2 rejim bor:
 
 Maqsad: arzon, tez, ko‘p ishlatish
 
-🪙 Narx: 2 token / 1 rasm
+🪙 Narx: 2 token / 1 so'rov (2 ta rasm)
 
 🤖 Model: gemini-2.5-flash-image
 
@@ -29,13 +29,13 @@ Maqsad: arzon, tez, ko‘p ishlatish
 
 1 ta yaqin (close-up)
 
-👉 150 token = 75 ta oddiy rasm
+👉 140 token = 70 ta oddiy so'rov (≈ 140 ta rasm)
 
 🔵 Pro mode – Starter ichida
 
 Maqsad: sifat, e-commerce, kiyim/soat/oyoq-kiyim
 
-🪙 Narx: 7 token / 1 rasm
+🪙 Narx: 7 token / 1 so'rov (2 ta rasm)
 
 🤖 Model:
 
@@ -55,7 +55,7 @@ professional angle
 
 texture / detail focus
 
-👉 150 token ≈ 21 ta pro rasm
+👉 140 token = 20 ta pro so'rov (≈ 40 ta rasm)
 
 🎥 Video (Starter ichida)
 📹 5 soniyalik video
@@ -75,7 +75,7 @@ texture / detail focus
 
 ⏱️ Duration: 5 soniya
 
-👉 150 token = 2 ta video + rasm qilishga token qoladi
+👉 140 token = 2 ta video + rasm so'rovlari uchun token qoladi
 
 
 💎 PRO TARIF — $19 / oy
@@ -92,11 +92,11 @@ Seni hech qachon minusga tushirmaydi
 🪙 TOKEN MODEL
 🔢 Jami token
 
-👉 400 token / oy
+👉 350 token / oy
 
-Nega 400?
+Nega 350?
 
-150 (starter) × ~2.6
+140 (starter) × 2.5
 
 lekin narx ×2.1
 
@@ -104,7 +104,7 @@ lekin narx ×2.1
 Oddiy rejim
 Tez, arzon, ko‘p ishlatish uchun
 
-🪙 Narx: 1.5 token / 1 rasm
+🪙 Narx: 1.5 token / 1 so'rov (2 ta rasm)
 
 🤖 Model: gemini-2.5-flash-image
 
@@ -127,7 +127,7 @@ Pro rejim (Premium image)
 
 Asosiy USTUNLIK shu yerda
 
-🪙 Narx: 6 token / 1 rasm
+🪙 Narx: 6 token / 1 so'rov (3 ta rasm)
 
 🤖 Model:
 
@@ -196,23 +196,23 @@ Ko‘p mahsulot, ko‘p rakurs, ko‘p video
 🪙 TOKEN MODEL
 🔢 Jami token
 
-👉 700 token / oy
+👉 600 token / oy
 
-Nega 700?
+Nega 600?
 
-Starter: 150 → $9
+Starter: 140 → $9
 
-Pro: 400 → $19
+Pro: 350 → $19
 
-Business+: 700 → $29
+Business+: 600 → $29
 
-Token × 1.75, narx × 1.5
+Token × ~1.7, narx × ~1.5
 
 ⚪️ Oddiy rejim (Fast mode) — Business+
 
 Ko‘p mahsulot, tez ishlab chiqish
 
-🪙 Narx: 1 token / 1 rasm
+🪙 Narx: 1 token / 1 so'rov (3 ta rasm)
 
 🤖 Model: gemini-2.5-flash-image
 
@@ -236,7 +236,7 @@ burchakli (angle)
 
 Eng kuchli image rejim
 
-🪙 Narx: 5 token / 1 rasm
+🪙 Narx: 5 token / 1 so'rov (4 ta rasm)
 (Pro tarifdan ham arzon — upgrade sababi)
 
 🤖 Model:

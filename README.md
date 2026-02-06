@@ -58,6 +58,11 @@ NODE_ENV=development
 npm run docker:dev
 ```
 
+This starts:
+- Next.js app (`nextjs`)
+- Postgres (`postgres`)
+- Image queue worker (`image_worker`) for async image generation
+
 ### 4. Production
 
 ```bash
@@ -131,3 +136,5 @@ Proprietary - Umari Studio
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+4. In a separate terminal, run the image worker (required for queued image generation):
+   `npm run worker:image`

@@ -60,6 +60,33 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  image_worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: umari_image_worker_dev
+    env_file:
+      - .env.local
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-umari_studio}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key}
+      NODE_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - umari_network
+    command: node scripts/image-worker.js
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   postgres_data_dev:
     driver: local

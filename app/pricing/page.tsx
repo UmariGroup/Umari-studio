@@ -295,11 +295,11 @@ export default function PricingPage() {
                     <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Token narxlari</h5>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Oddiy rasm:</span>
+                        <span className="text-gray-500">Oddiy rasm (so'rov):</span>
                         <span className="font-bold text-gray-700">{plan.features.imageBasic.tokenCost}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Pro rasm:</span>
+                        <span className="text-gray-500">Pro rasm (so'rov):</span>
                         <span className="font-bold text-gray-700">{plan.features.imagePro?.tokenCost || '—'}</span>
                       </div>
                       <div className="flex justify-between">
@@ -375,13 +375,13 @@ export default function PricingPage() {
                     <td className="px-6 py-4 text-center font-bold">{displayPlans.find((p) => p.id === 'business_plus')?.tokens ?? '—'}</td>
                   </tr>
                   <tr className="bg-gray-50/50">
-                    <td className="px-6 py-4 text-gray-600">Oddiy rasm (token)</td>
+                    <td className="px-6 py-4 text-gray-600">Oddiy rasm (so'rov, token)</td>
                     <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'starter')?.features.imageBasic.tokenCost ?? '—'}</td>
                     <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'pro')?.features.imageBasic.tokenCost ?? '—'}</td>
                     <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'business_plus')?.features.imageBasic.tokenCost ?? '—'}</td>
                   </tr>
                   <tr>
-                    <td className="px-6 py-4 text-gray-600">Pro rasm (token)</td>
+                    <td className="px-6 py-4 text-gray-600">Pro rasm (so'rov, token)</td>
                     <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'starter')?.features.imagePro?.tokenCost ?? '—'}</td>
                     <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'pro')?.features.imagePro?.tokenCost ?? '—'}</td>
                     <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'business_plus')?.features.imagePro?.tokenCost ?? '—'}</td>

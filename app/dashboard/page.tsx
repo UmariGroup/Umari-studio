@@ -222,20 +222,20 @@ export default function DashboardPage() {
               <div className="bg-gradient-to-br from-emerald-50 to-teal-50 p-5 rounded-2xl border border-emerald-100">
                 <div className="flex items-center gap-2 mb-3">
                   <FiImage className="w-6 h-6 text-emerald-600" aria-hidden />
-                  <span className="font-bold text-emerald-700 text-sm">Oddiy rasm</span>
+                  <span className="font-bold text-emerald-700 text-sm">Oddiy rasm (so'rov)</span>
                 </div>
                 <p className="text-3xl font-black text-emerald-600">{planTokenCosts.basic}</p>
-                <p className="text-xs text-emerald-500 mt-1">token / rasm</p>
+                <p className="text-xs text-emerald-500 mt-1">token / so'rov</p>
               </div>
               
               {/* Pro Image */}
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-5 rounded-2xl border border-blue-100">
                 <div className="flex items-center gap-2 mb-3">
                   <FiZap className="w-6 h-6 text-blue-600" aria-hidden />
-                  <span className="font-bold text-blue-700 text-sm">Pro rasm</span>
+                  <span className="font-bold text-blue-700 text-sm">Pro rasm (so'rov)</span>
                 </div>
                 <p className="text-3xl font-black text-blue-600">{planTokenCosts.pro}</p>
-                <p className="text-xs text-blue-500 mt-1">token / rasm</p>
+                <p className="text-xs text-blue-500 mt-1">token / so'rov</p>
               </div>
               
               {/* Basic Video */}
@@ -314,7 +314,7 @@ export default function DashboardPage() {
                         <span>AI Enhanced</span>
                       </span>
                       <span className="px-3 py-1 bg-pink-100 text-pink-700 text-xs font-bold rounded-full">
-                        {planTokenCosts.basic} - {planTokenCosts.pro} token
+                        {planTokenCosts.basic} - {planTokenCosts.pro} token / so'rov
                       </span>
                     </div>
                   </div>
@@ -432,12 +432,12 @@ export default function DashboardPage() {
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 text-center">
             <FiImage className="w-10 h-10 mx-auto mb-2 text-purple-500" aria-hidden />
             <p className="text-3xl font-black text-purple-600">{Math.floor(stats.tokensRemaining / planTokenCosts.basic)}</p>
-            <p className="text-xs text-gray-500">Oddiy rasm (taxminan)</p>
+            <p className="text-xs text-gray-500">Oddiy rasm so'rovi (taxminan)</p>
           </div>
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 text-center">
             <FiZap className="w-10 h-10 mx-auto mb-2 text-blue-500" aria-hidden />
             <p className="text-3xl font-black text-blue-600">{Math.floor(stats.tokensRemaining / planTokenCosts.pro)}</p>
-            <p className="text-xs text-gray-500">Pro rasm (taxminan)</p>
+            <p className="text-xs text-gray-500">Pro rasm so'rovi (taxminan)</p>
           </div>
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 text-center">
             <FiVideo className="w-10 h-10 mx-auto mb-2 text-amber-500" aria-hidden />

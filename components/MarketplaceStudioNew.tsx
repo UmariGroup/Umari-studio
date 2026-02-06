@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useToast } from './ToastProvider';
 import { getTelegramSubscribeUrl } from '@/lib/telegram';
+import { parseApiErrorResponse, toUzbekErrorMessage } from '@/lib/uzbek-errors';
 import { FiZap } from 'react-icons/fi';
 
 // ============ TYPES ============
@@ -24,6 +25,17 @@ interface PlanConfig {
   proTokenCost: number;
   basicModel: string;
   proModels: string[];
+}
+
+type ImageBatchStatus = 'queued' | 'processing' | 'succeeded' | 'partial' | 'failed' | 'canceled';
+
+interface ImageBatchItem {
+  id: string;
+  index: number;
+  status: string;
+  label: string | null;
+  imageUrl: string | null;
+  error: string | null;
 }
 
 // ============ PLAN CONFIGURATIONS ============
@@ -85,7 +97,14 @@ const MarketplaceStudio: React.FC = () => {
   // UI state
   const [generating, setGenerating] = useState(false);
   const [prompt, setPrompt] = useState('');
-  const [countdown, setCountdown] = useState(15);
+  const [batchId, setBatchId] = useState<string | null>(null);
+  const [batchStatus, setBatchStatus] = useState<ImageBatchStatus | null>(null);
+  const [batchItems, setBatchItems] = useState<ImageBatchItem[]>([]);
+  const [queuePosition, setQueuePosition] = useState<number | null>(null);
+  const [etaSeconds, setEtaSeconds] = useState<number | null>(null);
+  const [parallelLimit, setParallelLimit] = useState<number | null>(null);
+  const [progressPct, setProgressPct] = useState<number>(0);
+  const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
 
   const MARKETPLACE_ASPECT_RATIO = '3:4' as const;
   const TARGET_W = 1080;
@@ -180,7 +199,7 @@ const MarketplaceStudio: React.FC = () => {
   const config = PLAN_CONFIGS[plan];
   const tokensRemaining = isAdmin ? 999999 : (user?.tokens_remaining || 0);
   const currentTokenCost = imageMode === 'basic' ? config.basicTokenCost : config.proTokenCost;
-  const canGenerate = tokensRemaining >= currentTokenCost && plan !== 'free';
+  const canGenerate = tokensRemaining >= currentTokenCost && plan !== 'free' && cooldownSeconds <= 0;
 
   const openSubscribe = (targetPlan: SubscriptionPlan) => {
     window.open(getTelegramSubscribeUrl(targetPlan), '_blank');
@@ -213,18 +232,89 @@ const MarketplaceStudio: React.FC = () => {
     fetchUser();
   }, []);
 
-  // Countdown timer
+  // Cooldown timer (transparent plan limits)
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (generating) {
-      timer = setInterval(() => {
-        setCountdown((prev) => (prev > 1 ? prev - 1 : 1));
-      }, 1000);
-    } else {
-      setCountdown(15);
-    }
+    if (cooldownSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setCooldownSeconds((prev) => Math.max(0, prev - 1));
+    }, 1000);
     return () => clearInterval(timer);
-  }, [generating]);
+  }, [cooldownSeconds]);
+
+  // Poll queued batch (progress + queue position + results)
+  useEffect(() => {
+    if (!batchId) return;
+
+    let cancelled = false;
+    let interval: NodeJS.Timeout | null = null;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/image-batches/${encodeURIComponent(batchId)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const batch = data?.batch;
+        if (!batch || cancelled) return;
+
+        setBatchStatus(batch.status || null);
+        setQueuePosition(typeof batch.queue_position === 'number' ? batch.queue_position : null);
+        setEtaSeconds(typeof batch.eta_seconds === 'number' ? batch.eta_seconds : null);
+        setParallelLimit(typeof batch.parallel_limit === 'number' ? batch.parallel_limit : null);
+        setProgressPct(typeof batch?.progress?.percent === 'number' ? batch.progress.percent : 0);
+
+        const items: ImageBatchItem[] = Array.isArray(batch.items)
+          ? batch.items.map((it: any) => ({
+              id: String(it?.id || ''),
+              index: Number(it?.index || 0),
+              status: String(it?.status || ''),
+              label: it?.label ? String(it.label) : null,
+              imageUrl: it?.imageUrl ? String(it.imageUrl) : null,
+              error: it?.error ? String(it.error) : null,
+            }))
+          : [];
+
+        setBatchItems(items);
+
+        const succeededImages = items
+          .filter((it) => it.status === 'succeeded' && it.imageUrl)
+          .sort((a, b) => a.index - b.index)
+          .map((it) => it.imageUrl as string);
+        setGeneratedImages(succeededImages);
+
+        if (typeof batch.tokens_remaining === 'number') {
+          setUser((prev) => (prev ? { ...prev, tokens_remaining: batch.tokens_remaining } : prev));
+        }
+
+        if (
+          batch.status === 'succeeded' ||
+          batch.status === 'partial' ||
+          batch.status === 'failed' ||
+          batch.status === 'canceled'
+        ) {
+          if (interval) clearInterval(interval);
+          interval = null;
+          setGenerating(false);
+
+          if (batch.status === 'succeeded') toast.success('Rasm muvaffaqiyatli yaratildi!');
+          else if (batch.status === 'partial') toast.info("Rasmlarning bir qismi yaratildi (qolganlari xatolik).");
+          else if (batch.status === 'canceled') toast.info('Navbat bekor qilindi.');
+          else toast.error(items.find((it) => it.error)?.error || 'Rasm yaratishda xatolik.');
+
+          // Keep batchId so user can still see results; stop polling only.
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    void poll();
+    interval = setInterval(poll, 1500);
+
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+    };
+  }, [batchId, toast]);
 
   // File upload handler
   const handleUpload = useCallback(
@@ -277,7 +367,13 @@ const MarketplaceStudio: React.FC = () => {
   // Generate images
   const handleGenerate = async () => {
     if (!canGenerate) {
-      toast.error('Tokenlaringiz yetarli emas yoki obuna kerak!');
+      if (cooldownSeconds > 0) {
+        const mm = String(Math.floor(cooldownSeconds / 60)).padStart(2, '0');
+        const ss = String(cooldownSeconds % 60).padStart(2, '0');
+        toast.info(`Keyingi generatsiya: ${mm}:${ss}`);
+      } else {
+        toast.error('Tokenlaringiz yetarli emas yoki obuna kerak!');
+      }
       return;
     }
 
@@ -293,11 +389,17 @@ const MarketplaceStudio: React.FC = () => {
     }
 
     setGenerating(true);
+    setBatchId(null);
+    setBatchStatus('queued');
+    setBatchItems([]);
+    setQueuePosition(null);
+    setEtaSeconds(null);
+    setParallelLimit(null);
+    setProgressPct(0);
     setGeneratedImages([]);
 
     try {
       const model = imageMode === 'basic' ? config.basicModel : selectedProModel;
-      const tokenCost = imageMode === 'basic' ? config.basicTokenCost : config.proTokenCost;
 
       const response = await fetch('/api/generate-marketplace-image', {
         method: 'POST',
@@ -308,40 +410,46 @@ const MarketplaceStudio: React.FC = () => {
           prompt,
           aspectRatio: MARKETPLACE_ASPECT_RATIO,
           model,
-          outputCount: config.outputCount,
-          tokenCost,
         }),
       });
 
-      const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || 'Xatolik yuz berdi');
+        const parsed = await parseApiErrorResponse(response);
+        const { title, message } = toUzbekErrorMessage(parsed);
+        toast.error(message, title);
+
+        if (typeof parsed.retryAfterSeconds === 'number' && parsed.retryAfterSeconds > 0) {
+          setCooldownSeconds(parsed.retryAfterSeconds);
+        }
+
+        setGenerating(false);
+        return;
       }
 
-      if (data.images && data.images.length > 0) {
-        try {
-          const normalized = await Promise.all(
-            (data.images as string[]).map((img: string) => normalizeTo1080x1440(img))
-          );
-          setGeneratedImages(normalized);
-        } catch {
-          // If normalization fails for any reason, still show originals.
-          setGeneratedImages(data.images);
-        }
-        // Update tokens
-        if (user) {
-          setUser({
-            ...user,
-            tokens_remaining: data.tokens_remaining ?? user.tokens_remaining,
-          });
-        }
+      const data = await response.json();
+      const newBatchId = typeof data?.batch_id === 'string' ? data.batch_id : '';
+      if (!newBatchId) {
+        toast.error('Server batch id qaytarmadi.');
+        setGenerating(false);
+        return;
       }
 
-      toast.success('Rasm muvaffaqiyatli yaratildi!');
+      setBatchId(newBatchId);
+      setBatchStatus('queued');
+      setQueuePosition(typeof data?.queue_position === 'number' ? data.queue_position : null);
+      setEtaSeconds(typeof data?.eta_seconds === 'number' ? data.eta_seconds : null);
+      setParallelLimit(typeof data?.parallel_limit === 'number' ? data.parallel_limit : null);
+
+      if (typeof data?.tokens_remaining === 'number') {
+        setUser((prev) => (prev ? { ...prev, tokens_remaining: data.tokens_remaining } : prev));
+      }
+
+      toast.info("So'rov navbatga qo'shildi. Navbat va progress ko'rsatiladi.");
     } catch (error) {
       toast.error((error as Error).message || 'Xatolik yuz berdi.');
-    } finally {
       setGenerating(false);
+    } finally {
+      // generating is stopped by the poller when the batch finishes
     }
   };
 
@@ -629,7 +737,18 @@ const MarketplaceStudio: React.FC = () => {
             {generating ? (
               <div className="flex items-center justify-center gap-3">
                 <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
-                <span>Yaratilmoqda... ({countdown}s)</span>
+                <span>
+                  {batchStatus === 'queued' ? "Navbatda..." : 'Yaratilmoqda...'}
+                  {batchStatus && batchStatus !== 'queued' ? ` (${progressPct}%)` : ''}
+                </span>
+              </div>
+            ) : cooldownSeconds > 0 ? (
+              <div className="flex items-center justify-center gap-3">
+                <FiZap className="w-6 h-6" aria-hidden />
+                <span>
+                  Keyingi: {String(Math.floor(cooldownSeconds / 60)).padStart(2, '0')}:
+                  {String(cooldownSeconds % 60).padStart(2, '0')}
+                </span>
               </div>
             ) : (
               <div className="flex items-center justify-center gap-3">
@@ -638,11 +757,85 @@ const MarketplaceStudio: React.FC = () => {
               </div>
             )}
           </button>
+
+          {(generating || cooldownSeconds > 0) && (
+            <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4 text-sm text-gray-700">
+              {cooldownSeconds > 0 && !generating && (
+                <p>
+                  Tarif limiti: keyingi generatsiya{' '}
+                  <strong>
+                    {String(Math.floor(cooldownSeconds / 60)).padStart(2, '0')}:
+                    {String(cooldownSeconds % 60).padStart(2, '0')}
+                  </strong>{' '}
+                  dan keyin.
+                </p>
+              )}
+
+              {generating && batchStatus === 'queued' && (
+                <div className="space-y-1">
+                  <p className="font-semibold">Siz navbatdasiz</p>
+                  <p>Navbat: {queuePosition ?? '...'}</p>
+                  <p>
+                    Taxminiy vaqt:{' '}
+                    {typeof etaSeconds === 'number'
+                      ? `~${Math.max(1, Math.round(etaSeconds / 60))} daqiqa`
+                      : '...'}
+                  </p>
+                  {typeof parallelLimit === 'number' && <p>Parallel limit: {parallelLimit}</p>}
+                </div>
+              )}
+
+              {generating && batchStatus && batchStatus !== 'queued' && (
+                <div className="space-y-1">
+                  <p className="font-semibold">Yaratilmoqda</p>
+                  <p>Progress: {progressPct}%</p>
+                  {typeof etaSeconds === 'number' && (
+                    <p>
+                      Taxminiy vaqt: ~{Math.max(1, Math.round(etaSeconds / 60))} daqiqa
+                    </p>
+                  )}
+                  {typeof parallelLimit === 'number' && <p>Parallel limit: {parallelLimit}</p>}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Output Section */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
           <h3 className="font-bold text-gray-800 mb-4">Yaratilgan rasmlar</h3>
+
+          {batchItems.length > 0 && (
+            <div className="mb-4">
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-600">
+                {[...batchItems]
+                  .sort((a, b) => a.index - b.index)
+                  .map((it) => (
+                    <div key={it.id} className="flex items-center justify-between gap-2">
+                      <span className="truncate">{it.label || `Rasm ${it.index + 1}`}</span>
+                      <span className="shrink-0">
+                        {it.status === 'queued'
+                          ? 'navbatda'
+                          : it.status === 'processing'
+                            ? 'ishlanmoqda'
+                            : it.status === 'succeeded'
+                              ? 'tayyor'
+                              : it.status === 'failed'
+                                ? 'xato'
+                                : it.status}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
           {generatedImages.length > 0 ? (
             <div className="grid grid-cols-2 gap-4">
               {generatedImages.map((img, idx) => (
@@ -682,12 +875,12 @@ const MarketplaceStudio: React.FC = () => {
           <div className="bg-white p-4 rounded-xl border border-emerald-200">
             <p className="text-xs text-gray-500 mb-1">Oddiy rasm</p>
             <p className="text-2xl font-black text-emerald-600">{config.basicTokenCost}</p>
-            <p className="text-xs text-gray-400">token / rasm</p>
+            <p className="text-xs text-gray-400">token / so'rov</p>
           </div>
           <div className="bg-white p-4 rounded-xl border border-blue-200">
             <p className="text-xs text-gray-500 mb-1">Pro rasm</p>
             <p className="text-2xl font-black text-blue-600">{config.proTokenCost}</p>
-            <p className="text-xs text-gray-400">token / rasm</p>
+            <p className="text-xs text-gray-400">token / so'rov</p>
           </div>
           <div className="bg-white p-4 rounded-xl border border-purple-200">
             <p className="text-xs text-gray-500 mb-1">Chiqadigan rasmlar</p>

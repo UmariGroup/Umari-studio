@@ -2,6 +2,14 @@ export interface ApiErrorBody {
   error?: string;
   code?: string;
   recommended_plan?: string | null;
+  retry_after_seconds?: number;
+  next_available_at?: string;
+  limit?: number;
+  window_seconds?: number;
+  daily_limit?: number;
+  used_today?: number;
+  reset_at?: string;
+  parallel_limit?: number;
 }
 
 export interface ParsedApiError {
@@ -9,6 +17,14 @@ export interface ParsedApiError {
   error: string;
   code?: string;
   recommendedPlan?: string | null;
+  retryAfterSeconds?: number | null;
+  nextAvailableAt?: string | null;
+  limit?: number | null;
+  windowSeconds?: number | null;
+  dailyLimit?: number | null;
+  usedToday?: number | null;
+  resetAt?: string | null;
+  parallelLimit?: number | null;
 }
 
 function stripUpstreamDetails(message: string): string {
@@ -33,11 +49,42 @@ export async function parseApiErrorResponse(res: Response): Promise<ParsedApiErr
   try {
     const data = (await res.json()) as ApiErrorBody;
     const error = typeof data?.error === 'string' ? data.error : `HTTP ${status}`;
+    const retryAfterSecondsRaw = (data as any)?.retry_after_seconds;
+    const retryAfterSeconds =
+      typeof retryAfterSecondsRaw === 'number' && Number.isFinite(retryAfterSecondsRaw) && retryAfterSecondsRaw > 0
+        ? Math.floor(retryAfterSecondsRaw)
+        : null;
+
+    const limitRaw = (data as any)?.limit;
+    const limit = typeof limitRaw === 'number' && Number.isFinite(limitRaw) ? limitRaw : null;
+
+    const windowSecondsRaw = (data as any)?.window_seconds;
+    const windowSeconds =
+      typeof windowSecondsRaw === 'number' && Number.isFinite(windowSecondsRaw) ? windowSecondsRaw : null;
+
+    const dailyLimitRaw = (data as any)?.daily_limit;
+    const dailyLimit = typeof dailyLimitRaw === 'number' && Number.isFinite(dailyLimitRaw) ? dailyLimitRaw : null;
+
+    const usedTodayRaw = (data as any)?.used_today;
+    const usedToday = typeof usedTodayRaw === 'number' && Number.isFinite(usedTodayRaw) ? usedTodayRaw : null;
+
+    const parallelLimitRaw = (data as any)?.parallel_limit;
+    const parallelLimit =
+      typeof parallelLimitRaw === 'number' && Number.isFinite(parallelLimitRaw) ? parallelLimitRaw : null;
+
     return {
       status,
       error: stripUpstreamDetails(error),
       code: typeof data?.code === 'string' ? data.code : undefined,
       recommendedPlan: (data as any)?.recommended_plan ?? null,
+      retryAfterSeconds,
+      nextAvailableAt: typeof (data as any)?.next_available_at === 'string' ? (data as any).next_available_at : null,
+      limit,
+      windowSeconds,
+      dailyLimit,
+      usedToday,
+      resetAt: typeof (data as any)?.reset_at === 'string' ? (data as any).reset_at : null,
+      parallelLimit,
     };
   } catch {
     try {
@@ -54,6 +101,13 @@ export function toUzbekErrorMessage(err: ParsedApiError): { title: string; messa
 
   const addRecommendation = (base: string) =>
     recommended ? `${base}\n\nTavsiya: ${recommended} tarif.` : base;
+
+  const formatMmSs = (seconds: number): string => {
+    const s = Math.max(0, Math.floor(seconds));
+    const mm = String(Math.floor(s / 60)).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    return `${mm}:${ss}`;
+  };
 
   if (err.code === 'UNAUTHORIZED' || err.status === 401) {
     return { title: 'Kirish kerak', message: "Avval tizimga kiring." };
@@ -74,6 +128,37 @@ export function toUzbekErrorMessage(err: ParsedApiError): { title: string; messa
     return {
       title: 'Tarif cheklovi',
       message: addRecommendation(err.error || "Bu amal sizning tarifingizda mavjud emas."),
+    };
+  }
+
+  if (err.code === 'DAILY_LIMIT' && typeof err.retryAfterSeconds === 'number') {
+    const limit = typeof err.dailyLimit === 'number' ? err.dailyLimit : null;
+    const used = typeof err.usedToday === 'number' ? err.usedToday : null;
+
+    const base =
+      limit && used !== null
+        ? `Kunlik limit: ${limit} ta. Bugun ishlatilgan: ${used} ta.`
+        : "Kunlik limit tugadi.";
+
+    return {
+      title: 'Kunlik limit',
+      message: `${base}\n\nKeyingi limit: ${formatMmSs(err.retryAfterSeconds)} dan keyin.`,
+    };
+  }
+
+  if (err.code === 'RATE_LIMIT' && typeof err.retryAfterSeconds === 'number') {
+    const limit = typeof err.limit === 'number' ? err.limit : null;
+    const windowSec = typeof err.windowSeconds === 'number' ? err.windowSeconds : null;
+    const windowMin = windowSec ? Math.max(1, Math.round(windowSec / 60)) : null;
+
+    const base =
+      limit && windowMin
+        ? `Tarif limiti: ${limit} ta / ${windowMin} minut.`
+        : "Tarif limiti: juda tez so'rov yuborildi.";
+
+    return {
+      title: 'Kutish kerak',
+      message: `${base}\n\nKeyingi generatsiya: ${formatMmSs(err.retryAfterSeconds)} dan keyin.`,
     };
   }
 
@@ -104,4 +189,3 @@ export function toUzbekErrorMessage(err: ParsedApiError): { title: string; messa
 
   return { title: 'Xatolik', message: err.error || 'Nomaʼlum xatolik.' };
 }
-

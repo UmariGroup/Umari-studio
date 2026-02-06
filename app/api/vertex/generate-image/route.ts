@@ -1,47 +1,22 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { generateMarketplaceImage as generateGeminiMarketplaceImage } from '../../../../services/gemini';
 import { randomUUID } from 'crypto';
-import { promises as fs } from 'fs';
-import path from 'path';
 import {
   BillingError,
   getAuthenticatedUserAccount,
   getImagePolicy,
-  recordTokenUsage,
   refundTokens,
   reserveTokens,
 } from '@/lib/subscription';
-
-function extFromMime(mime: string): string {
-  switch (mime) {
-    case 'image/png': return 'png';
-    case 'image/jpeg': return 'jpg';
-    case 'image/webp': return 'webp';
-    default: return 'png';
-  }
-}
-
-async function tryPersistDataUrlToPublic(dataUrl: string): Promise<string | null> {
-  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl);
-  if (!match) return null;
-
-  const mime = match[1];
-  const base64 = match[2];
-  const ext = extFromMime(mime);
-  const fileName = `vertex-${randomUUID()}.${ext}`;
-
-  const dir = path.join(process.cwd(), 'public', 'generated');
-  const filePath = path.join(dir, fileName);
-
-  try {
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(filePath, Buffer.from(base64, 'base64'));
-    return `/generated/${fileName}`;
-  } catch {
-    return null;
-  }
-}
+import { getClient, query } from '@/lib/db';
+import {
+  ensureImageJobsTable,
+  estimateAvgImageJobSeconds,
+  getImageDailyLimit,
+  getImageParallelLimit,
+  getImageQueuePriority,
+  getImageRateLimit,
+} from '@/lib/image-queue';
 
 function mergeImagesUpToLimit(groups: string[][], limit: number): string[] {
   const out: string[] = [];
@@ -58,9 +33,11 @@ export async function POST(request: NextRequest) {
   let userId: string | null = null;
   let reservedTokens = 0;
   let reservedTokensRemaining = 0;
-  let costPerImage = 0;
+  let enqueued = false;
 
   try {
+    await ensureImageJobsTable();
+
     const user = await getAuthenticatedUserAccount();
     userId = user.id;
 
@@ -79,8 +56,6 @@ export async function POST(request: NextRequest) {
     const styleImages = Array.isArray(body?.styleImages) ? body.styleImages.filter(Boolean) : [];
     // Marketplace images must be 3:4 (1080×1440). We enforce the aspect ratio server-side.
     const aspectRatio = '3:4';
-    // We no longer support Vertex for image generation; Gemini-only.
-    const provider = 'gemini';
     const model = typeof body?.model === 'string' ? body.model.trim() : '';
     const requestedMode = typeof body?.mode === 'string' ? body.mode.trim().toLowerCase() : '';
 
@@ -94,7 +69,7 @@ export async function POST(request: NextRequest) {
     const plan = user.role === 'admin' ? 'business_plus' : user.subscription_plan;
     const policy = getImagePolicy(plan, inferredMode as any);
 
-    if (!policy.outputCount || policy.costPerImage <= 0) {
+    if (!policy.outputCount || policy.costPerRequest <= 0) {
       throw new BillingError({
         status: 403,
         code: 'PLAN_RESTRICTED',
@@ -119,6 +94,8 @@ export async function POST(request: NextRequest) {
 
     console.log(`[GenerateImage] Provider: gemini, Requested Model: ${model || '(default from env)'}`);
 
+    const parallelLimit = getImageParallelLimit(plan);
+
     const hasAnyProductImage =
       productImages.length > 0 || frontImagesRaw.length > 0 || backImagesRaw.length > 0 || sideImagesRaw.length > 0;
 
@@ -129,6 +106,84 @@ export async function POST(request: NextRequest) {
     const safePrompt = basePrompt.slice(0, policy.maxPromptChars);
     const safeProductImages = productImages.slice(0, policy.maxProductImages);
     const safeStyleImages = styleImages.slice(0, policy.maxStyleImages);
+
+    // ============================================================
+    // Rate limiting (transparent, plan-based)
+    // Counts DISTINCT batches (not per output image)
+    // ============================================================
+    {
+      const dailyLimit = getImageDailyLimit(plan);
+      if (dailyLimit) {
+        const dailyRes = await query(
+          `SELECT COUNT(DISTINCT batch_id)::int AS cnt
+           FROM image_jobs
+           WHERE user_id = $1
+             AND plan = $2
+             AND status <> 'canceled'
+             AND created_at >= date_trunc('day', NOW())`,
+          [user.id, plan]
+        );
+        const usedToday = Number(dailyRes.rows?.[0]?.cnt ?? 0);
+        if (Number.isFinite(usedToday) && usedToday >= dailyLimit) {
+          const now = new Date();
+          const resetAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
+          const retryAfterSeconds = Math.max(1, Math.ceil((resetAt.getTime() - Date.now()) / 1000));
+
+          return NextResponse.json(
+            {
+              error: `Kunlik limit tugadi (${dailyLimit} ta/kun). Keyingi limit: ${resetAt.toISOString()}`,
+              code: 'DAILY_LIMIT',
+              daily_limit: dailyLimit,
+              used_today: usedToday,
+              reset_at: resetAt.toISOString(),
+              retry_after_seconds: retryAfterSeconds,
+              parallel_limit: parallelLimit,
+            },
+            { status: 429 }
+          );
+        }
+      }
+
+      const cooldown = getImageRateLimit(plan);
+      if (cooldown) {
+        const res = await query(
+          `SELECT COUNT(DISTINCT batch_id)::int AS cnt,
+                  MIN(created_at) AS oldest
+           FROM image_jobs
+           WHERE user_id = $1
+             AND plan = $2
+             AND status <> 'canceled'
+             AND created_at >= (NOW() - ($3 * INTERVAL '1 second'))`,
+          [user.id, plan, cooldown.windowSeconds]
+        );
+
+        const cnt = Number(res.rows?.[0]?.cnt ?? 0);
+        const oldestRaw = res.rows?.[0]?.oldest as Date | null | undefined;
+
+        if (Number.isFinite(cnt) && cnt >= cooldown.maxBatches) {
+          const oldest = oldestRaw instanceof Date ? oldestRaw : oldestRaw ? new Date(oldestRaw) : null;
+          const nextAvailableAt = oldest
+            ? new Date(oldest.getTime() + cooldown.windowSeconds * 1000)
+            : new Date(Date.now() + cooldown.windowSeconds * 1000);
+          const retryAfterSeconds = Math.max(1, Math.ceil((nextAvailableAt.getTime() - Date.now()) / 1000));
+
+          return NextResponse.json(
+            {
+              error: `Tarif limit: ${cooldown.maxBatches} ta / ${Math.round(
+                cooldown.windowSeconds / 60
+              )} minut. Keyingi generatsiya: ${nextAvailableAt.toISOString()}`,
+              code: 'RATE_LIMIT',
+              limit: cooldown.maxBatches,
+              window_seconds: cooldown.windowSeconds,
+              next_available_at: nextAvailableAt.toISOString(),
+              retry_after_seconds: retryAfterSeconds,
+              parallel_limit: parallelLimit,
+            },
+            { status: 429 }
+          );
+        }
+      }
+    }
 
     // Business+ (and compatible clients): allow strict front/back/side control.
     const hasAngleGroups =
@@ -294,11 +349,9 @@ export async function POST(request: NextRequest) {
       ];
     })();
 
-    const requestedModel = model || undefined;
-
-    // Reserve tokens upfront; refund any unused on partial failures
-    costPerImage = policy.costPerImage;
-    reservedTokens = Number((policy.costPerImage * policy.outputCount).toFixed(2));
+    // Reserve tokens upfront per REQUEST (not per output image)
+    const costPerRequest = policy.costPerRequest;
+    reservedTokens = Number(costPerRequest.toFixed(2));
     if (user.role !== 'admin') {
       const reserveResult = await reserveTokens({ userId: user.id, tokens: reservedTokens });
       reservedTokensRemaining = reserveResult.tokensRemaining;
@@ -306,72 +359,133 @@ export async function POST(request: NextRequest) {
       reservedTokensRemaining = 999999;
     }
 
-    // Run in parallel
-    const results = await Promise.allSettled(
-      variations.map(async (v) => {
+    // Enqueue DB-backed jobs (persistent queue; worker processes async)
+    const batchId = randomUUID();
+    const priority = getImageQueuePriority(plan);
+    const selectedModel =
+      policy.allowedModels.length > 0 ? (model || policy.allowedModels[0] || '').trim() : model.trim();
+
+    const client = await getClient();
+    const jobIds: string[] = [];
+    let firstCreatedAt: Date | null = null;
+
+    try {
+      await client.query('BEGIN');
+
+      for (let i = 0; i < variations.length; i++) {
+        const v = variations[i];
+        const jobId = randomUUID();
+        jobIds.push(jobId);
+
         const fullPrompt = `${safePrompt}${v.suffix}\n\nOUTPUT REQUIREMENT: The final image must be exactly 1080x1440 pixels (3:4).`;
         const productImagesForVariation = v.productImages?.length ? v.productImages : safeProductImages;
 
-        return generateGeminiMarketplaceImage(fullPrompt, productImagesForVariation, safeStyleImages, aspectRatio, {
-          model: requestedModel,
-        });
-      })
-    );
+        const insertRes = await client.query(
+          `INSERT INTO image_jobs (
+             id, batch_id, batch_index, user_id,
+             plan, mode, provider, model, aspect_ratio,
+             label, base_prompt, prompt, product_images, style_images,
+             status, priority, tokens_reserved, created_at, updated_at
+           ) VALUES (
+             $1, $2, $3, $4,
+             $5, $6, 'gemini', $7, $8,
+             $9, $10, $11, $12, $13,
+             'queued', $14, $15, NOW(), NOW()
+           )
+           RETURNING created_at`,
+          [
+            jobId,
+            batchId,
+            i,
+            user.id,
+            plan,
+            inferredMode,
+            selectedModel || null,
+            aspectRatio,
+            v?.label || v?.id || `Image ${i + 1}`,
+            safePrompt || null,
+            fullPrompt,
+            productImagesForVariation,
+            safeStyleImages,
+            priority,
+            user.role === 'admin' ? 0 : i === 0 ? reservedTokens : 0,
+          ]
+        );
 
-    const successfulImages: string[] = [];
-    const successfulLabels: string[] = [];
-    const errors: string[] = [];
-
-    results.forEach((res, idx) => {
-      const v = variations[idx];
-      if (res.status === 'fulfilled') {
-        successfulImages.push(res.value);
-        successfulLabels.push(v?.label || v?.id || `Image ${idx + 1}`);
-      } else {
-        errors.push(res.reason?.message || 'Unknown error');
+        if (!firstCreatedAt) {
+          const raw = insertRes.rows?.[0]?.created_at;
+          firstCreatedAt = raw instanceof Date ? raw : raw ? new Date(raw) : new Date();
+        }
       }
-    });
 
-    if (successfulImages.length === 0) {
-      if (user.role !== 'admin' && userId && reservedTokens) {
-        await refundTokens({ userId, tokens: reservedTokens });
+      await client.query('COMMIT');
+      enqueued = true;
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // ignore
       }
-      throw new Error(errors[0] || 'Failed to generate images');
+      throw err;
+    } finally {
+      client.release();
     }
 
-    const imagesSucceeded = successfulImages.length;
-    const imagesRequested = policy.outputCount;
-    const unusedCount = Math.max(0, imagesRequested - imagesSucceeded);
-    const refundAmount = Number((unusedCount * costPerImage).toFixed(2));
-    if (user.role !== 'admin' && userId && refundAmount > 0) {
-      await refundTokens({ userId, tokens: refundAmount });
-    }
+    // Best-effort queue metrics for transparent UI
+    let queuePosition: number | null = null;
+    let etaSeconds: number | null = null;
 
-    // Persist to disk
-    const persistedUrls = await Promise.all(successfulImages.map(tryPersistDataUrlToPublic));
-    const finalUrls = persistedUrls.map((url, i) => url || successfulImages[i]);
+    try {
+      const createdAt = firstCreatedAt || new Date();
+      const [queuedRes, activeRes, avgSeconds] = await Promise.all([
+        query(
+          `SELECT COUNT(*)::int AS cnt
+           FROM image_jobs
+           WHERE plan = $1
+             AND status = 'queued'
+             AND created_at < $2`,
+          [plan, createdAt]
+        ),
+        query(
+          `SELECT COUNT(*)::int AS cnt
+           FROM image_jobs
+           WHERE plan = $1
+             AND status = 'processing'`,
+          [plan]
+        ),
+        estimateAvgImageJobSeconds(plan),
+      ]);
 
-    if (user.role !== 'admin') {
-      await recordTokenUsage({
-        userId: user.id,
-        tokensUsed: Number((imagesSucceeded * costPerImage).toFixed(2)),
-        serviceType: 'image_generate',
-        modelUsed: model || 'gemini',
-        prompt: safePrompt,
-      });
+      const queuedAhead = Number(queuedRes.rows?.[0]?.cnt ?? 0);
+      const active = Number(activeRes.rows?.[0]?.cnt ?? 0);
+
+      if (Number.isFinite(queuedAhead)) {
+        queuePosition = Math.max(1, queuedAhead + 1);
+      }
+
+      const avg = Number(avgSeconds);
+      if (Number.isFinite(avg) && avg > 0) {
+        const ahead = Math.max(0, queuedAhead) + Math.max(0, active);
+        const remaining = variations.length;
+        etaSeconds = Math.max(5, Math.ceil(((ahead + remaining) / parallelLimit) * avg));
+      }
+    } catch {
+      queuePosition = null;
+      etaSeconds = null;
     }
 
     return NextResponse.json({
       success: true,
-      images: finalUrls, // Return array
-      imageUrl: finalUrls[0], // Backwards compat
-      image_labels: successfulLabels,
-      tokens_charged: Number((imagesSucceeded * costPerImage).toFixed(2)),
+      batch_id: batchId,
+      job_ids: jobIds,
+      status: 'queued',
+      queue_position: queuePosition,
+      eta_seconds: etaSeconds,
+      parallel_limit: parallelLimit,
       tokens_reserved: reservedTokens,
-      tokens_remaining:
-        user.role === 'admin'
-          ? 999999
-          : Number((reservedTokensRemaining + refundAmount).toFixed(2)),
+      tokens_remaining: user.role === 'admin' ? 999999 : Number(reservedTokensRemaining.toFixed(2)),
+      note:
+        'Jobs queued. You can poll /api/image-batches/:id to get progress, queue position, and results.',
     });
 
   } catch (error) {
@@ -385,7 +499,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (userId && reservedTokens) {
+    // If jobs were NOT enqueued successfully, refund reserved tokens.
+    if (!enqueued && userId && reservedTokens) {
       try {
         await refundTokens({ userId, tokens: reservedTokens });
       } catch {
@@ -393,22 +508,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const status =
-      message.includes('(400') ? 400 :
-        message.includes('(401') ? 401 :
-          message.includes('(403') ? 403 :
-            message.includes('(404') ? 404 :
-              message.includes('(429') ? 429 :
-                message.includes('(503') ? 503 :
-                  message.includes('(504') ? 504 :
-                    500;
-
-    return NextResponse.json(
-      {
-        error: message,
-        details: message
-      },
-      { status }
-    );
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -98,3 +98,40 @@ CREATE INDEX idx_token_usage_user ON token_usage(user_id);
 CREATE INDEX idx_admin_logs_admin ON admin_logs(admin_id);
 CREATE INDEX idx_admin_logs_target ON admin_logs(target_user_id);
 
+-- ============================================================
+-- Image generation queue (DB-backed, persistent)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS image_jobs (
+  id UUID PRIMARY KEY,
+  batch_id UUID NOT NULL,
+  batch_index INT NOT NULL,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  plan VARCHAR(50) NOT NULL CHECK (plan IN ('free', 'starter', 'pro', 'business_plus')),
+  mode VARCHAR(16) NOT NULL CHECK (mode IN ('basic', 'pro')),
+  provider VARCHAR(32) NOT NULL DEFAULT 'gemini',
+  model VARCHAR(128),
+  aspect_ratio VARCHAR(16),
+  label TEXT,
+  base_prompt TEXT,
+  prompt TEXT,
+  product_images JSONB,
+  style_images JSONB,
+  status VARCHAR(32) NOT NULL CHECK (status IN ('queued', 'processing', 'succeeded', 'failed', 'canceled')),
+  priority INT NOT NULL DEFAULT 0,
+  result_url TEXT,
+  error_text TEXT,
+  tokens_reserved NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  tokens_refunded NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  usage_recorded BOOLEAN NOT NULL DEFAULT false,
+  worker_id VARCHAR(128),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  started_at TIMESTAMP,
+  finished_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_image_jobs_user_created ON image_jobs(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_image_jobs_batch ON image_jobs(batch_id, batch_index);
+CREATE INDEX IF NOT EXISTS idx_image_jobs_queue ON image_jobs(plan, status, priority, created_at);
+

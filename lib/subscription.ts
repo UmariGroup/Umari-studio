@@ -258,7 +258,7 @@ export async function recordTokenUsage(args: TokenUsageArgs): Promise<void> {
 }
 
 export interface ImagePolicy {
-  costPerImage: number;
+  costPerRequest: number;
   outputCount: number;
   maxProductImages: number;
   maxStyleImages: number;
@@ -270,7 +270,7 @@ export function getImagePolicy(plan: SubscriptionPlan, mode: ImageMode): ImagePo
   if (plan === 'starter') {
     return mode === 'pro'
       ? {
-          costPerImage: 7,
+          costPerRequest: 7,
           outputCount: 2,
           maxProductImages: 3,
           maxStyleImages: 1,
@@ -278,7 +278,7 @@ export function getImagePolicy(plan: SubscriptionPlan, mode: ImageMode): ImagePo
           allowedModels: ['gemini-3-pro-image-preview', 'nano-banana-pro-preview'],
         }
       : {
-          costPerImage: 2,
+          costPerRequest: 2,
           outputCount: 2,
           maxProductImages: 3,
           maxStyleImages: 1,
@@ -290,7 +290,7 @@ export function getImagePolicy(plan: SubscriptionPlan, mode: ImageMode): ImagePo
   if (plan === 'pro') {
     return mode === 'pro'
       ? {
-          costPerImage: 6,
+          costPerRequest: 6,
           outputCount: 3,
           maxProductImages: 4,
           maxStyleImages: 1,
@@ -298,7 +298,7 @@ export function getImagePolicy(plan: SubscriptionPlan, mode: ImageMode): ImagePo
           allowedModels: ['gemini-3-pro-image-preview', 'nano-banana-pro-preview'],
         }
       : {
-          costPerImage: 1.5,
+          costPerRequest: 1.5,
           outputCount: 2,
           maxProductImages: 3,
           maxStyleImages: 1,
@@ -310,7 +310,7 @@ export function getImagePolicy(plan: SubscriptionPlan, mode: ImageMode): ImagePo
   if (plan === 'business_plus') {
     return mode === 'pro'
       ? {
-          costPerImage: 5,
+          costPerRequest: 5,
           outputCount: 4,
           maxProductImages: 5,
           maxStyleImages: 2,
@@ -318,7 +318,7 @@ export function getImagePolicy(plan: SubscriptionPlan, mode: ImageMode): ImagePo
           allowedModels: ['gemini-3-pro-image-preview', 'nano-banana-pro-preview'],
         }
       : {
-          costPerImage: 1,
+          costPerRequest: 1,
           outputCount: 3,
           maxProductImages: 5,
           maxStyleImages: 2,
@@ -338,7 +338,7 @@ export function getImagePolicy(plan: SubscriptionPlan, mode: ImageMode): ImagePo
   }
 
   return {
-    costPerImage: 2,
+    costPerRequest: 2,
     outputCount: 1,
     maxProductImages: 1,
     maxStyleImages: 0,

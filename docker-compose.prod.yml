@@ -116,6 +116,57 @@ services:
           memory: 800M
           cpus: '1.0'
 
+  image_worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.prod
+      args:
+        NODE_ENV: production
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+        DB_USER: ${DB_USER}
+        DB_PASSWORD: ${DB_PASSWORD}
+        DB_NAME: ${DB_NAME}
+        DB_HOST: ${DB_HOST}
+        DB_PORT: ${DB_PORT}
+    container_name: umari_image_worker_prod
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_TEXT_MODEL: ${GEMINI_TEXT_MODEL:-gemini-2.0-flash}
+      GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-gemini-2.5-flash-image}
+      NODE_ENV: production
+    volumes:
+      - ./.secrets:/.secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - umari_network_prod
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    command: ["node", "scripts/image-worker.js"]
+    deploy:
+      resources:
+        limits:
+          memory: 400M
+          cpus: '0.5'
+
 volumes:
   postgres_data_prod:
     driver: local

@@ -220,8 +220,8 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
     },
     highlights: [
       '140 token / oy',
-      'Oddiy rasm: 2 token',
-      'Pro rasm: 7 token',
+      "Oddiy: 2 token/so'rov",
+      "Pro: 7 token/so'rov",
       'Video: 15 token (5 sek)',
       'Faqat Veo 3 Fast',
     ],
@@ -258,8 +258,8 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
     },
     highlights: [
       '350 token / oy',
-      'Oddiy: 1.5 token/rasm',
-      'Pro: 6 token/rasm',
+      "Oddiy: 1.5 token/so'rov",
+      "Pro: 6 token/so'rov",
       'Pro video: 35 token',
     ],
   },
@@ -295,8 +295,8 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
     },
     highlights: [
       '600 token / oy',
-      'Oddiy: 1 token/rasm',
-      'Pro: 5 token/rasm',
+      "Oddiy: 1 token/so'rov",
+      "Pro: 5 token/so'rov",
       'Oddiy video: 20 token',
       'Pro video: 30 token',
       'Premium (Upscale): 45 token',
