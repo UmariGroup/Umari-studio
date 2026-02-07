@@ -41,7 +41,7 @@ function getVideoServiceType(mode: VideoMode): string {
 
 function getTargetVideoDurationSeconds(plan: string, mode: VideoMode): number | null {
   if (plan === 'starter') {
-    return mode === 'basic' ? 5 : null;
+    return mode === 'basic' ? 4 : null;
   }
 
   if (plan === 'pro') {
@@ -51,12 +51,48 @@ function getTargetVideoDurationSeconds(plan: string, mode: VideoMode): number | 
   }
 
   if (plan === 'business_plus') {
-    if (mode === 'basic') return 5;
-    if (mode === 'pro') return 7;
-    if (mode === 'premium') return 10;
+    if (mode === 'basic') return 4;
+    if (mode === 'pro') return 6;
+    if (mode === 'premium') return 8;
   }
 
   return null;
+}
+
+function getSupportedDurationsForModel(model: string): number[] | null {
+  const m = String(model || '').toLowerCase();
+  if (m.includes('veo-3.0-fast') || m.includes('veo-3.0-generate')) {
+    return [4, 6, 8];
+  }
+  return null;
+}
+
+function pickNearestDuration(target: number, supported: number[]): number {
+  let best = supported[0];
+  let bestDistance = Math.abs(best - target);
+
+  for (const value of supported.slice(1)) {
+    const distance = Math.abs(value - target);
+    if (distance < bestDistance || (distance === bestDistance && value > best)) {
+      best = value;
+      bestDistance = distance;
+    }
+  }
+
+  return best;
+}
+
+function parseSupportedDurationsFromError(message: string): number[] | null {
+  const match = /supported durations are\s*\[([^\]]+)\]/i.exec(String(message || ''));
+  if (!match) return null;
+
+  const values = match[1]
+    .split(',')
+    .map((part) => Number(part.trim()))
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .map((value) => Math.round(value));
+
+  return values.length > 0 ? Array.from(new Set(values)).sort((a, b) => a - b) : null;
 }
 
 function getMonthlyVideoLimit(plan: string, mode: VideoMode): number | null {
@@ -179,6 +215,11 @@ export async function POST(req: NextRequest) {
 
     const safePrompt = prompt.slice(0, policy.maxPromptChars);
     const targetDurationSeconds = getTargetVideoDurationSeconds(plan, mode);
+    const supportedDurations = getSupportedDurationsForModel(selectedModel);
+    let effectiveDurationSeconds =
+      targetDurationSeconds && supportedDurations
+        ? pickNearestDuration(targetDurationSeconds, supportedDurations)
+        : targetDurationSeconds;
 
     const safeImages = images.slice(0, policy.maxImages);
 
@@ -222,18 +263,44 @@ export async function POST(req: NextRequest) {
 
     console.log(`[GenerateVideo] Plan=${plan}, Mode=${mode}, Model=${selectedModel}`);
 
-    const durationPrompt =
-      targetDurationSeconds && targetDurationSeconds > 0
-        ? `${safePrompt}\n\nCRITICAL: Final video duration must be exactly ${targetDurationSeconds} seconds.`
+    let durationPrompt =
+      effectiveDurationSeconds && effectiveDurationSeconds > 0
+        ? `${safePrompt}\n\nCRITICAL: Final video duration must be exactly ${effectiveDurationSeconds} seconds.`
         : safePrompt;
 
-    const rawVideoUrl = await generateMarketplaceVideo(
-      durationPrompt,
-      safeImages,
-      selectedModel,
-      aspectRatio,
-      targetDurationSeconds || undefined
-    );
+    let rawVideoUrl: string;
+    try {
+      rawVideoUrl = await generateMarketplaceVideo(
+        durationPrompt,
+        safeImages,
+        selectedModel,
+        aspectRatio,
+        effectiveDurationSeconds || undefined
+      );
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      const supportedFromError = parseSupportedDurationsFromError(message);
+
+      if (!supportedFromError || !effectiveDurationSeconds) {
+        throw err;
+      }
+
+      const fallbackDuration = pickNearestDuration(effectiveDurationSeconds, supportedFromError);
+      if (fallbackDuration === effectiveDurationSeconds) {
+        throw err;
+      }
+
+      effectiveDurationSeconds = fallbackDuration;
+      durationPrompt = `${safePrompt}\n\nCRITICAL: Final video duration must be exactly ${effectiveDurationSeconds} seconds.`;
+
+      rawVideoUrl = await generateMarketplaceVideo(
+        durationPrompt,
+        safeImages,
+        selectedModel,
+        aspectRatio,
+        effectiveDurationSeconds
+      );
+    }
     let persisted: string | null = null;
     try {
       persisted = await tryPersistVideoDataUrlToPublic(rawVideoUrl);
@@ -274,8 +341,7 @@ export async function POST(req: NextRequest) {
             durationPrompt,
             safeImages,
             aspectRatio,
-            rawVideoUrl,
-            targetDurationSeconds || undefined
+            rawVideoUrl
           );
           let upscaledPersisted: string | null = null;
           try {
@@ -328,7 +394,8 @@ export async function POST(req: NextRequest) {
       success: true,
       videoUrl,
       upscaleJobId,
-      target_duration_seconds: targetDurationSeconds,
+      requested_duration_seconds: targetDurationSeconds,
+      duration_seconds: effectiveDurationSeconds,
       tokens_charged: reservedTokens,
       tokens_remaining: user.role === 'admin' ? 999999 : Number(tokensRemaining.toFixed(2)),
     });

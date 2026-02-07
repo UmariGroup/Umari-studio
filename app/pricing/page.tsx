@@ -79,13 +79,14 @@ function buildPlanConfig(slug: string, dbPlan?: ApiPlan): PlanConfig | null {
 
   const imageCosts = IMAGE_TOKEN_COSTS[slug as keyof typeof IMAGE_TOKEN_COSTS];
   const videoCosts = VIDEO_TOKEN_COSTS[slug as keyof typeof VIDEO_TOKEN_COSTS];
+  const basicVideoDuration = slug === 'pro' ? 6 : 4;
 
   const proImage = imageCosts.pro >= 900 ? null : { model: 'gemini-3-pro-image-preview', tokenCost: imageCosts.pro };
   const proVideo = videoCosts.pro >= 900 ? null : { model: 'veo-3.0-generate-001', tokenCost: videoCosts.pro, duration: 6 };
   const premiumVideo =
     videoCosts.premium >= 900
       ? null
-      : { model: 'veo3_upsampler_video_generation', tokenCost: videoCosts.premium, duration: 10 };
+      : { model: 'veo3_upsampler_video_generation', tokenCost: videoCosts.premium, duration: 8 };
 
   const benefitsFromDb = dbPlan ? featuresToList(dbPlan.features) : [];
   const benefits = benefitsFromDb.length > 0 ? benefitsFromDb : meta.highlights;
@@ -101,7 +102,7 @@ function buildPlanConfig(slug: string, dbPlan?: ApiPlan): PlanConfig | null {
     features: {
       imageBasic: { model: 'gemini-2.5-flash-image', tokenCost: imageCosts.basic },
       imagePro: proImage,
-      videoBasic: { model: 'veo-3.0-fast-generate-001', tokenCost: videoCosts.basic, duration: 5 },
+      videoBasic: { model: 'veo-3.0-fast-generate-001', tokenCost: videoCosts.basic, duration: basicVideoDuration },
       videoPro: proVideo,
       videoPremium: premiumVideo,
       copywriter: { tokenCost: COPYWRITER_TOKEN_COST[slug] ?? 0 },

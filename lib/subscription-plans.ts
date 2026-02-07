@@ -90,9 +90,9 @@ export const VIDEO_MODELS: VideoModelConfig[] = [
     id: 'veo-3.0-fast-generate-001',
     name: 'Umari Flash Video',
     mode: 'basic',
-    duration: 5,
+    duration: 4,
     description: 'Tez generatsiya - oddiy videolar uchun',
-    features: ['5 soniya', 'Tez rendering', 'Asosiy animatsiya'],
+    features: ['4 soniya', 'Tez rendering', 'Asosiy animatsiya'],
   },
   {
     id: 'veo-3.0-generate-001',
@@ -106,9 +106,9 @@ export const VIDEO_MODELS: VideoModelConfig[] = [
     id: 'veo3_upsampler_video_generation',
     name: 'Umari Studio Video',
     mode: 'premium',
-    duration: 10,
+    duration: 8,
     description: 'Eng yuqori sifat - professional reklama uchun',
-    features: ['10 soniya', 'Upscale qilingan', 'Studio sifati', 'Reels/Ads uchun'],
+    features: ['8 soniya', 'Upscale qilingan', 'Studio sifati', 'Reels/Ads uchun'],
   },
 ];
 
@@ -222,7 +222,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
       '140 token / oy',
       "Oddiy: 2 token/so'rov",
       "Pro: 7 token/so'rov",
-      'Video: 15 token (5 sek)',
+      'Video: 15 token (4 sek)',
       'Faqat Veo 3 Fast',
     ],
   },
