@@ -19,6 +19,23 @@ function coerceNumber(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function workloadSecondsByMode(
+  rows: Array<{ mode: string; cnt: number }>,
+  basicAvgSeconds: number,
+  proAvgSeconds: number
+): number {
+  let total = 0;
+  for (const row of rows) {
+    const cnt = Number(row?.cnt || 0);
+    if (!Number.isFinite(cnt) || cnt <= 0) continue;
+
+    const mode = String(row?.mode || '').toLowerCase();
+    const perJob = mode === 'pro' ? proAvgSeconds : basicAvgSeconds;
+    total += cnt * perJob;
+  }
+  return total;
+}
+
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     await ensureImageJobsTable();
@@ -48,8 +65,13 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     }
 
     const plan = String(jobs[0]?.plan || 'starter') as any;
+    const mode = String(jobs[0]?.mode || 'basic').toLowerCase() === 'pro' ? 'pro' : 'basic';
     const parallelLimit = getImageParallelLimit(plan);
-    const avgSeconds = await estimateAvgImageJobSeconds(plan);
+    const [basicAvgSeconds, proAvgSeconds] = await Promise.all([
+      estimateAvgImageJobSeconds(plan, 'basic'),
+      estimateAvgImageJobSeconds(plan, 'pro'),
+    ]);
+    const currentAvgSeconds = mode === 'pro' ? proAvgSeconds : basicAvgSeconds;
 
     const total = jobs.length;
     const counts = jobs.reduce(
@@ -94,30 +116,51 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 
         const [aheadRes, activeRes] = await Promise.all([
           query(
-            `SELECT COUNT(*)::int AS cnt
+            `SELECT mode, COUNT(*)::int AS cnt
              FROM image_jobs
              WHERE plan = $1
                AND status = 'queued'
-               AND created_at < $2`,
+               AND created_at < $2
+             GROUP BY mode`,
             [plan, createdAt]
           ),
           query(
-            `SELECT COUNT(*)::int AS cnt
+            `SELECT mode, COUNT(*)::int AS cnt
              FROM image_jobs
              WHERE plan = $1
-               AND status = 'processing'`,
+               AND status = 'processing'
+             GROUP BY mode`,
             [plan]
           ),
         ]);
 
-        const ahead = coerceInt(aheadRes.rows?.[0]?.cnt);
-        const active = coerceInt(activeRes.rows?.[0]?.cnt);
+        const queuedRows = Array.isArray(aheadRes.rows)
+          ? aheadRes.rows.map((row: any) => ({
+              mode: String(row?.mode || ''),
+              cnt: Number(row?.cnt || 0),
+            }))
+          : [];
+
+        const activeRows = Array.isArray(activeRes.rows)
+          ? activeRes.rows.map((row: any) => ({
+              mode: String(row?.mode || ''),
+              cnt: Number(row?.cnt || 0),
+            }))
+          : [];
+
+        const ahead = queuedRows.reduce(
+          (sum, row) => sum + (Number.isFinite(row.cnt) ? Math.max(0, row.cnt) : 0),
+          0
+        );
 
         queuePosition = Math.max(1, ahead + 1);
-        etaSeconds = Math.max(5, Math.ceil(((ahead + active + remaining) / parallelLimit) * avgSeconds));
+        const queuedWorkSeconds = workloadSecondsByMode(queuedRows, basicAvgSeconds, proAvgSeconds);
+        const activeWorkSeconds = workloadSecondsByMode(activeRows, basicAvgSeconds, proAvgSeconds);
+        const ownRemainingSeconds = Math.max(0, remaining) * currentAvgSeconds;
+        etaSeconds = Math.max(5, Math.ceil((queuedWorkSeconds + activeWorkSeconds + ownRemainingSeconds) / parallelLimit));
       } else if (status === 'processing' && remaining > 0) {
         // For in-progress batches, only estimate remaining time for this batch.
-        etaSeconds = Math.max(5, Math.ceil((remaining / parallelLimit) * avgSeconds));
+        etaSeconds = Math.max(5, Math.ceil((remaining * currentAvgSeconds) / parallelLimit));
       }
     } catch {
       queuePosition = null;

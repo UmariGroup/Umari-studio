@@ -29,6 +29,23 @@ function mergeImagesUpToLimit(groups: string[][], limit: number): string[] {
   return out;
 }
 
+function workloadSecondsByMode(
+  rows: Array<{ mode: string; cnt: number }>,
+  basicAvgSeconds: number,
+  proAvgSeconds: number
+): number {
+  let total = 0;
+  for (const row of rows) {
+    const cnt = Number(row?.cnt || 0);
+    if (!Number.isFinite(cnt) || cnt <= 0) continue;
+
+    const mode = String(row?.mode || '').toLowerCase();
+    const perJob = mode === 'pro' ? proAvgSeconds : basicAvgSeconds;
+    total += cnt * perJob;
+  }
+  return total;
+}
+
 export async function POST(request: NextRequest) {
   let userId: string | null = null;
   let reservedTokens = 0;
@@ -439,37 +456,67 @@ export async function POST(request: NextRequest) {
 
     try {
       const createdAt = firstCreatedAt || new Date();
-      const [queuedRes, activeRes, avgSeconds] = await Promise.all([
+      const [queuedRes, activeRes, basicAvgSeconds, proAvgSeconds] = await Promise.all([
         query(
-          `SELECT COUNT(*)::int AS cnt
+          `SELECT mode, COUNT(*)::int AS cnt
            FROM image_jobs
            WHERE plan = $1
              AND status = 'queued'
-             AND created_at < $2`,
+             AND created_at < $2
+           GROUP BY mode`,
           [plan, createdAt]
         ),
         query(
-          `SELECT COUNT(*)::int AS cnt
+          `SELECT mode, COUNT(*)::int AS cnt
            FROM image_jobs
            WHERE plan = $1
-             AND status = 'processing'`,
+             AND status = 'processing'
+           GROUP BY mode`,
           [plan]
         ),
-        estimateAvgImageJobSeconds(plan),
+        estimateAvgImageJobSeconds(plan, 'basic'),
+        estimateAvgImageJobSeconds(plan, 'pro'),
       ]);
 
-      const queuedAhead = Number(queuedRes.rows?.[0]?.cnt ?? 0);
-      const active = Number(activeRes.rows?.[0]?.cnt ?? 0);
+      const queuedRows = Array.isArray(queuedRes.rows)
+        ? queuedRes.rows.map((row: any) => ({
+            mode: String(row?.mode || ''),
+            cnt: Number(row?.cnt || 0),
+          }))
+        : [];
+
+      const activeRows = Array.isArray(activeRes.rows)
+        ? activeRes.rows.map((row: any) => ({
+            mode: String(row?.mode || ''),
+            cnt: Number(row?.cnt || 0),
+          }))
+        : [];
+
+      const queuedAhead = queuedRows.reduce(
+        (sum, row) => sum + (Number.isFinite(row.cnt) ? Math.max(0, row.cnt) : 0),
+        0
+      );
 
       if (Number.isFinite(queuedAhead)) {
         queuePosition = Math.max(1, queuedAhead + 1);
       }
 
-      const avg = Number(avgSeconds);
-      if (Number.isFinite(avg) && avg > 0) {
-        const ahead = Math.max(0, queuedAhead) + Math.max(0, active);
-        const remaining = variations.length;
-        etaSeconds = Math.max(5, Math.ceil(((ahead + remaining) / parallelLimit) * avg));
+      const basicAvg = Number(basicAvgSeconds);
+      const proAvg = Number(proAvgSeconds);
+      const currentAvg = inferredMode === 'pro' ? proAvg : basicAvg;
+
+      if (
+        Number.isFinite(basicAvg) &&
+        basicAvg > 0 &&
+        Number.isFinite(proAvg) &&
+        proAvg > 0 &&
+        Number.isFinite(currentAvg) &&
+        currentAvg > 0
+      ) {
+        const queuedWorkSeconds = workloadSecondsByMode(queuedRows, basicAvg, proAvg);
+        const activeWorkSeconds = workloadSecondsByMode(activeRows, basicAvg, proAvg);
+        const ownWorkSeconds = Math.max(1, variations.length) * currentAvg;
+        etaSeconds = Math.max(5, Math.ceil((queuedWorkSeconds + activeWorkSeconds + ownWorkSeconds) / parallelLimit));
       }
     } catch {
       queuePosition = null;

@@ -1,4 +1,4 @@
-import type { SubscriptionPlan } from '@/lib/subscription-plans';
+import type { ImageMode, SubscriptionPlan } from '@/lib/subscription-plans';
 import { query } from '@/lib/db';
 
 export type ImageJobStatus = 'queued' | 'processing' | 'succeeded' | 'failed' | 'canceled';
@@ -118,23 +118,34 @@ export async function ensureImageJobsTable(): Promise<void> {
   );
 }
 
-export async function estimateAvgImageJobSeconds(plan: SubscriptionPlan): Promise<number> {
-  const fallback = Math.max(5, envNumber('IMAGE_QUEUE_ESTIMATE_SECONDS_PER_IMAGE') ?? 45);
+export async function estimateAvgImageJobSeconds(plan: SubscriptionPlan, mode?: ImageMode): Promise<number> {
+  const modeFallback =
+    mode === 'basic'
+      ? envNumber('IMAGE_QUEUE_ESTIMATE_SECONDS_BASIC')
+      : mode === 'pro'
+        ? envNumber('IMAGE_QUEUE_ESTIMATE_SECONDS_PRO')
+        : null;
+
+  const fallback = Math.max(5, modeFallback ?? envNumber('IMAGE_QUEUE_ESTIMATE_SECONDS_PER_IMAGE') ?? 45);
 
   try {
+    const modeFilter = mode ? 'AND mode = $2' : '';
+    const params: unknown[] = mode ? [plan, mode] : [plan];
+
     const res = await query(
       `SELECT AVG(sec)::float AS avg_sec
        FROM (
          SELECT EXTRACT(EPOCH FROM (finished_at - started_at)) AS sec
          FROM image_jobs
          WHERE plan = $1
+           ${modeFilter}
            AND status = 'succeeded'
            AND started_at IS NOT NULL
            AND finished_at IS NOT NULL
          ORDER BY finished_at DESC
          LIMIT 200
        ) t`,
-      [plan]
+      params
     );
 
     const avg = Number(res.rows?.[0]?.avg_sec);
@@ -145,4 +156,3 @@ export async function estimateAvgImageJobSeconds(plan: SubscriptionPlan): Promis
     return fallback;
   }
 }
-
