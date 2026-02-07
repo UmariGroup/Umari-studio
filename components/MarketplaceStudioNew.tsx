@@ -78,6 +78,12 @@ const PLAN_CONFIGS: Record<SubscriptionPlan, PlanConfig> = {
   },
 };
 
+const IMAGE_MODEL_LABELS: Record<string, string> = {
+  'gemini-2.5-flash-image': 'Umari Flash',
+  'gemini-3-pro-image-preview': 'Umari Pro',
+  'nano-banana-pro-preview': 'Umari Studio',
+};
+
 const MarketplaceStudio: React.FC = () => {
   const toast = useToast();
   
@@ -109,6 +115,8 @@ const MarketplaceStudio: React.FC = () => {
   const MARKETPLACE_ASPECT_RATIO = '3:4' as const;
   const TARGET_W = 1080;
   const TARGET_H = 1440;
+
+  const getModelLabel = (modelId: string): string => IMAGE_MODEL_LABELS[modelId] || modelId;
 
   const formatEta = (seconds: number | null): string => {
     if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return '...';
@@ -426,7 +434,7 @@ const MarketplaceStudio: React.FC = () => {
 
     setGenerating(true);
     setBatchId(null);
-    setBatchStatus('queued');
+    setBatchStatus('processing');
     setBatchItems([]);
     setQueuePosition(null);
     setEtaSeconds(null);
@@ -463,6 +471,51 @@ const MarketplaceStudio: React.FC = () => {
       }
 
       const data = await response.json();
+
+      const immediateImages = Array.isArray(data?.images)
+        ? data.images.filter((img: unknown): img is string => typeof img === 'string' && img.length > 0)
+        : [];
+      const immediateItems: ImageBatchItem[] = Array.isArray(data?.items)
+        ? data.items.map((it: any) => ({
+            id: String(it?.id || ''),
+            index: Number(it?.index || 0),
+            status: String(it?.status || ''),
+            label: it?.label ? String(it.label) : null,
+            imageUrl: it?.imageUrl ? String(it.imageUrl) : null,
+            error: it?.error ? String(it.error) : null,
+          }))
+        : [];
+
+      if (immediateImages.length > 0 || data?.status === 'failed' || data?.status === 'partial' || data?.status === 'succeeded') {
+        setGeneratedImages(immediateImages);
+        setBatchItems(immediateItems);
+        setBatchStatus(
+          data?.status === 'failed' || data?.status === 'partial' || data?.status === 'succeeded'
+            ? data.status
+            : immediateImages.length > 0
+              ? 'succeeded'
+              : 'failed'
+        );
+        setProgressPct(100);
+        setQueuePosition(null);
+        setEtaSeconds(null);
+        setParallelLimit(typeof data?.parallel_limit === 'number' ? data.parallel_limit : null);
+        setGenerating(false);
+
+        if (typeof data?.tokens_remaining === 'number') {
+          setUser((prev) => (prev ? { ...prev, tokens_remaining: data.tokens_remaining } : prev));
+        }
+
+        if (data?.status === 'partial') {
+          toast.info("Rasmlarning bir qismi yaratildi (qolganlari xatolik).");
+        } else if (immediateImages.length > 0) {
+          toast.success('Rasm muvaffaqiyatli yaratildi!');
+        } else {
+          toast.error(immediateItems.find((it) => it.error)?.error || "Rasm yaratishda xatolik.");
+        }
+        return;
+      }
+
       const newBatchId = typeof data?.batch_id === 'string' ? data.batch_id : '';
       if (!newBatchId) {
         toast.error('Server batch id qaytarmadi.');
@@ -634,7 +687,7 @@ const MarketplaceStudio: React.FC = () => {
                     : 'border-gray-200 bg-white hover:border-blue-300'
                 }`}
               >
-                <p className="font-semibold text-gray-800">{model}</p>
+                <p className="font-semibold text-gray-800">{getModelLabel(model)}</p>
               </button>
             ))}
           </div>

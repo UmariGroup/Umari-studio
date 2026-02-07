@@ -53,24 +53,24 @@ export interface ImageModelConfig {
 export const IMAGE_MODELS: ImageModelConfig[] = [
   {
     id: 'gemini-2.5-flash-image',
-    name: 'Gemini Flash (Tez)',
+    name: 'Umari Flash',
     service: 'gemini',
     mode: 'basic',
     description: 'Tez va tejamli - kundalik ishlar uchun',
   },
   {
     id: 'gemini-3-pro-image-preview',
-    name: 'Gemini Pro (Premium)',
+    name: 'Umari Pro',
     service: 'gemini',
     mode: 'pro',
     description: 'Yuqori sifat - e-commerce uchun',
   },
   {
     id: 'nano-banana-pro-preview',
-    name: 'Nano Banana Pro',
+    name: 'Umari Studio',
     service: 'gemini',
     mode: 'pro',
-    description: 'Alternativ premium model',
+    description: 'Premium alternativ model',
   },
 ];
 

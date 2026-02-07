@@ -5,18 +5,18 @@ import {
   BillingError,
   getAuthenticatedUserAccount,
   getImagePolicy,
+  recordTokenUsage,
   refundTokens,
   reserveTokens,
 } from '@/lib/subscription';
 import { getClient, query } from '@/lib/db';
 import {
   ensureImageJobsTable,
-  estimateAvgImageJobSeconds,
   getImageDailyLimit,
   getImageParallelLimit,
-  getImageQueuePriority,
   getImageRateLimit,
 } from '@/lib/image-queue';
+import { generateMarketplaceImage } from '@/services/gemini';
 
 function mergeImagesUpToLimit(groups: string[][], limit: number): string[] {
   const out: string[] = [];
@@ -29,28 +29,11 @@ function mergeImagesUpToLimit(groups: string[][], limit: number): string[] {
   return out;
 }
 
-function workloadSecondsByMode(
-  rows: Array<{ mode: string; cnt: number }>,
-  basicAvgSeconds: number,
-  proAvgSeconds: number
-): number {
-  let total = 0;
-  for (const row of rows) {
-    const cnt = Number(row?.cnt || 0);
-    if (!Number.isFinite(cnt) || cnt <= 0) continue;
-
-    const mode = String(row?.mode || '').toLowerCase();
-    const perJob = mode === 'pro' ? proAvgSeconds : basicAvgSeconds;
-    total += cnt * perJob;
-  }
-  return total;
-}
-
 export async function POST(request: NextRequest) {
   let userId: string | null = null;
   let reservedTokens = 0;
   let reservedTokensRemaining = 0;
-  let enqueued = false;
+  let billingSettled = false;
 
   try {
     await ensureImageJobsTable();
@@ -366,7 +349,6 @@ export async function POST(request: NextRequest) {
       ];
     })();
 
-    // Reserve tokens upfront per REQUEST (not per output image)
     const costPerRequest = policy.costPerRequest;
     reservedTokens = Number(costPerRequest.toFixed(2));
     if (user.role !== 'admin') {
@@ -376,165 +358,201 @@ export async function POST(request: NextRequest) {
       reservedTokensRemaining = 999999;
     }
 
-    // Enqueue DB-backed jobs (persistent queue; worker processes async)
     const batchId = randomUUID();
-    const priority = getImageQueuePriority(plan);
     const selectedModel =
       policy.allowedModels.length > 0 ? (model || policy.allowedModels[0] || '').trim() : model.trim();
 
-    const client = await getClient();
-    const jobIds: string[] = [];
-    let firstCreatedAt: Date | null = null;
+    const maxPerRequest = Math.max(1, Number(process.env.IMAGE_SYNC_MAX_CONCURRENT_PER_REQUEST || 2));
+    const maxConcurrent = Math.min(Math.max(1, parallelLimit), maxPerRequest, variations.length);
 
-    try {
-      await client.query('BEGIN');
+    type ImageOutput = {
+      id: string;
+      index: number;
+      label: string | null;
+      status: 'succeeded' | 'failed';
+      imageUrl: string | null;
+      error: string | null;
+      prompt: string;
+      productImages: string[];
+      startedAt: Date;
+      finishedAt: Date;
+    };
 
-      for (let i = 0; i < variations.length; i++) {
-        const v = variations[i];
-        const jobId = randomUUID();
-        jobIds.push(jobId);
+    const outputs: ImageOutput[] = new Array(variations.length);
+    let cursor = 0;
 
-        const fullPrompt = `${safePrompt}${v.suffix}\n\nOUTPUT REQUIREMENT: The final image must be exactly 1080x1440 pixels (3:4).`;
-        const productImagesForVariation = v.productImages?.length ? v.productImages : safeProductImages;
+    const runOne = async () => {
+      while (true) {
+        const index = cursor;
+        cursor += 1;
+        if (index >= variations.length) return;
 
-        const insertRes = await client.query(
-          `INSERT INTO image_jobs (
-             id, batch_id, batch_index, user_id,
-             plan, mode, provider, model, aspect_ratio,
-             label, base_prompt, prompt, product_images, style_images,
-             status, priority, tokens_reserved, created_at, updated_at
-           ) VALUES (
-             $1, $2, $3, $4,
-             $5, $6, 'gemini', $7, $8,
-             $9, $10, $11, $12::jsonb, $13::jsonb,
-             'queued', $14, $15, NOW(), NOW()
-           )
-           RETURNING created_at`,
-          [
-            jobId,
-            batchId,
-            i,
-            user.id,
-            plan,
-            inferredMode,
-            selectedModel || null,
-            aspectRatio,
-            v?.label || v?.id || `Image ${i + 1}`,
-            safePrompt || null,
+        const variation = variations[index];
+        const startedAt = new Date();
+        const fullPrompt = `${safePrompt}${variation.suffix}\n\nOUTPUT REQUIREMENT: The final image must be exactly 1080x1440 pixels (3:4).`;
+        const productImagesForVariation =
+          variation.productImages?.length > 0 ? variation.productImages : safeProductImages;
+
+        try {
+          const dataUrl = await generateMarketplaceImage(
             fullPrompt,
-            // IMPORTANT: pg serializes JS arrays as Postgres arrays (`{"..."}`),
-            // which is invalid JSON for a JSONB column. Store real JSON.
-            JSON.stringify(productImagesForVariation || []),
-            JSON.stringify(safeStyleImages || []),
-            priority,
-            user.role === 'admin' ? 0 : i === 0 ? reservedTokens : 0,
-          ]
-        );
+            productImagesForVariation,
+            safeStyleImages,
+            aspectRatio,
+            { model: selectedModel || undefined }
+          );
 
-        if (!firstCreatedAt) {
-          const raw = insertRes.rows?.[0]?.created_at;
-          firstCreatedAt = raw instanceof Date ? raw : raw ? new Date(raw) : new Date();
+          outputs[index] = {
+            id: randomUUID(),
+            index,
+            label: variation?.label || variation?.id || `Image ${index + 1}`,
+            status: 'succeeded',
+            imageUrl: dataUrl,
+            error: null,
+            prompt: fullPrompt,
+            productImages: productImagesForVariation,
+            startedAt,
+            finishedAt: new Date(),
+          };
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          outputs[index] = {
+            id: randomUUID(),
+            index,
+            label: variation?.label || variation?.id || `Image ${index + 1}`,
+            status: 'failed',
+            imageUrl: null,
+            error: msg.slice(0, 5000),
+            prompt: fullPrompt,
+            productImages: productImagesForVariation,
+            startedAt,
+            finishedAt: new Date(),
+          };
         }
       }
+    };
 
-      await client.query('COMMIT');
-      enqueued = true;
-    } catch (err) {
-      try {
-        await client.query('ROLLBACK');
-      } catch {
-        // ignore
+    await Promise.all(Array.from({ length: maxConcurrent }, () => runOne()));
+
+    const ordered = outputs
+      .filter(Boolean)
+      .sort((a, b) => a.index - b.index);
+    const succeeded = ordered.filter((item) => item.status === 'succeeded');
+    const failed = ordered.filter((item) => item.status === 'failed');
+
+    const anySucceeded = succeeded.length > 0;
+    let tokensRefunded = 0;
+    let tokensCharged = 0;
+
+    if (user.role !== 'admin') {
+      if (anySucceeded) {
+        await recordTokenUsage({
+          userId: user.id,
+          tokensUsed: reservedTokens,
+          serviceType: 'image_generate',
+          modelUsed: selectedModel || null,
+          prompt: safePrompt,
+        });
+        tokensCharged = reservedTokens;
+      } else {
+        await refundTokens({ userId: user.id, tokens: reservedTokens });
+        reservedTokensRemaining += reservedTokens;
+        tokensRefunded = reservedTokens;
       }
-      throw err;
-    } finally {
-      client.release();
     }
+    billingSettled = true;
 
-    // Best-effort queue metrics for transparent UI
-    let queuePosition: number | null = null;
-    let etaSeconds: number | null = null;
-
+    // Keep image_jobs table for limits/analytics, but skip queued/worker flow.
     try {
-      const createdAt = firstCreatedAt || new Date();
-      const [queuedRes, activeRes, basicAvgSeconds, proAvgSeconds] = await Promise.all([
-        query(
-          `SELECT mode, COUNT(*)::int AS cnt
-           FROM image_jobs
-           WHERE plan = $1
-             AND status = 'queued'
-             AND created_at < $2
-           GROUP BY mode`,
-          [plan, createdAt]
-        ),
-        query(
-          `SELECT mode, COUNT(*)::int AS cnt
-           FROM image_jobs
-           WHERE plan = $1
-             AND status = 'processing'
-           GROUP BY mode`,
-          [plan]
-        ),
-        estimateAvgImageJobSeconds(plan, 'basic'),
-        estimateAvgImageJobSeconds(plan, 'pro'),
-      ]);
-
-      const queuedRows = Array.isArray(queuedRes.rows)
-        ? queuedRes.rows.map((row: any) => ({
-            mode: String(row?.mode || ''),
-            cnt: Number(row?.cnt || 0),
-          }))
-        : [];
-
-      const activeRows = Array.isArray(activeRes.rows)
-        ? activeRes.rows.map((row: any) => ({
-            mode: String(row?.mode || ''),
-            cnt: Number(row?.cnt || 0),
-          }))
-        : [];
-
-      const queuedAhead = queuedRows.reduce(
-        (sum, row) => sum + (Number.isFinite(row.cnt) ? Math.max(0, row.cnt) : 0),
-        0
-      );
-
-      if (Number.isFinite(queuedAhead)) {
-        queuePosition = Math.max(1, queuedAhead + 1);
-      }
-
-      const basicAvg = Number(basicAvgSeconds);
-      const proAvg = Number(proAvgSeconds);
-      const currentAvg = inferredMode === 'pro' ? proAvg : basicAvg;
-
-      if (
-        Number.isFinite(basicAvg) &&
-        basicAvg > 0 &&
-        Number.isFinite(proAvg) &&
-        proAvg > 0 &&
-        Number.isFinite(currentAvg) &&
-        currentAvg > 0
-      ) {
-        const queuedWorkSeconds = workloadSecondsByMode(queuedRows, basicAvg, proAvg);
-        const activeWorkSeconds = workloadSecondsByMode(activeRows, basicAvg, proAvg);
-        const ownWorkSeconds = Math.max(1, variations.length) * currentAvg;
-        etaSeconds = Math.max(5, Math.ceil((queuedWorkSeconds + activeWorkSeconds + ownWorkSeconds) / parallelLimit));
+      const client = await getClient();
+      try {
+        await client.query('BEGIN');
+        for (const item of ordered) {
+          await client.query(
+            `INSERT INTO image_jobs (
+               id, batch_id, batch_index, user_id,
+               plan, mode, provider, model, aspect_ratio,
+               label, base_prompt, prompt, product_images, style_images,
+               status, priority, result_url, error_text,
+               tokens_reserved, tokens_refunded, usage_recorded,
+               created_at, updated_at, started_at, finished_at
+             ) VALUES (
+               $1, $2, $3, $4,
+               $5, $6, 'gemini', $7, $8,
+               $9, $10, $11, $12::jsonb, $13::jsonb,
+               $14, 0, $15, $16,
+               $17, $18, $19,
+               NOW(), NOW(), $20, $21
+             )`,
+            [
+              item.id,
+              batchId,
+              item.index,
+              user.id,
+              plan,
+              inferredMode,
+              selectedModel || null,
+              aspectRatio,
+              item.label,
+              safePrompt || null,
+              item.prompt,
+              JSON.stringify(item.productImages || []),
+              JSON.stringify(safeStyleImages || []),
+              item.status,
+              item.imageUrl,
+              item.error,
+              user.role === 'admin' ? 0 : item.index === 0 ? reservedTokens : 0,
+              user.role === 'admin' ? 0 : !anySucceeded && item.index === 0 ? reservedTokens : 0,
+              user.role === 'admin' ? true : anySucceeded && item.index === 0,
+              item.startedAt,
+              item.finishedAt,
+            ]
+          );
+        }
+        await client.query('COMMIT');
+      } catch {
+        try {
+          await client.query('ROLLBACK');
+        } catch {
+          // ignore
+        }
+      } finally {
+        client.release();
       }
     } catch {
-      queuePosition = null;
-      etaSeconds = null;
+      // ignore logging errors
     }
 
+    const status = failed.length === 0 ? 'succeeded' : anySucceeded ? 'partial' : 'failed';
     return NextResponse.json({
       success: true,
+      status,
       batch_id: batchId,
-      job_ids: jobIds,
-      status: 'queued',
-      queue_position: queuePosition,
-      eta_seconds: etaSeconds,
+      images: succeeded.map((item) => item.imageUrl).filter(Boolean),
+      items: ordered.map((item) => ({
+        id: item.id,
+        index: item.index,
+        status: item.status,
+        label: item.label,
+        imageUrl: item.imageUrl,
+        error: item.error,
+      })),
+      progress: {
+        done: ordered.length,
+        total: ordered.length,
+        percent: 100,
+        queued: 0,
+        processing: 0,
+        succeeded: succeeded.length,
+        failed: failed.length,
+        canceled: 0,
+      },
       parallel_limit: parallelLimit,
       tokens_reserved: reservedTokens,
+      tokens_charged: user.role === 'admin' ? 0 : tokensCharged,
+      tokens_refunded: user.role === 'admin' ? 0 : tokensRefunded,
       tokens_remaining: user.role === 'admin' ? 999999 : Number(reservedTokensRemaining.toFixed(2)),
-      note:
-        'Jobs queued. You can poll /api/image-batches/:id to get progress, queue position, and results.',
+      note: 'Synchronous generation completed.',
     });
 
   } catch (error) {
@@ -548,8 +566,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If jobs were NOT enqueued successfully, refund reserved tokens.
-    if (!enqueued && userId && reservedTokens) {
+    if (!billingSettled && userId && reservedTokens) {
       try {
         await refundTokens({ userId, tokens: reservedTokens });
       } catch {
