@@ -1,6 +1,6 @@
 import { SubscriptionPlan, SUBSCRIPTION_PLANS, normalizeSubscriptionPlan } from './subscription-plans';
 
-const DEFAULT_TELEGRAM_USERNAME = 'umari_studio_admin';
+const DEFAULT_TELEGRAM_USERNAME = 'Ostudio22';
 
 export function getTelegramUsername(): string {
   const configured = process.env.NEXT_PUBLIC_TELEGRAM_SUPPORT_USERNAME;
