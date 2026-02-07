@@ -389,7 +389,7 @@ export async function POST(request: NextRequest) {
            ) VALUES (
              $1, $2, $3, $4,
              $5, $6, 'gemini', $7, $8,
-             $9, $10, $11, $12, $13,
+             $9, $10, $11, $12::jsonb, $13::jsonb,
              'queued', $14, $15, NOW(), NOW()
            )
            RETURNING created_at`,

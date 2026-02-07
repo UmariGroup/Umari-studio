@@ -25,6 +25,9 @@ function readInt(value, fallback) {
   return Math.trunc(n);
 }
 
+const IDLE_SLEEP_MIN_MS = Math.max(250, readInt(process.env.IMAGE_WORKER_IDLE_MIN_MS, 500));
+const IDLE_SLEEP_MAX_MS = Math.max(IDLE_SLEEP_MIN_MS, readInt(process.env.IMAGE_WORKER_IDLE_MAX_MS, 4000));
+
 function getPlanSlots() {
   return {
     free: Math.max(1, readInt(process.env.IMAGE_QUEUE_PARALLEL_FREE, 1)),
@@ -668,13 +671,16 @@ async function runPlanSlot(pool, plan, slot) {
   await client.query(`SELECT pg_advisory_lock($1)`, [lockKey]);
   console.log(`[${name}] slot lock acquired.`);
 
+  let idleSleepMs = IDLE_SLEEP_MIN_MS;
   while (true) {
     const job = await claimNextJob(client, plan);
     if (!job) {
-      await sleep(750);
+      await sleep(idleSleepMs);
+      idleSleepMs = Math.min(IDLE_SLEEP_MAX_MS, Math.floor(idleSleepMs * 1.5));
       continue;
     }
 
+    idleSleepMs = IDLE_SLEEP_MIN_MS;
     await processJob(client, job);
   }
 }

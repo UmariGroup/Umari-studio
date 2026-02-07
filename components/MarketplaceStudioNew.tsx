@@ -110,6 +110,23 @@ const MarketplaceStudio: React.FC = () => {
   const TARGET_W = 1080;
   const TARGET_H = 1440;
 
+  const formatEta = (seconds: number | null): string => {
+    if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return '...';
+
+    if (seconds < 60) {
+      return `~${Math.max(5, Math.round(seconds))} soniya`;
+    }
+
+    const minutes = Math.max(1, Math.round(seconds / 60));
+    if (minutes < 60) {
+      return `~${minutes} daqiqa`;
+    }
+
+    const hours = Math.floor(minutes / 60);
+    const remainMinutes = minutes % 60;
+    return remainMinutes > 0 ? `~${hours} soat ${remainMinutes} daqiqa` : `~${hours} soat`;
+  };
+
   const normalizeTo1080x1440 = useCallback(async (src: string): Promise<string> => {
     const toDataUrl = async (input: string): Promise<string> => {
       if (input.startsWith('data:image/')) return input;
@@ -246,21 +263,35 @@ const MarketplaceStudio: React.FC = () => {
     if (!batchId) return;
 
     let cancelled = false;
-    let interval: NodeJS.Timeout | null = null;
+    let timer: NodeJS.Timeout | null = null;
+    let inFlight = false;
 
     const poll = async () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+
+      let nextDelayMs = 2500;
+
       try {
         const res = await fetch(`/api/image-batches/${encodeURIComponent(batchId)}`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          nextDelayMs = 4000;
+          return;
+        }
         const data = await res.json();
         const batch = data?.batch;
-        if (!batch || cancelled) return;
+        if (!batch || cancelled) {
+          nextDelayMs = 4000;
+          return;
+        }
 
         setBatchStatus(batch.status || null);
         setQueuePosition(typeof batch.queue_position === 'number' ? batch.queue_position : null);
         setEtaSeconds(typeof batch.eta_seconds === 'number' ? batch.eta_seconds : null);
         setParallelLimit(typeof batch.parallel_limit === 'number' ? batch.parallel_limit : null);
         setProgressPct(typeof batch?.progress?.percent === 'number' ? batch.progress.percent : 0);
+
+        nextDelayMs = batch.status === 'queued' ? 3000 : 1800;
 
         const items: ImageBatchItem[] = Array.isArray(batch.items)
           ? batch.items.map((it: any) => ({
@@ -291,8 +322,6 @@ const MarketplaceStudio: React.FC = () => {
           batch.status === 'failed' ||
           batch.status === 'canceled'
         ) {
-          if (interval) clearInterval(interval);
-          interval = null;
           setGenerating(false);
 
           if (batch.status === 'succeeded') toast.success('Rasm muvaffaqiyatli yaratildi!');
@@ -301,18 +330,25 @@ const MarketplaceStudio: React.FC = () => {
           else toast.error(items.find((it) => it.error)?.error || 'Rasm yaratishda xatolik.');
 
           // Keep batchId so user can still see results; stop polling only.
+          return;
         }
       } catch {
-        // ignore
+        nextDelayMs = 4000;
+      } finally {
+        inFlight = false;
+        if (!cancelled) {
+          timer = setTimeout(() => {
+            void poll();
+          }, nextDelayMs);
+        }
       }
     };
 
     void poll();
-    interval = setInterval(poll, 1500);
 
     return () => {
       cancelled = true;
-      if (interval) clearInterval(interval);
+      if (timer) clearTimeout(timer);
     };
   }, [batchId, toast]);
 
@@ -777,9 +813,7 @@ const MarketplaceStudio: React.FC = () => {
                   <p>Navbat: {queuePosition ?? '...'}</p>
                   <p>
                     Taxminiy vaqt:{' '}
-                    {typeof etaSeconds === 'number'
-                      ? `~${Math.max(1, Math.round(etaSeconds / 60))} daqiqa`
-                      : '...'}
+                    {formatEta(etaSeconds)}
                   </p>
                   {typeof parallelLimit === 'number' && <p>Parallel limit: {parallelLimit}</p>}
                 </div>
@@ -791,7 +825,7 @@ const MarketplaceStudio: React.FC = () => {
                   <p>Progress: {progressPct}%</p>
                   {typeof etaSeconds === 'number' && (
                     <p>
-                      Taxminiy vaqt: ~{Math.max(1, Math.round(etaSeconds / 60))} daqiqa
+                      Taxminiy vaqt: {formatEta(etaSeconds)}
                     </p>
                   )}
                   {typeof parallelLimit === 'number' && <p>Parallel limit: {parallelLimit}</p>}
