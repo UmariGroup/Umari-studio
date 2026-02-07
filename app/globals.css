@@ -34,3 +34,53 @@ textarea,
 select {
   font-family: inherit;
 }
+
+@keyframes examples-marquee {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes examples-marquee-reverse {
+  0% {
+    transform: translate3d(-50%, 0, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.examples-marquee {
+  display: flex;
+  width: max-content;
+  gap: 1rem;
+  animation: examples-marquee 40s linear infinite;
+  will-change: transform;
+}
+
+.examples-marquee.examples-marquee-reverse {
+  animation-name: examples-marquee-reverse;
+  animation-duration: 48s;
+}
+
+.examples-marquee:hover {
+  animation-play-state: paused;
+}
+
+.examples-fade {
+  background: linear-gradient(to right, #ffffff 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+@media (max-width: 640px) {
+  .examples-marquee {
+    gap: 0.6rem;
+    animation-duration: 28s;
+  }
+
+  .examples-marquee.examples-marquee-reverse {
+    animation-duration: 32s;
+  }
+}

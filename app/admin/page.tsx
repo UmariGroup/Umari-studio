@@ -1,8 +1,8 @@
-'use client';
+﻿'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { SUBSCRIPTION_PLANS, FREE_TRIAL_TOKENS } from '@/lib/subscription-plans';
+import { FREE_TRIAL_TOKENS, SUBSCRIPTION_PLANS } from '@/lib/subscription-plans';
 import {
   FiBarChart2,
   FiCheck,
@@ -14,6 +14,7 @@ import {
   FiUsers,
   FiClock,
   FiZap,
+  FiArrowRight,
 } from 'react-icons/fi';
 
 interface DashboardStats {
@@ -31,35 +32,31 @@ interface DashboardStats {
 const QUICK_ACTIONS = [
   {
     href: '/admin/users',
-    icon: <FiUsers className="w-8 h-8" />,
+    icon: <FiUsers className="h-6 w-6" />,
     title: 'Foydalanuvchilar',
-    description: 'Barcha foydalanuvchilarni boshqarish',
-    color: 'from-blue-500 to-indigo-600',
-    badge: 'Asosiy',
+    description: "Barcha akkauntlarni boshqarish va filtrlar bilan ko'rish.",
+    tone: 'from-blue-500 to-indigo-600',
   },
   {
     href: '/admin/admins',
-    icon: <FiShield className="w-8 h-8" />,
-    title: 'Admin boshqaruvi',
-    description: "Administratorlar ro'yxati",
-    color: 'from-purple-500 to-pink-600',
-    badge: null,
+    icon: <FiShield className="h-6 w-6" />,
+    title: 'Adminlar',
+    description: "Administrator huquqlarini nazorat qilish va boshqarish.",
+    tone: 'from-violet-500 to-fuchsia-600',
   },
   {
     href: '/admin/subscriptions',
-    icon: <FiCreditCard className="w-8 h-8" />,
-    title: 'Obuna rejalari',
-    description: "Tariflar sozlamalari",
-    color: 'from-emerald-500 to-teal-600',
-    badge: null,
+    icon: <FiCreditCard className="h-6 w-6" />,
+    title: 'Tariflar',
+    description: 'Narx, token va obuna holatlarini yangilash.',
+    tone: 'from-emerald-500 to-teal-600',
   },
   {
     href: '/admin/logs',
-    icon: <FiFileText className="w-8 h-8" />,
+    icon: <FiFileText className="h-6 w-6" />,
     title: 'Loglar',
-    description: 'Admin harakatlari tarixi',
-    color: 'from-gray-500 to-slate-600',
-    badge: null,
+    description: 'Admin amallari tarixi va xavfsizlik kuzatuvi.',
+    tone: 'from-slate-600 to-slate-700',
   },
 ];
 
@@ -78,22 +75,22 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchStats();
-  }, []);
-
-  const fetchStats = async () => {
-    try {
-      const response = await fetch('/api/admin/dashboard');
-      const data = await response.json();
-      if (data.success) {
-        setStats(data.stats);
+    const fetchStats = async () => {
+      try {
+        const response = await fetch('/api/admin/dashboard');
+        const data = await response.json();
+        if (data.success) {
+          setStats(data.stats);
+        }
+      } catch (error) {
+        console.error('Error fetching stats:', error);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    void fetchStats();
+  }, []);
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -101,218 +98,209 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      {/* Header */}
-      <nav className="bg-white/5 backdrop-blur-xl border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <div className="p-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl">
-              <FiShield className="w-8 h-8 text-white" />
+    <div className="relative min-h-screen overflow-hidden bg-slate-50">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-20 top-0 h-72 w-72 rounded-full bg-blue-300/25 blur-3xl" />
+        <div className="absolute right-0 top-20 h-80 w-80 rounded-full bg-violet-300/25 blur-3xl" />
+      </div>
+
+      <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/85 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-blue-600 to-violet-600 text-white">
+              <FiShield className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-black text-white">Admin Panel</h1>
-              <p className="text-white/50 text-sm">Umari Studio boshqaruv markazi</p>
+              <p className="text-sm font-semibold text-slate-900">Umari Admin</p>
+              <p className="text-xs text-slate-500">Boshqaruv markazi</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="px-4 py-2 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-colors font-semibold">
+
+          <div className="flex items-center gap-2">
+            <Link href="/dashboard" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
               Dashboard
             </Link>
             <button
               onClick={handleLogout}
-              className="px-4 py-2 bg-red-500/20 text-red-300 rounded-xl hover:bg-red-500/30 transition-colors font-semibold"
+              className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
             >
-              <span className="inline-flex items-center gap-2"><FiLogOut /> Chiqish</span>
+              <FiLogOut className="h-4 w-4" /> Chiqish
             </button>
           </div>
         </div>
-      </nav>
+      </header>
 
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Total Users */}
-          <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-500/20 rounded-xl">
-                <FiUsers className="w-6 h-6 text-blue-400" />
-              </div>
-              <div>
-                <p className="text-white/50 text-sm">Jami foydalanuvchilar</p>
-                <p className="text-3xl font-black text-white">{loading ? '...' : stats.totalUsers}</p>
-              </div>
-            </div>
+      <main className="relative mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+            <StatCard
+              label="Jami foydalanuvchilar"
+              value={loading ? '...' : stats.totalUsers}
+              accent="text-blue-700"
+              icon={<FiUsers className="h-5 w-5" />}
+            />
+            <StatCard
+              label="Faol obunalar"
+              value={loading ? '...' : stats.activeSubscriptions}
+              accent="text-emerald-700"
+              icon={<FiCheck className="h-5 w-5" />}
+            />
+            <StatCard
+              label="Free foydalanuvchilar"
+              value={loading ? '...' : stats.freeUsers}
+              accent="text-amber-700"
+              icon={<FiClock className="h-5 w-5" />}
+            />
+            <StatCard
+              label="Jami daromad"
+              value={loading ? '...' : `$${stats.totalRevenue}`}
+              accent="text-violet-700"
+              icon={<FiDollarSign className="h-5 w-5" />}
+            />
+            <StatCard
+              label="Ishlatilgan token"
+              value={loading ? '...' : stats.totalTokensUsed}
+              accent="text-indigo-700"
+              icon={<FiZap className="h-5 w-5" />}
+            />
           </div>
+        </section>
 
-          {/* Active Subscriptions */}
-          <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-emerald-500/20 rounded-xl">
-                <FiCheck className="w-6 h-6 text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-white/50 text-sm">Faol obunalar</p>
-                <p className="text-3xl font-black text-emerald-400">{loading ? '...' : stats.activeSubscriptions}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Free Users */}
-          <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-amber-500/20 rounded-xl">
-                <FiClock className="w-6 h-6 text-amber-400" />
-              </div>
-              <div>
-                <p className="text-white/50 text-sm">Free foydalanuvchilar</p>
-                <p className="text-3xl font-black text-amber-400">{loading ? '...' : stats.freeUsers}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Total Revenue */}
-          <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-purple-500/20 rounded-xl">
-                <FiDollarSign className="w-6 h-6 text-purple-400" />
-              </div>
-              <div>
-                <p className="text-white/50 text-sm">Jami daromad</p>
-                <p className="text-3xl font-black text-purple-400">${loading ? '...' : stats.totalRevenue}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Subscription Breakdown */}
-        <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
-          <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-3">
-            <FiBarChart2 className="w-5 h-5 text-purple-400" />
-            Tariflar bo'yicha taqsimot
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-5 inline-flex items-center gap-2 text-lg font-bold text-slate-900">
+            <FiBarChart2 className="text-blue-600" /> Tariflar bo'yicha taqsimot
           </h2>
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            {/* Free */}
-            <div className="bg-gray-500/10 rounded-xl p-4 border border-gray-500/20">
-              <div className="flex items-center gap-2 mb-2">
-                <FiZap className="text-xl text-gray-300" />
-                <span className="font-bold text-gray-300">Free</span>
-              </div>
-              <p className="text-2xl font-black text-gray-400">{stats.freeUsers}</p>
-              <p className="text-xs text-gray-500">{FREE_TRIAL_TOKENS} token sinov</p>
-            </div>
-
-            {/* Starter */}
-            <div className="bg-emerald-500/10 rounded-xl p-4 border border-emerald-500/20">
-              <div className="flex items-center gap-2 mb-2">
-                <FiCreditCard className="text-xl text-emerald-300" />
-                <span className="font-bold text-emerald-300">Starter</span>
-              </div>
-              <p className="text-2xl font-black text-emerald-400">{stats.starterUsers || 0}</p>
-              <p className="text-xs text-emerald-500/70">$9/oy • {SUBSCRIPTION_PLANS.starter.monthlyTokens} token</p>
-            </div>
-
-            {/* Pro */}
-            <div className="bg-blue-500/10 rounded-xl p-4 border border-blue-500/20">
-              <div className="flex items-center gap-2 mb-2">
-                <FiCreditCard className="text-xl text-blue-300" />
-                <span className="font-bold text-blue-300">Pro</span>
-              </div>
-              <p className="text-2xl font-black text-blue-400">{stats.proUsers || 0}</p>
-              <p className="text-xs text-blue-500/70">$19/oy • {SUBSCRIPTION_PLANS.pro.monthlyTokens} token</p>
-            </div>
-
-            {/* Business+ */}
-            <div className="bg-purple-500/10 rounded-xl p-4 border border-purple-500/20">
-              <div className="flex items-center gap-2 mb-2">
-                <FiCreditCard className="text-xl text-purple-300" />
-                <span className="font-bold text-purple-300">Business+</span>
-              </div>
-              <p className="text-2xl font-black text-purple-400">{stats.businessUsers || 0}</p>
-              <p className="text-xs text-purple-500/70">$29/oy • {SUBSCRIPTION_PLANS.business_plus.monthlyTokens} token</p>
-            </div>
-
-            {/* Expired */}
-            <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/20">
-              <div className="flex items-center gap-2 mb-2">
-                <FiClock className="text-xl text-red-300" />
-                <span className="font-bold text-red-300">Expired</span>
-              </div>
-              <p className="text-2xl font-black text-red-400">{stats.expiredUsers || 0}</p>
-              <p className="text-xs text-red-500/70">Muddati tugagan</p>
-            </div>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+            <PlanMiniCard title="Free" users={stats.freeUsers} meta={`${FREE_TRIAL_TOKENS} token sinov`} tone="text-slate-700 border-slate-200 bg-slate-50" />
+            <PlanMiniCard title="Starter" users={stats.starterUsers || 0} meta={`$9/oy • ${SUBSCRIPTION_PLANS.starter.monthlyTokens} token`} tone="text-emerald-700 border-emerald-200 bg-emerald-50" />
+            <PlanMiniCard title="Pro" users={stats.proUsers || 0} meta={`$19/oy • ${SUBSCRIPTION_PLANS.pro.monthlyTokens} token`} tone="text-blue-700 border-blue-200 bg-blue-50" />
+            <PlanMiniCard title="Business+" users={stats.businessUsers || 0} meta={`$29/oy • ${SUBSCRIPTION_PLANS.business_plus.monthlyTokens} token`} tone="text-violet-700 border-violet-200 bg-violet-50" />
+            <PlanMiniCard title="Expired" users={stats.expiredUsers || 0} meta="Muddati tugagan" tone="text-rose-700 border-rose-200 bg-rose-50" />
           </div>
-        </div>
+        </section>
 
-        {/* Quick Actions */}
-        <div>
-          <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-3">
-            <FiZap className="w-5 h-5 text-purple-400" aria-hidden />
-            Tez harakatlar
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <section>
+          <h2 className="mb-5 text-lg font-bold text-slate-900">Tez harakatlar</h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
             {QUICK_ACTIONS.map((action) => (
               <Link
                 key={action.href}
                 href={action.href}
-                className="group relative bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 hover:bg-white/10 transition-all hover:scale-[1.02] hover:shadow-xl"
+                className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
               >
-                {action.badge && (
-                  <span className="absolute top-4 right-4 px-2 py-1 bg-purple-500 text-white text-xs font-bold rounded-lg">
-                    {action.badge}
-                  </span>
-                )}
-                <div className={`w-14 h-14 rounded-xl bg-gradient-to-r ${action.color} flex items-center justify-center text-white mb-4 group-hover:scale-110 transition-transform`}>
+                <div className={`mb-4 inline-flex rounded-xl bg-gradient-to-r p-3 text-white ${action.tone}`}>
                   {action.icon}
                 </div>
-                <h3 className="text-lg font-bold text-white mb-1">{action.title}</h3>
-                <p className="text-white/50 text-sm">{action.description}</p>
+                <h3 className="text-base font-bold text-slate-900">{action.title}</h3>
+                <p className="mt-1 text-sm leading-6 text-slate-600">{action.description}</p>
+                <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-blue-700">
+                  Ochish <FiArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+                </span>
               </Link>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* Plan Info Card */}
-        <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-2xl p-6 border border-purple-500/20">
-          <h2 className="text-lg font-bold text-white mb-4 inline-flex items-center gap-2">
-            <FiFileText className="text-purple-300" /> Tariflar haqida qisqacha
+        <section className="rounded-3xl border border-slate-200 bg-gradient-to-r from-blue-50 via-violet-50 to-indigo-50 p-6">
+          <h2 className="mb-4 inline-flex items-center gap-2 text-lg font-bold text-slate-900">
+            <FiFileText className="text-indigo-600" /> Tariflar bo'yicha qisqa eslatma
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white/5 rounded-xl p-4">
-              <h3 className="font-bold text-emerald-400 mb-2 inline-flex items-center gap-2">
-                <FiCreditCard /> Starter — $9/oy
-              </h3>
-              <ul className="text-white/70 text-sm space-y-1">
-                <li>• {SUBSCRIPTION_PLANS.starter.monthlyTokens} token / oy</li>
-                <li>• Rasm: Basic + Pro</li>
-                <li>• Video: Faqat Veo 3 Fast</li>
-                <li>• Copywriter: gemini-2.0-flash</li>
-              </ul>
-            </div>
-            <div className="bg-white/5 rounded-xl p-4">
-              <h3 className="font-bold text-blue-400 mb-2 inline-flex items-center gap-2">
-                <FiCreditCard /> Pro — $19/oy
-              </h3>
-              <ul className="text-white/70 text-sm space-y-1">
-                <li>• {SUBSCRIPTION_PLANS.pro.monthlyTokens} token / oy</li>
-                <li>• Rasm: Basic + Pro + Nano</li>
-                <li>• Video: Veo 3 Fast + Pro</li>
-                <li>• Copywriter: gemini-2.5-flash</li>
-              </ul>
-            </div>
-            <div className="bg-white/5 rounded-xl p-4">
-              <h3 className="font-bold text-purple-400 mb-2 inline-flex items-center gap-2">
-                <FiCreditCard /> Business+ — $29/oy
-              </h3>
-              <ul className="text-white/70 text-sm space-y-1">
-                <li>• {SUBSCRIPTION_PLANS.business_plus.monthlyTokens} token / oy</li>
-                <li>• Barcha modellar</li>
-                <li>• Video: + Premium Upscaler</li>
-                <li>• Copywriter: gemini-2.5-pro</li>
-              </ul>
-            </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <PlanSummary
+              title="Starter"
+              subtitle="$9/oy"
+              bullets={[
+                `${SUBSCRIPTION_PLANS.starter.monthlyTokens} token / oy`,
+                'Image: Basic + Pro',
+                'Video: Umari Fast',
+                'Copywriter: 18 blok',
+              ]}
+            />
+            <PlanSummary
+              title="Pro"
+              subtitle="$19/oy"
+              bullets={[
+                `${SUBSCRIPTION_PLANS.pro.monthlyTokens} token / oy`,
+                'Image: Basic + Pro',
+                'Video: Fast + Pro',
+                'Katalog workflow',
+              ]}
+            />
+            <PlanSummary
+              title="Business+"
+              subtitle="$29/oy"
+              bullets={[
+                `${SUBSCRIPTION_PLANS.business_plus.monthlyTokens} token / oy`,
+                'Eng kuchli image rejim',
+                "Ko'p video va rakurs",
+                'Premium throughput',
+              ]}
+            />
           </div>
-        </div>
-      </div>
+        </section>
+      </main>
     </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  accent,
+  icon,
+}: {
+  label: string;
+  value: string | number;
+  accent: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className={`mb-2 inline-flex rounded-lg bg-white p-2 ${accent}`}>{icon}</div>
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className={`text-2xl font-black ${accent}`}>{value}</p>
+    </div>
+  );
+}
+
+function PlanMiniCard({
+  title,
+  users,
+  meta,
+  tone,
+}: {
+  title: string;
+  users: number;
+  meta: string;
+  tone: string;
+}) {
+  return (
+    <div className={`rounded-2xl border p-4 ${tone}`}>
+      <p className="text-sm font-bold">{title}</p>
+      <p className="mt-1 text-2xl font-black">{users}</p>
+      <p className="mt-1 text-xs opacity-80">{meta}</p>
+    </div>
+  );
+}
+
+function PlanSummary({
+  title,
+  subtitle,
+  bullets,
+}: {
+  title: string;
+  subtitle: string;
+  bullets: string[];
+}) {
+  return (
+    <article className="rounded-2xl border border-white/80 bg-white/80 p-4 shadow-sm backdrop-blur">
+      <p className="text-sm font-bold text-slate-900">{title}</p>
+      <p className="mb-3 text-sm font-semibold text-blue-700">{subtitle}</p>
+      <ul className="space-y-1 text-sm text-slate-600">
+        {bullets.map((bullet) => (
+          <li key={`${title}-${bullet}`}>• {bullet}</li>
+        ))}
+      </ul>
+    </article>
   );
 }

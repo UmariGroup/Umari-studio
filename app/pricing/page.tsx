@@ -388,19 +388,19 @@ export default function PricingPage() {
                     <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'business_plus')?.features.imagePro?.tokenCost ?? '—'}</td>
                   </tr>
                   <tr className="bg-gray-50/50">
-                    <td className="px-6 py-4 text-gray-600">Veo 3 Fast video</td>
+                    <td className="px-6 py-4 text-gray-600">Umari flash video</td>
                     <td className="px-6 py-4 text-center">✓ ({displayPlans.find((p) => p.id === 'starter')?.features.videoBasic.tokenCost ?? '—'} token)</td>
                     <td className="px-6 py-4 text-center">✓ ({displayPlans.find((p) => p.id === 'pro')?.features.videoBasic.tokenCost ?? '—'} token)</td>
                     <td className="px-6 py-4 text-center">✓ ({displayPlans.find((p) => p.id === 'business_plus')?.features.videoBasic.tokenCost ?? '—'} token)</td>
                   </tr>
                   <tr>
-                    <td className="px-6 py-4 text-gray-600">Veo 3 Pro video</td>
+                    <td className="px-6 py-4 text-gray-600">Umari Pro video</td>
                     <td className="px-6 py-4 text-center text-gray-400">—</td>
                     <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'pro')?.features.videoPro ? `✓ (${displayPlans.find((p) => p.id === 'pro')?.features.videoPro?.tokenCost} token)` : '—'}</td>
                     <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'business_plus')?.features.videoPro ? `✓ (${displayPlans.find((p) => p.id === 'business_plus')?.features.videoPro?.tokenCost} token)` : '—'}</td>
                   </tr>
                   <tr className="bg-gray-50/50">
-                    <td className="px-6 py-4 text-gray-600">Premium Upscale video</td>
+                    <td className="px-6 py-4 text-gray-600">Umari Premium Upscale video</td>
                     <td className="px-6 py-4 text-center text-gray-400">—</td>
                     <td className="px-6 py-4 text-center text-gray-400">—</td>
                     <td className="px-6 py-4 text-center">{displayPlans.find((p) => p.id === 'business_plus')?.features.videoPremium ? `✓ (${displayPlans.find((p) => p.id === 'business_plus')?.features.videoPremium?.tokenCost} token)` : '—'}</td>

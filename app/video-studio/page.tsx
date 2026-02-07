@@ -4,8 +4,14 @@ import VideoStudio from '@/components/VideoStudioNew';
 
 export default function VideoStudioPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-red-50">
-      <VideoStudio />
+    <div className="relative min-h-screen overflow-hidden bg-slate-50">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-24 top-0 h-72 w-72 rounded-full bg-blue-300/20 blur-3xl" />
+        <div className="absolute right-0 top-20 h-80 w-80 rounded-full bg-violet-300/20 blur-3xl" />
+      </div>
+      <div className="relative">
+        <VideoStudio />
+      </div>
     </div>
   );
 }

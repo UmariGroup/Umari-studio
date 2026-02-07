@@ -3,10 +3,6 @@
  * Based on tarif.md specifications
  */
 
-import type { IconType } from 'react-icons';
-import { FiGift, FiPackage, FiStar } from 'react-icons/fi';
-import { FaRocket } from 'react-icons/fa';
-
 export type SubscriptionStatus = 'free' | 'active' | 'expired';
 export type SubscriptionPlan = 'free' | 'starter' | 'pro' | 'business_plus';
 
@@ -145,7 +141,6 @@ export interface SubscriptionPlanMeta {
   monthlyTokens: number;
   color: string;
   gradient: string;
-  icon: IconType;
   badge?: string;
   image: PlanImageConfig;
   video: PlanVideoConfig;
@@ -165,7 +160,6 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
     monthlyTokens: FREE_TRIAL_TOKENS,
     color: 'gray',
     gradient: 'from-gray-400 to-gray-600',
-    icon: FiGift,
     image: {
       maxProductImages: 1,
       maxStyleImages: 0,
@@ -196,7 +190,6 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
     monthlyTokens: 140,
     color: 'emerald',
     gradient: 'from-emerald-400 to-teal-600',
-    icon: FiPackage,
     badge: 'Ommabop',
     image: {
       maxProductImages: 3,
@@ -234,7 +227,6 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
     monthlyTokens: 350,
     color: 'blue',
     gradient: 'from-blue-500 to-indigo-600',
-    icon: FiStar,
     badge: 'Tavsiya etiladi',
     image: {
       maxProductImages: 4,
@@ -271,7 +263,6 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
     monthlyTokens: 600,
     color: 'purple',
     gradient: 'from-purple-500 to-pink-600',
-    icon: FaRocket,
     badge: 'Eng kuchli',
     image: {
       maxProductImages: 5,

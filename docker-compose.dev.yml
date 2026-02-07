@@ -3,9 +3,10 @@ services:
     image: postgres:16-alpine
     container_name: umari_postgres_dev
     env_file:
-      - .env.local
+      - .env
     environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
+      # Keep bootstrap user fixed to avoid role-mismatch with persisted volumes.
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-umari_studio}
     ports:
@@ -35,11 +36,12 @@ services:
       dockerfile: docker/Dockerfile.dev
     container_name: umari_nextjs_dev
     env_file:
-      - .env.local
+      - .env
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: ${DB_USER:-postgres}
+      # Keep app user stable for existing volumes where custom role may not exist.
+      DB_USER: postgres
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-umari_studio}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-key}
@@ -55,7 +57,7 @@ services:
       - /app/node_modules
     networks:
       - umari_network
-    command: npm run dev
+    command: sh -c "npm install && npm run dev"
     # Security: no privileged access
     security_opt:
       - no-new-privileges:true
@@ -66,11 +68,11 @@ services:
       dockerfile: docker/Dockerfile.dev
     container_name: umari_image_worker_dev
     env_file:
-      - .env.local
+      - .env
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: ${DB_USER:-postgres}
+      DB_USER: postgres
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-umari_studio}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-key}
@@ -83,7 +85,7 @@ services:
       - /app/node_modules
     networks:
       - umari_network
-    command: node scripts/image-worker.js
+    command: sh -c "npm install && node scripts/image-worker.js"
     security_opt:
       - no-new-privileges:true
 

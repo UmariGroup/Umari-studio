@@ -4,8 +4,14 @@ import CopywriterStudio from '../../components/CopywriterStudio';
 
 export default function CopywriterStudioPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-blue-50">
-      <CopywriterStudio />
+    <div className="relative min-h-screen overflow-hidden bg-slate-50">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-24 top-0 h-72 w-72 rounded-full bg-blue-300/20 blur-3xl" />
+        <div className="absolute right-0 top-20 h-80 w-80 rounded-full bg-violet-300/20 blur-3xl" />
+      </div>
+      <div className="relative">
+        <CopywriterStudio />
+      </div>
     </div>
   );
 }
