@@ -88,7 +88,7 @@ export interface VideoModelConfig {
 export const VIDEO_MODELS: VideoModelConfig[] = [
   {
     id: 'veo-3.0-fast-generate-001',
-    name: 'Veo 3 Fast',
+    name: 'Umari Flash Video',
     mode: 'basic',
     duration: 5,
     description: 'Tez generatsiya - oddiy videolar uchun',
@@ -96,7 +96,7 @@ export const VIDEO_MODELS: VideoModelConfig[] = [
   },
   {
     id: 'veo-3.0-generate-001',
-    name: 'Veo 3 Pro',
+    name: 'Umari Pro Video',
     mode: 'pro',
     duration: 6,
     description: 'Yuqori sifat - reklama videolari uchun',
@@ -104,7 +104,7 @@ export const VIDEO_MODELS: VideoModelConfig[] = [
   },
   {
     id: 'veo3_upsampler_video_generation',
-    name: 'Veo 3 Premium + Upscaler',
+    name: 'Umari Studio Video',
     mode: 'premium',
     duration: 10,
     description: 'Eng yuqori sifat - professional reklama uchun',

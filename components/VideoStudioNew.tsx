@@ -44,6 +44,12 @@ interface VideoModeConfig {
   available: boolean;
 }
 
+const VIDEO_MODEL_LABELS: Record<string, string> = {
+  'veo-3.0-fast-generate-001': 'Umari Flash Video',
+  'veo-3.0-generate-001': 'Umari Pro Video',
+  veo3_upsampler_video_generation: 'Umari Studio Video',
+};
+
 // ============ PLAN VIDEO CONFIGURATIONS ============
 const getVideoModesForPlan = (plan: SubscriptionPlan): VideoModeConfig[] => {
   const configs: Record<SubscriptionPlan, VideoModeConfig[]> = {
@@ -128,6 +134,7 @@ const getVideoModesForPlan = (plan: SubscriptionPlan): VideoModeConfig[] => {
 
 const VideoStudio: React.FC = () => {
   const toast = useToast();
+  const getVideoModelLabel = (modelId: string): string => VIDEO_MODEL_LABELS[modelId] || modelId;
 
   // User state
   const [user, setUser] = useState<UserData | null>(null);
@@ -489,7 +496,7 @@ const VideoStudio: React.FC = () => {
                       ? 'bg-blue-100 text-blue-700'
                       : 'bg-purple-100 text-purple-700'
                 } inline-flex items-center gap-2`}>
-                  <FiFilm aria-hidden className="w-4 h-4" /> {currentConfig.model}
+                  <FiFilm aria-hidden className="w-4 h-4" /> {getVideoModelLabel(currentConfig.model)}
                 </span>
                 <span className="text-sm text-gray-600">{currentConfig.description}</span>
               </div>
@@ -675,7 +682,7 @@ const VideoStudio: React.FC = () => {
                         {progress}%
                       </span>
                     </div>
-                    <p className="text-sm text-gray-400">Veo AI video yaratmoqda...</p>
+                    <p className="text-sm text-gray-400">Umari AI video yaratmoqda...</p>
                     <p className="text-xs text-gray-500">Bu bir necha daqiqa olishi mumkin</p>
                   </div>
                 ) : videoUrl ? (
