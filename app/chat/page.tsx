@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import { FiArrowLeft, FiMessageSquare, FiSend, FiCpu, FiZap, FiHelpCircle } from 'react-icons/fi';
+import { clsx } from 'clsx';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -102,55 +104,63 @@ export default function ChatPage() {
   };
 
   const quickQuestions = [
-    '🖼️ Qanday qilib yaxshi marketplace rasm yarataman?',
-    '🎬 YouTube Shorts uchun script yozish',
-    '✍️ Blog maqola uchun SEO maslahatlar',
-    '📊 Marketing metrics qanday tahlil qilaman?',
-    '🛍️ E-commerce uchun copywriting',
-    '📱 Instagram post g\'oyalari'
+    '🖼️ Marketplace rasm yaratish',
+    '🎬 Video script yozish',
+    '✍️ SEO matn yozish',
+    '📊 Savdoni oshirish',
+    '📱 SMM strategiya',
+    '💡 Brand rivojlantirish'
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <nav className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-gray-600 hover:text-purple-600">
-              ← Orqaga
-            </Link>
-            <h1 className="text-2xl font-bold text-gray-900">💬 AI Chat</h1>
-          </div>
-          <Link
-            href="/dashboard"
-            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
-          >
-            Dashboard
-          </Link>
-        </div>
-      </nav>
+    <div className="relative min-h-screen overflow-hidden bg-slate-50">
+      {/* Background Blobs */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-20 top-0 h-72 w-72 rounded-full bg-blue-300/20 blur-3xl" />
+        <div className="absolute right-0 top-16 h-80 w-80 rounded-full bg-violet-300/20 blur-3xl" />
+      </div>
 
-      <div className="max-w-4xl mx-auto px-6 py-8 h-[calc(100vh-100px)] flex flex-col">
-        {/* Chat Messages */}
-        <div className="flex-1 bg-white rounded-lg shadow-sm p-6 mb-6 overflow-y-auto">
-          <div className="space-y-4">
+      <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 h-screen flex flex-col">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-sky-500 to-blue-600 rounded-3xl p-6 text-white shadow-xl shadow-blue-200/30 mb-6 shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link href="/dashboard" className="p-2 bg-white/20 backdrop-blur-sm rounded-xl hover:bg-white/30 transition text-white">
+                <FiArrowLeft className="w-6 h-6" />
+              </Link>
+              <div>
+                <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
+                  <FiMessageSquare className="w-6 h-6" /> AI Chat
+                </h1>
+                <p className="text-white/80 text-sm">24/7 aqlli yordamchi</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Chat Area */}
+        <div className="flex-1 bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {messages.map((message, index) => (
               <div
                 key={index}
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                  className={clsx(
+                    "max-w-[85%] lg:max-w-[70%] px-5 py-4 rounded-2xl text-sm leading-relaxed shadow-sm",
                     message.role === 'user'
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-gray-100 text-gray-900'
-                  }`}
+                      ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-tr-sm"
+                      : "bg-slate-100 text-slate-800 rounded-tl-sm border border-slate-200"
+                  )}
                 >
                   <div className="whitespace-pre-wrap">{message.content}</div>
                   <div
-                    className={`text-xs mt-1 ${
-                      message.role === 'user' ? 'text-purple-200' : 'text-gray-500'
-                    }`}
+                    className={clsx(
+                      "text-[10px] mt-2 font-medium opacity-70 text-right",
+                      message.role === 'user' ? "text-blue-100" : "text-slate-500"
+                    )}
                   >
                     {message.timestamp.toLocaleTimeString('uz-UZ', {
                       hour: '2-digit',
@@ -160,87 +170,60 @@ export default function ChatPage() {
                 </div>
               </div>
             ))}
-            
+
             {loading && (
               <div className="flex justify-start">
-                <div className="bg-gray-100 text-gray-900 px-4 py-2 rounded-lg">
-                  <div className="flex items-center space-x-2">
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    </div>
-                    <span className="text-sm">Javob yozilmoqda...</span>
+                <div className="bg-slate-100 px-5 py-4 rounded-2xl rounded-tl-sm border border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.15s' }} />
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
                   </div>
                 </div>
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
-        </div>
 
-        {/* Quick Questions */}
-        {messages.length <= 1 && (
-          <div className="mb-4">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">⚡ Tezkor savollar:</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {quickQuestions.map((question, index) => (
-                <button
-                  key={index}
-                  onClick={() => setInput(question)}
-                  className="text-left p-3 bg-white border border-gray-200 rounded-lg hover:bg-purple-50 hover:border-purple-300 transition text-sm"
-                >
-                  {question}
-                </button>
-              ))}
+          {/* Quick Questions & Input */}
+          <div className="p-4 bg-slate-50 border-t border-slate-200">
+            {messages.length <= 1 && (
+              <div className="mb-4 overflow-x-auto pb-2">
+                <div className="flex gap-2 w-max">
+                  {quickQuestions.map((question, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setInput(question)}
+                      className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors shadow-sm"
+                    >
+                      {question}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 relative">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Savolingizni yozing..."
+                className="flex-1 p-4 pr-12 bg-white border border-slate-200 rounded-2xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none shadow-sm h-[60px] max-h-[120px]"
+                rows={1}
+                disabled={loading}
+              />
+              <button
+                onClick={handleSendMessage}
+                disabled={!input.trim() || loading}
+                className="absolute right-2 top-2 bottom-2 aspect-square bg-blue-600 text-white rounded-xl flex items-center justify-center hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md"
+              >
+                <FiSend className="w-5 h-5" />
+              </button>
             </div>
-          </div>
-        )}
-
-        {/* Input Area */}
-        <div className="bg-white rounded-lg shadow-sm p-4">
-          <div className="flex gap-3">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Savolingizni yozing... (Enter - yuborish)"
-              className="flex-1 p-3 border border-gray-300 rounded-lg resize-none focus:outline-none focus:border-purple-500"
-              rows={3}
-              disabled={loading}
-            />
-            <button
-              onClick={handleSendMessage}
-              disabled={!input.trim() || loading}
-              className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-            >
-              {loading ? '⏳' : '📤 Yuborish'}
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between mt-3 text-sm text-gray-500">
-            <div>💡 Maslahat: Enter tugmasini bosib yuboring</div>
-            <div className="flex items-center gap-4">
-              <span>🎯 AI Yordamchi</span>
-              <span>🔒 Xavfsiz</span>
-              <span>⚡ Tez</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Features Info */}
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-gradient-to-r from-blue-50 to-blue-100 p-3 rounded-lg">
-            <div className="font-medium text-sm text-blue-800">🎯 Maqsadli maslahatlar</div>
-            <div className="text-xs text-blue-600 mt-1">Biznes va marketing bo'yicha</div>
-          </div>
-          <div className="bg-gradient-to-r from-green-50 to-green-100 p-3 rounded-lg">
-            <div className="font-medium text-sm text-green-800">🚀 Professional yordam</div>
-            <div className="text-xs text-green-600 mt-1">Content va strategiya</div>
-          </div>
-          <div className="bg-gradient-to-r from-purple-50 to-purple-100 p-3 rounded-lg">
-            <div className="font-medium text-sm text-purple-800">⚡ Real-time javoblar</div>
-            <div className="text-xs text-purple-600 mt-1">Darhol yordam olish</div>
+            <p className="text-center text-[10px] text-slate-400 mt-2">
+              AI xato qilishi mumkin. Muhim ma'lumotlarni tekshiring.
+            </p>
           </div>
         </div>
       </div>

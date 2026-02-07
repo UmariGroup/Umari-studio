@@ -1,10 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useToast } from './ToastProvider';
 import { getTelegramSubscribeUrl } from '@/lib/telegram';
 import { parseApiErrorResponse, toUzbekErrorMessage } from '@/lib/uzbek-errors';
-import { FiZap } from 'react-icons/fi';
+import { FiZap, FiArrowLeft } from 'react-icons/fi';
 
 // ============ TYPES ============
 type ImageMode = 'basic' | 'pro';
@@ -86,20 +87,20 @@ const IMAGE_MODEL_LABELS: Record<string, string> = {
 
 const MarketplaceStudio: React.FC = () => {
   const toast = useToast();
-  
+
   // User state
   const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
-  
+
   // Image mode tab
   const [imageMode, setImageMode] = useState<ImageMode>('basic');
   const [selectedProModel, setSelectedProModel] = useState<string>('gemini-3-pro-image-preview');
-  
+
   // Images
   const [productImages, setProductImages] = useState<(string | null)[]>([null]);
   const [styleImages, setStyleImages] = useState<(string | null)[]>([null]);
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
-  
+
   // UI state
   const [generating, setGenerating] = useState(false);
   const [prompt, setPrompt] = useState('');
@@ -303,13 +304,13 @@ const MarketplaceStudio: React.FC = () => {
 
         const items: ImageBatchItem[] = Array.isArray(batch.items)
           ? batch.items.map((it: any) => ({
-              id: String(it?.id || ''),
-              index: Number(it?.index || 0),
-              status: String(it?.status || ''),
-              label: it?.label ? String(it.label) : null,
-              imageUrl: it?.imageUrl ? String(it.imageUrl) : null,
-              error: it?.error ? String(it.error) : null,
-            }))
+            id: String(it?.id || ''),
+            index: Number(it?.index || 0),
+            status: String(it?.status || ''),
+            label: it?.label ? String(it.label) : null,
+            imageUrl: it?.imageUrl ? String(it.imageUrl) : null,
+            error: it?.error ? String(it.error) : null,
+          }))
           : [];
 
         setBatchItems(items);
@@ -388,7 +389,7 @@ const MarketplaceStudio: React.FC = () => {
       const maxCount = type === 'product' ? config.maxProductImages : config.maxStyleImages;
       const setImages = type === 'product' ? setProductImages : setStyleImages;
       const images = type === 'product' ? productImages : styleImages;
-      
+
       if (images.length < maxCount) {
         setImages((prev) => [...prev, null]);
       }
@@ -477,13 +478,13 @@ const MarketplaceStudio: React.FC = () => {
         : [];
       const immediateItems: ImageBatchItem[] = Array.isArray(data?.items)
         ? data.items.map((it: any) => ({
-            id: String(it?.id || ''),
-            index: Number(it?.index || 0),
-            status: String(it?.status || ''),
-            label: it?.label ? String(it.label) : null,
-            imageUrl: it?.imageUrl ? String(it.imageUrl) : null,
-            error: it?.error ? String(it.error) : null,
-          }))
+          id: String(it?.id || ''),
+          index: Number(it?.index || 0),
+          status: String(it?.status || ''),
+          label: it?.label ? String(it.label) : null,
+          imageUrl: it?.imageUrl ? String(it.imageUrl) : null,
+          error: it?.error ? String(it.error) : null,
+        }))
         : [];
 
       if (immediateImages.length > 0 || data?.status === 'failed' || data?.status === 'partial' || data?.status === 'succeeded') {
@@ -570,6 +571,9 @@ const MarketplaceStudio: React.FC = () => {
       <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-3xl p-8 text-white shadow-2xl shadow-blue-200/30">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="flex items-center gap-5">
+            <Link href="/dashboard" className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl hover:bg-white/30 transition text-white">
+              <FiArrowLeft className="w-6 h-6" />
+            </Link>
             <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
               <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -587,8 +591,8 @@ const MarketplaceStudio: React.FC = () => {
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-yellow-400/20 rounded-xl">
                   <svg className="w-6 h-6 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 100-12 6 6 0 000 12z"/>
-                    <path d="M10 6a1 1 0 011 1v2h2a1 1 0 110 2h-2v2a1 1 0 11-2 0v-2H7a1 1 0 110-2h2V7a1 1 0 011-1z"/>
+                    <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 100-12 6 6 0 000 12z" />
+                    <path d="M10 6a1 1 0 011 1v2h2a1 1 0 110 2h-2v2a1 1 0 11-2 0v-2H7a1 1 0 110-2h2V7a1 1 0 011-1z" />
                   </svg>
                 </div>
                 <div>
@@ -634,11 +638,10 @@ const MarketplaceStudio: React.FC = () => {
         <div className="flex gap-2">
           <button
             onClick={() => setImageMode('basic')}
-            className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all ${
-              imageMode === 'basic'
-                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg'
-                : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-            }`}
+            className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all ${imageMode === 'basic'
+              ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg'
+              : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+              }`}
           >
             <div className="flex items-center justify-center gap-3">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -653,11 +656,10 @@ const MarketplaceStudio: React.FC = () => {
           <button
             onClick={() => setImageMode('pro')}
             disabled={config.proModels.length === 0}
-            className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all ${
-              imageMode === 'pro'
-                ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg'
-                : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-            } ${config.proModels.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all ${imageMode === 'pro'
+              ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg'
+              : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+              } ${config.proModels.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <div className="flex items-center justify-center gap-3">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -681,11 +683,10 @@ const MarketplaceStudio: React.FC = () => {
               <button
                 key={model}
                 onClick={() => setSelectedProModel(model)}
-                className={`p-4 rounded-xl border-2 transition-all text-left ${
-                  selectedProModel === model
-                    ? 'border-blue-500 bg-blue-100'
-                    : 'border-gray-200 bg-white hover:border-blue-300'
-                }`}
+                className={`p-4 rounded-xl border-2 transition-all text-left ${selectedProModel === model
+                  ? 'border-blue-500 bg-blue-100'
+                  : 'border-gray-200 bg-white hover:border-blue-300'
+                  }`}
               >
                 <p className="font-semibold text-gray-800">{getModelLabel(model)}</p>
               </button>
@@ -817,11 +818,10 @@ const MarketplaceStudio: React.FC = () => {
           <button
             onClick={handleGenerate}
             disabled={generating || !canGenerate}
-            className={`w-full py-5 rounded-2xl font-bold text-lg transition-all ${
-              generating || !canGenerate
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:shadow-xl hover:scale-[1.02]'
-            }`}
+            className={`w-full py-5 rounded-2xl font-bold text-lg transition-all ${generating || !canGenerate
+              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:shadow-xl hover:scale-[1.02]'
+              }`}
           >
             {generating ? (
               <div className="flex items-center justify-center gap-3">

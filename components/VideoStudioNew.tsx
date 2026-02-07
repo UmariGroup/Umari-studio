@@ -5,6 +5,7 @@ import { useToast } from './ToastProvider';
 import { parseApiErrorResponse, toUzbekErrorMessage } from '@/lib/uzbek-errors';
 import {
   FiArrowRight,
+  FiArrowLeft,
   FiAward,
   FiDownload,
   FiEdit3,
@@ -21,6 +22,7 @@ import {
   FiZap,
 } from 'react-icons/fi';
 import { FaCoins } from 'react-icons/fa';
+import Link from 'next/link';
 
 // ============ TYPES ============
 type VideoMode = 'basic' | 'pro' | 'premium';
@@ -181,7 +183,7 @@ const VideoStudio: React.FC = () => {
             role: data.user.role || 'user',
           };
           setUser(userData);
-          
+
           const modes = getVideoModesForPlan(userData.subscription_plan);
           setVideoModes(modes);
           if (modes.length > 0) {
@@ -372,6 +374,9 @@ const VideoStudio: React.FC = () => {
       <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-3xl p-8 text-white shadow-2xl shadow-blue-200/30">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="flex items-center gap-5">
+            <Link href="/dashboard" className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl hover:bg-white/30 transition text-white">
+              <FiArrowLeft className="w-6 h-6" />
+            </Link>
             <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
               <FiVideo className="w-10 h-10" aria-hidden />
             </div>
@@ -418,26 +423,24 @@ const VideoStudio: React.FC = () => {
               <button
                 key={mode.id}
                 onClick={() => setSelectedMode(mode.id)}
-                className={`flex-1 py-5 px-6 text-center transition-all relative ${
-                  selectedMode === mode.id
-                    ? mode.id === 'basic'
-                      ? 'bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700'
-                      : mode.id === 'pro'
-                        ? 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700'
-                        : 'bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700'
-                    : 'text-gray-500 hover:bg-gray-50'
-                }`}
+                className={`flex-1 py-5 px-6 text-center transition-all relative ${selectedMode === mode.id
+                  ? mode.id === 'basic'
+                    ? 'bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700'
+                    : mode.id === 'pro'
+                      ? 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700'
+                      : 'bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700'
+                  : 'text-gray-500 hover:bg-gray-50'
+                  }`}
               >
                 <div className="flex items-center justify-center gap-3">
-                  <div className={`p-2 rounded-xl ${
-                    selectedMode === mode.id
-                      ? mode.id === 'basic'
-                        ? 'bg-emerald-100'
-                        : mode.id === 'pro'
-                          ? 'bg-blue-100'
-                          : 'bg-purple-100'
-                      : 'bg-gray-100'
-                  }`}>
+                  <div className={`p-2 rounded-xl ${selectedMode === mode.id
+                    ? mode.id === 'basic'
+                      ? 'bg-emerald-100'
+                      : mode.id === 'pro'
+                        ? 'bg-blue-100'
+                        : 'bg-purple-100'
+                    : 'bg-gray-100'
+                    }`}>
                     {mode.id === 'basic' && (
                       <FiZap className="w-5 h-5" aria-hidden />
                     )}
@@ -452,26 +455,24 @@ const VideoStudio: React.FC = () => {
                     <p className="font-bold">{mode.name}</p>
                     <p className="text-xs opacity-70">{mode.duration} sek</p>
                   </div>
-                  <div className={`ml-2 px-3 py-1 rounded-full text-sm font-bold ${
-                    selectedMode === mode.id
-                      ? mode.id === 'basic'
-                        ? 'bg-emerald-200 text-emerald-800'
-                        : mode.id === 'pro'
-                          ? 'bg-blue-200 text-blue-800'
-                          : 'bg-purple-200 text-purple-800'
-                      : 'bg-gray-100 text-gray-600'
-                  }`}>
+                  <div className={`ml-2 px-3 py-1 rounded-full text-sm font-bold ${selectedMode === mode.id
+                    ? mode.id === 'basic'
+                      ? 'bg-emerald-200 text-emerald-800'
+                      : mode.id === 'pro'
+                        ? 'bg-blue-200 text-blue-800'
+                        : 'bg-purple-200 text-purple-800'
+                    : 'bg-gray-100 text-gray-600'
+                    }`}>
                     {mode.tokenCost} token
                   </div>
                 </div>
                 {selectedMode === mode.id && (
-                  <div className={`absolute bottom-0 left-0 right-0 h-1 ${
-                    mode.id === 'basic'
-                      ? 'bg-gradient-to-r from-emerald-400 to-teal-500'
-                      : mode.id === 'pro'
-                        ? 'bg-gradient-to-r from-blue-400 to-indigo-500'
-                        : 'bg-gradient-to-r from-purple-400 to-pink-500'
-                  }`}></div>
+                  <div className={`absolute bottom-0 left-0 right-0 h-1 ${mode.id === 'basic'
+                    ? 'bg-gradient-to-r from-emerald-400 to-teal-500'
+                    : mode.id === 'pro'
+                      ? 'bg-gradient-to-r from-blue-400 to-indigo-500'
+                      : 'bg-gradient-to-r from-purple-400 to-pink-500'
+                    }`}></div>
                 )}
               </button>
             ))}
@@ -480,22 +481,20 @@ const VideoStudio: React.FC = () => {
 
         {/* Mode Features */}
         {currentConfig && (
-          <div className={`px-8 py-4 ${
-            currentConfig.id === 'basic'
-              ? 'bg-gradient-to-r from-emerald-50 to-teal-50'
-              : currentConfig.id === 'pro'
-                ? 'bg-gradient-to-r from-blue-50 to-indigo-50'
-                : 'bg-gradient-to-r from-purple-50 to-pink-50'
-          } border-b`}>
+          <div className={`px-8 py-4 ${currentConfig.id === 'basic'
+            ? 'bg-gradient-to-r from-emerald-50 to-teal-50'
+            : currentConfig.id === 'pro'
+              ? 'bg-gradient-to-r from-blue-50 to-indigo-50'
+              : 'bg-gradient-to-r from-purple-50 to-pink-50'
+            } border-b`}>
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div className="flex items-center gap-4">
-                <span className={`px-4 py-2 rounded-xl font-mono text-sm font-bold ${
-                  currentConfig.id === 'basic'
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : currentConfig.id === 'pro'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-purple-100 text-purple-700'
-                } inline-flex items-center gap-2`}>
+                <span className={`px-4 py-2 rounded-xl font-mono text-sm font-bold ${currentConfig.id === 'basic'
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : currentConfig.id === 'pro'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-purple-100 text-purple-700'
+                  } inline-flex items-center gap-2`}>
                   <FiFilm aria-hidden className="w-4 h-4" /> {getVideoModelLabel(currentConfig.model)}
                 </span>
                 <span className="text-sm text-gray-600">{currentConfig.description}</span>
@@ -584,11 +583,10 @@ const VideoStudio: React.FC = () => {
                   <div className="flex gap-2">
                     <button
                       onClick={() => setIsPortrait(false)}
-                      className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${
-                        !isPortrait
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-white text-gray-500 border border-gray-200'
-                      }`}
+                      className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${!isPortrait
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-white text-gray-500 border border-gray-200'
+                        }`}
                     >
                       <span className="inline-flex items-center justify-center gap-2">
                         <FiMonitor aria-hidden className="w-4 h-4" />
@@ -597,11 +595,10 @@ const VideoStudio: React.FC = () => {
                     </button>
                     <button
                       onClick={() => setIsPortrait(true)}
-                      className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${
-                        isPortrait
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-white text-gray-500 border border-gray-200'
-                      }`}
+                      className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${isPortrait
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-white text-gray-500 border border-gray-200'
+                        }`}
                     >
                       <span className="inline-flex items-center justify-center gap-2">
                         <FiSmartphone aria-hidden className="w-4 h-4" />
@@ -614,15 +611,14 @@ const VideoStudio: React.FC = () => {
                 <button
                   onClick={handleGenerate}
                   disabled={generating || !canGenerate || sourceImages.length === 0}
-                  className={`flex-[2] py-4 px-8 rounded-xl font-bold text-white flex items-center justify-center gap-3 transition-all ${
-                    generating || !canGenerate || sourceImages.length === 0
-                      ? 'bg-gray-300 cursor-not-allowed'
-                      : currentConfig?.id === 'basic'
-                        ? 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:shadow-xl'
-                        : currentConfig?.id === 'pro'
-                          ? 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:shadow-xl'
-                          : 'bg-gradient-to-r from-purple-500 to-pink-600 hover:shadow-xl'
-                  }`}
+                  className={`flex-[2] py-4 px-8 rounded-xl font-bold text-white flex items-center justify-center gap-3 transition-all ${generating || !canGenerate || sourceImages.length === 0
+                    ? 'bg-gray-300 cursor-not-allowed'
+                    : currentConfig?.id === 'basic'
+                      ? 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:shadow-xl'
+                      : currentConfig?.id === 'pro'
+                        ? 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:shadow-xl'
+                        : 'bg-gradient-to-r from-purple-500 to-pink-600 hover:shadow-xl'
+                    }`}
                 >
                   {generating ? (
                     <>
@@ -718,21 +714,19 @@ const VideoStudio: React.FC = () => {
         </h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {videoModes.map((mode) => (
-            <div key={mode.id} className={`p-4 rounded-xl border ${
-              mode.id === 'basic'
-                ? 'bg-white border-emerald-200'
-                : mode.id === 'pro'
-                  ? 'bg-white border-blue-200'
-                  : 'bg-white border-purple-200'
-            }`}>
+            <div key={mode.id} className={`p-4 rounded-xl border ${mode.id === 'basic'
+              ? 'bg-white border-emerald-200'
+              : mode.id === 'pro'
+                ? 'bg-white border-blue-200'
+                : 'bg-white border-purple-200'
+              }`}>
               <p className="text-xs text-gray-500 mb-1">{mode.name}</p>
-              <p className={`text-2xl font-black ${
-                mode.id === 'basic'
-                  ? 'text-emerald-600'
-                  : mode.id === 'pro'
-                    ? 'text-blue-600'
-                    : 'text-purple-600'
-              }`}>{mode.tokenCost}</p>
+              <p className={`text-2xl font-black ${mode.id === 'basic'
+                ? 'text-emerald-600'
+                : mode.id === 'pro'
+                  ? 'text-blue-600'
+                  : 'text-purple-600'
+                }`}>{mode.tokenCost}</p>
               <p className="text-xs text-gray-400">token / {mode.duration} sek</p>
             </div>
           ))}

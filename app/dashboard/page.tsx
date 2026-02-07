@@ -1,12 +1,11 @@
-'use client';
+﻿'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { planLabelUz } from '@/lib/uzbek-errors';
 import {
   FiAlertTriangle,
   FiArrowRight,
-  FiChevronRight,
   FiClock,
   FiCpu,
   FiEdit3,
@@ -64,421 +63,341 @@ export default function DashboardPage() {
     tokensRemaining: 0,
     tokensUsed: 0,
     tokensTotal: 0,
-    operationsCount: 0,
   });
   const [loading, setLoading] = useState(true);
-
-  const formatTokens = (n: number) =>
-    Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 
   const isAdmin = user?.role === 'admin';
   const plan = user?.subscription_plan || 'free';
   const planTokenCosts = TOKEN_COSTS[plan] || TOKEN_COSTS.starter;
 
   useEffect(() => {
-    fetchUserData();
+    const fetchUserData = async () => {
+      try {
+        const response = await fetch('/api/auth/me');
+        if (!response.ok) {
+          window.location.href = '/login';
+          return;
+        }
+
+        const data = await response.json();
+        if (data.success) {
+          setUser(data.user);
+          setAccess({
+            canUse: Boolean(data.can_use),
+            blockedReason: data.blocked_reason || null,
+            recommendedPlan: data.recommended_plan || null,
+          });
+          setStats({
+            tokensRemaining: Number(data.user.tokens_remaining || 0),
+            tokensUsed: Number(data.user.tokens_used || (data.user.tokens_total - data.user.tokens_remaining) || 0),
+            tokensTotal: Number(data.user.tokens_total || 0),
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+        window.location.href = '/login';
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void fetchUserData();
   }, []);
 
-  const fetchUserData = async () => {
-    try {
-      const response = await fetch('/api/auth/me');
-      if (!response.ok) {
-        window.location.href = '/login';
-        return;
-      }
-      const data = await response.json();
-      if (data.success) {
-        setUser(data.user);
-        setAccess({
-          canUse: Boolean(data.can_use),
-          blockedReason: data.blocked_reason || null,
-          recommendedPlan: data.recommended_plan || null,
-        });
-        setStats({
-          tokensRemaining: Number(data.user.tokens_remaining || 0),
-          tokensUsed: Number(data.user.tokens_used || (data.user.tokens_total - data.user.tokens_remaining) || 0),
-          tokensTotal: Number(data.user.tokens_total || 0),
-          operationsCount: 0,
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching user data:', error);
-      window.location.href = '/login';
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      localStorage.removeItem('userData');
-      window.location.href = '/login';
-    } catch (error) {
-      console.error('Logout error:', error);
-      localStorage.removeItem('userData');
-      window.location.href = '/login';
-    }
-  };
-
-  const tokenPercentage = stats.tokensTotal > 0 
-    ? Math.round((stats.tokensRemaining / stats.tokensTotal) * 100)
+  const tokenPercentage = stats.tokensTotal > 0
+    ? Math.max(0, Math.min(100, Math.round((stats.tokensRemaining / stats.tokensTotal) * 100)))
     : 0;
+
+  const estimateUsage = (cost: number): string => {
+    if (isAdmin) return '∞';
+    if (!Number.isFinite(cost) || cost <= 0 || cost >= 900) return '-';
+    return Math.floor(stats.tokensRemaining / cost).toLocaleString();
+  };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50 to-pink-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="relative w-20 h-20 mx-auto mb-6">
-            <div className="absolute inset-0 rounded-full border-4 border-purple-200"></div>
-            <div className="absolute inset-0 rounded-full border-4 border-purple-600 border-t-transparent animate-spin"></div>
-          </div>
-          <p className="text-gray-600 font-medium">Yuklanmoqda...</p>
+      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50">
+        <div className="absolute -left-20 top-0 h-72 w-72 rounded-full bg-blue-300/20 blur-3xl" />
+        <div className="absolute right-0 top-10 h-80 w-80 rounded-full bg-violet-300/20 blur-3xl" />
+        <div className="relative text-center">
+          <div className="mx-auto mb-5 h-16 w-16 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+          <p className="font-medium text-slate-600">Yuklanmoqda...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50/30 to-pink-50/30">
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Alert Banners */}
+    <div className="relative min-h-screen overflow-hidden bg-slate-50">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-20 top-0 h-72 w-72 rounded-full bg-blue-300/20 blur-3xl" />
+        <div className="absolute right-0 top-16 h-80 w-80 rounded-full bg-violet-300/20 blur-3xl" />
+      </div>
+
+      <div className="relative mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+        <section className="overflow-hidden rounded-3xl border border-blue-200/60 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-6 text-white shadow-2xl shadow-blue-200/30 sm:p-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-white/80">Umari Dashboard</p>
+              <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">
+                Assalomu alaykum{user?.first_name ? `, ${user.first_name}` : ''}
+              </h1>
+              <p className="mt-2 text-sm text-white/80">
+                Barcha studiyalar bitta joyda: Marketplace, Video va Copywriter.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <div className="rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur">
+                <p className="text-xs text-white/70">Tarif</p>
+                <p className="text-xl font-bold">{plan === 'business_plus' ? 'Business+' : (planLabelUz(plan) || 'Free')}</p>
+              </div>
+              <div className="rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur">
+                <p className="text-xs text-white/70">Qolgan token</p>
+                <p className="text-xl font-black">{isAdmin ? '∞' : stats.tokensRemaining.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+
+          {!isAdmin && (
+            <div className="mt-6">
+              <div className="mb-2 flex items-center justify-between text-xs text-white/80">
+                <span>Token progress</span>
+                <span>{tokenPercentage}%</span>
+              </div>
+              <div className="h-2.5 overflow-hidden rounded-full bg-white/20">
+                <div className="h-full rounded-full bg-white" style={{ width: `${tokenPercentage}%` }} />
+              </div>
+            </div>
+          )}
+        </section>
+
         {access.blockedReason === 'expired' && (
-          <div className="mb-8 rounded-2xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50 p-6 shadow-lg">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-amber-200 rounded-xl">
-                  <FiClock className="w-8 h-8 text-amber-700" aria-hidden />
+          <section className="rounded-2xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50 p-5 shadow-sm">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-amber-200 p-2.5">
+                  <FiClock className="h-6 w-6 text-amber-700" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-extrabold text-amber-900">Obuna muddati tugagan!</h3>
-                  <p className="text-sm text-amber-800 mt-1">
-                    Davom etish uchun tarifni qayta faollashtiring.
-                  </p>
+                  <h3 className="font-bold text-amber-900">Obuna muddati tugagan</h3>
+                  <p className="text-sm text-amber-800">Davom etish uchun tarifni qayta faollashtiring.</p>
                 </div>
               </div>
               <Link
                 href={`/pricing?plan=${encodeURIComponent(user?.subscription_plan || 'starter')}`}
-                className="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold hover:shadow-lg transition-all"
+                className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-5 py-3 font-semibold text-white"
               >
-                <span className="inline-flex items-center gap-2">
-                  Tarifni faollashtirish <FiArrowRight aria-hidden />
-                </span>
+                Tarifni faollashtirish <FiArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </div>
-          </div>
+          </section>
         )}
 
         {access.blockedReason === 'no_tokens' && (
-          <div className="mb-8 rounded-2xl border-2 border-red-300 bg-gradient-to-r from-red-50 to-pink-50 p-6 shadow-lg">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-red-200 rounded-xl">
-                  <FiAlertTriangle className="w-8 h-8 text-red-700" aria-hidden />
+          <section className="rounded-2xl border-2 border-rose-300 bg-gradient-to-r from-rose-50 to-pink-50 p-5 shadow-sm">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-rose-200 p-2.5">
+                  <FiAlertTriangle className="h-6 w-6 text-rose-700" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-extrabold text-red-900">Token tugadi!</h3>
-                  <p className="text-sm text-red-800 mt-1">
-                    Rejani yangilang yoki yuqori tarifga o'ting.
-                  </p>
+                  <h3 className="font-bold text-rose-900">Token tugagan</h3>
+                  <p className="text-sm text-rose-800">Rejani yangilang yoki yuqori tarifga o'ting.</p>
                 </div>
               </div>
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Link
                   href={`/pricing?plan=${encodeURIComponent(user?.subscription_plan || 'starter')}`}
-                  className="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-gradient-to-r from-red-500 to-pink-600 text-white font-bold hover:shadow-lg transition-all"
+                  className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-rose-500 to-pink-600 px-5 py-3 font-semibold text-white"
                 >
                   Rejani yangilash
                 </Link>
                 {access.recommendedPlan && (
                   <Link
                     href={`/pricing?plan=${encodeURIComponent(access.recommendedPlan)}`}
-                    className="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-white text-red-700 font-bold border-2 border-red-200 hover:border-red-400 transition-all"
+                    className="inline-flex items-center justify-center rounded-xl border border-rose-300 bg-white px-5 py-3 font-semibold text-rose-700"
                   >
                     {planLabelUz(access.recommendedPlan) || 'Upgrade'} ga o'tish
                   </Link>
                 )}
               </div>
             </div>
-          </div>
+          </section>
         )}
 
-        {/* Token Pricing Info */}
-        <div className="mb-8 bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
-          <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-8 py-5 border-b border-gray-100">
-            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-3">
-              <span className="p-2 bg-purple-100 rounded-xl">
-                <FaCoins className="w-5 h-5 text-purple-600" aria-hidden />
-              </span>
-              Token narxlari
-              <span className="ml-2 px-3 py-1 text-sm bg-purple-100 text-purple-700 rounded-full font-medium">
-                {plan === 'business_plus' ? 'Business+' : planLabelUz(plan) || 'Free'}
-              </span>
-            </h2>
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5 flex items-center gap-2">
+            <span className="rounded-xl bg-blue-100 p-2 text-blue-700"><FaCoins className="h-5 w-5" /></span>
+            <h2 className="text-lg font-bold text-slate-900">Token narxlari</h2>
+            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+              {plan === 'business_plus' ? 'Business+' : (planLabelUz(plan) || 'Free')}
+            </span>
           </div>
-          <div className="p-8">
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {/* Basic Image */}
-              <div className="bg-gradient-to-br from-emerald-50 to-teal-50 p-5 rounded-2xl border border-emerald-100">
-                <div className="flex items-center gap-2 mb-3">
-                  <FiImage className="w-6 h-6 text-emerald-600" aria-hidden />
-                  <span className="font-bold text-emerald-700 text-sm">Oddiy rasm (so'rov)</span>
-                </div>
-                <p className="text-3xl font-black text-emerald-600">{planTokenCosts.basic}</p>
-                <p className="text-xs text-emerald-500 mt-1">token / so'rov</p>
-              </div>
-              
-              {/* Pro Image */}
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-5 rounded-2xl border border-blue-100">
-                <div className="flex items-center gap-2 mb-3">
-                  <FiZap className="w-6 h-6 text-blue-600" aria-hidden />
-                  <span className="font-bold text-blue-700 text-sm">Pro rasm (so'rov)</span>
-                </div>
-                <p className="text-3xl font-black text-blue-600">{planTokenCosts.pro}</p>
-                <p className="text-xs text-blue-500 mt-1">token / so'rov</p>
-              </div>
-              
-              {/* Basic Video */}
-              <div className="bg-gradient-to-br from-amber-50 to-orange-50 p-5 rounded-2xl border border-amber-100">
-                <div className="flex items-center gap-2 mb-3">
-                  <FiVideo className="w-6 h-6 text-amber-600" aria-hidden />
-                  <span className="font-bold text-amber-700 text-sm">Oddiy video</span>
-                </div>
-                <p className="text-3xl font-black text-amber-600">{planTokenCosts.videoBasic}</p>
-                <p className="text-xs text-amber-500 mt-1">token / video</p>
-              </div>
 
-              {/* Pro Video */}
-              {planTokenCosts.videoPro && (
-                <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-5 rounded-2xl border border-purple-100">
-                  <div className="flex items-center gap-2 mb-3">
-                    <FiFilm className="w-6 h-6 text-purple-600" aria-hidden />
-                    <span className="font-bold text-purple-700 text-sm">Pro video</span>
-                  </div>
-                  <p className="text-3xl font-black text-purple-600">{planTokenCosts.videoPro}</p>
-                  <p className="text-xs text-purple-500 mt-1">token / video</p>
-                </div>
-              )}
-
-              {/* Premium Video */}
-              {planTokenCosts.videoPremium && (
-                <div className="bg-gradient-to-br from-rose-50 to-red-50 p-5 rounded-2xl border border-rose-100">
-                  <div className="flex items-center gap-2 mb-3">
-                    <FaGem className="w-6 h-6 text-rose-600" aria-hidden />
-                    <span className="font-bold text-rose-700 text-sm">Premium video</span>
-                  </div>
-                  <p className="text-3xl font-black text-rose-600">{planTokenCosts.videoPremium}</p>
-                  <p className="text-xs text-rose-500 mt-1">token / video</p>
-                </div>
-              )}
-
-              {/* Copywriter */}
-              <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-5 rounded-2xl border border-green-100">
-                <div className="flex items-center gap-2 mb-3">
-                  <FiEdit3 className="w-6 h-6 text-green-600" aria-hidden />
-                  <span className="font-bold text-green-700 text-sm">Kopywriter</span>
-                </div>
-                <p className="text-3xl font-black text-green-600">{planTokenCosts.copywriter}</p>
-                <p className="text-xs text-green-500 mt-1">token / matn</p>
-              </div>
-            </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
+            <TokenCard title="Oddiy rasm" value={planTokenCosts.basic} subtitle="token / so'rov" tone="emerald" icon={<FiImage className="h-5 w-5" />} />
+            <TokenCard title="Pro rasm" value={planTokenCosts.pro} subtitle="token / so'rov" tone="blue" icon={<FiZap className="h-5 w-5" />} />
+            <TokenCard title="Oddiy video" value={planTokenCosts.videoBasic} subtitle="token / video" tone="amber" icon={<FiVideo className="h-5 w-5" />} />
+            {planTokenCosts.videoPro ? <TokenCard title="Pro video" value={planTokenCosts.videoPro} subtitle="token / video" tone="violet" icon={<FiFilm className="h-5 w-5" />} /> : null}
+            {planTokenCosts.videoPremium ? <TokenCard title="Premium video" value={planTokenCosts.videoPremium} subtitle="token / video" tone="rose" icon={<FaGem className="h-5 w-5" />} /> : null}
+            <TokenCard title="Copywriter" value={planTokenCosts.copywriter} subtitle="token / matn" tone="green" icon={<FiEdit3 className="h-5 w-5" />} />
           </div>
-        </div>
+        </section>
 
-        {/* Studio Cards */}
-        <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-3">
-          <span className="p-2 bg-gradient-to-br from-purple-100 to-pink-100 rounded-xl">
-            <FiZap className="w-6 h-6 text-purple-600" aria-hidden />
-          </span>
-          AI Studiyalar
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {/* Marketplace Studio */}
-          <Link href="/marketplace" className="group">
-            <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-2xl transition-all duration-300 group-hover:scale-[1.02]">
-              <div className="h-3 bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500"></div>
-              <div className="p-8">
-                <div className="flex items-start gap-5">
-                  <div className="p-4 bg-gradient-to-br from-purple-100 to-pink-100 rounded-2xl group-hover:scale-110 transition-transform">
-                    <FiImage className="w-10 h-10 text-purple-600" aria-hidden />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-2xl font-black text-gray-800 mb-2">Marketplace Studio</h3>
-                    <p className="text-gray-600 mb-4">
-                      Professional 4K mahsulot rasmlari yarating. Uzum, Amazon, OZON uchun optimallashtirilgan.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-bold rounded-full inline-flex items-center gap-1.5">
-                        <FiZap aria-hidden className="w-3.5 h-3.5" />
-                        <span>AI Enhanced</span>
-                      </span>
-                      <span className="px-3 py-1 bg-pink-100 text-pink-700 text-xs font-bold rounded-full">
-                        {planTokenCosts.basic} - {planTokenCosts.pro} token / so'rov
-                      </span>
-                    </div>
-                  </div>
-                  <FiChevronRight
-                    className="w-8 h-8 text-gray-300 group-hover:text-purple-500 group-hover:translate-x-2 transition-all"
-                    aria-hidden
-                  />
-                </div>
-              </div>
-            </div>
-          </Link>
-
-          {/* Video Studio */}
-          <Link href="/video-studio" className="group">
-            <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-2xl transition-all duration-300 group-hover:scale-[1.02]">
-              <div className="h-3 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
-              <div className="p-8">
-                <div className="flex items-start gap-5">
-                  <div className="p-4 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-2xl group-hover:scale-110 transition-transform">
-                    <FiVideo className="w-10 h-10 text-blue-600" aria-hidden />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-2xl font-black text-gray-800 mb-2">Video Studio</h3>
-                    <p className="text-gray-600 mb-4">
-                      Rasmlardan jonli video yarating. Veo AI bilan professional mahsulot videolari.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-full inline-flex items-center gap-1.5">
-                        <FiFilm aria-hidden className="w-3.5 h-3.5" />
-                        <span>Veo 3.0 AI</span>
-                      </span>
-                      <span className="px-3 py-1 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full">
-                        {planTokenCosts.videoBasic}{planTokenCosts.videoPro ? ` - ${planTokenCosts.videoPremium || planTokenCosts.videoPro}` : ''} token
-                      </span>
-                    </div>
-                  </div>
-                  <FiChevronRight
-                    className="w-8 h-8 text-gray-300 group-hover:text-blue-500 group-hover:translate-x-2 transition-all"
-                    aria-hidden
-                  />
-                </div>
-              </div>
-            </div>
-          </Link>
-
-          {/* Copywriter Studio */}
-          <Link href="/copywriter" className="group">
-            <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-2xl transition-all duration-300 group-hover:scale-[1.02]">
-              <div className="h-3 bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500"></div>
-              <div className="p-8">
-                <div className="flex items-start gap-5">
-                  <div className="p-4 bg-gradient-to-br from-green-100 to-emerald-100 rounded-2xl group-hover:scale-110 transition-transform">
-                    <FiEdit3 className="w-10 h-10 text-green-600" aria-hidden />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-2xl font-black text-gray-800 mb-2">Copywriter Studio</h3>
-                    <p className="text-gray-600 mb-4">
-                      Blog, email, social media postlar. SEO-optimized professional content.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full inline-flex items-center gap-1.5">
-                        <FiSearch aria-hidden className="w-3.5 h-3.5" />
-                        <span>SEO Ready</span>
-                      </span>
-                      <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">
-                        {planTokenCosts.copywriter} token
-                      </span>
-                    </div>
-                  </div>
-                  <FiChevronRight
-                    className="w-8 h-8 text-gray-300 group-hover:text-green-500 group-hover:translate-x-2 transition-all"
-                    aria-hidden
-                  />
-                </div>
-              </div>
-            </div>
-          </Link>
-
-          {/* AI Chat */}
-          <Link href="/chat" className="group">
-            <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-2xl transition-all duration-300 group-hover:scale-[1.02]">
-              <div className="h-3 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500"></div>
-              <div className="p-8">
-                <div className="flex items-start gap-5">
-                  <div className="p-4 bg-gradient-to-br from-amber-100 to-orange-100 rounded-2xl group-hover:scale-110 transition-transform">
-                    <FiMessageSquare className="w-10 h-10 text-amber-600" aria-hidden />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-2xl font-black text-gray-800 mb-2">AI Chat</h3>
-                    <p className="text-gray-600 mb-4">
-                      Umumi savol-javoblar, individual maslahatlar va professional AI yordam.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full inline-flex items-center gap-1.5">
-                        <FiCpu aria-hidden className="w-3.5 h-3.5" />
-                        <span>24/7 Yordam</span>
-                      </span>
-                      <span className="px-3 py-1 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">
-                        Cheksiz
-                      </span>
-                    </div>
-                  </div>
-                  <FiChevronRight
-                    className="w-8 h-8 text-gray-300 group-hover:text-amber-500 group-hover:translate-x-2 transition-all"
-                    aria-hidden
-                  />
-                </div>
-              </div>
-            </div>
-          </Link>
-        </div>
-
-        {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 text-center">
-            <FiImage className="w-10 h-10 mx-auto mb-2 text-purple-500" aria-hidden />
-            <p className="text-3xl font-black text-purple-600">{Math.floor(stats.tokensRemaining / planTokenCosts.basic)}</p>
-            <p className="text-xs text-gray-500">Oddiy rasm so'rovi (taxminan)</p>
+        <section>
+          <h2 className="mb-4 text-xl font-bold text-slate-900">AI studiyalar</h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StudioCard
+              href="/marketplace"
+              title="Marketplace Studio"
+              description="Mahsulot rasmlari, listingga tayyor format va marketplace workflow."
+              badge={`So'rov: ${planTokenCosts.basic} - ${planTokenCosts.pro} token`}
+              icon={<FiImage className="h-6 w-6" />}
+              gradient="from-blue-500 to-indigo-600"
+            />
+            <StudioCard
+              href="/video-studio"
+              title="Video Studio"
+              description="Mahsulot rasmlaridan tez promo video va reklama variantlari."
+              badge={`Video: ${planTokenCosts.videoBasic}${planTokenCosts.videoPro ? ` - ${planTokenCosts.videoPremium || planTokenCosts.videoPro}` : ''} token`}
+              icon={<FiVideo className="h-6 w-6" />}
+              gradient="from-indigo-500 to-violet-600"
+            />
+            <StudioCard
+              href="/copywriter"
+              title="Copywriter Studio"
+              description="UZ/RU marketplace matnlari, 18 blokli strukturada kontent yaratish."
+              badge={`Matn: ${planTokenCosts.copywriter} token`}
+              icon={<FiEdit3 className="h-6 w-6" />}
+              gradient="from-violet-500 to-fuchsia-600"
+            />
+            <StudioCard
+              href="/chat"
+              title="AI Chat"
+              description="Savol-javob, kontent va strategiya bo'yicha yordamchi chat."
+              badge="24/7 yordam"
+              icon={<FiMessageSquare className="h-6 w-6" />}
+              gradient="from-sky-500 to-blue-600"
+            />
           </div>
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 text-center">
-            <FiZap className="w-10 h-10 mx-auto mb-2 text-blue-500" aria-hidden />
-            <p className="text-3xl font-black text-blue-600">{Math.floor(stats.tokensRemaining / planTokenCosts.pro)}</p>
-            <p className="text-xs text-gray-500">Pro rasm so'rovi (taxminan)</p>
-          </div>
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 text-center">
-            <FiVideo className="w-10 h-10 mx-auto mb-2 text-amber-500" aria-hidden />
-            <p className="text-3xl font-black text-amber-600">{Math.floor(stats.tokensRemaining / planTokenCosts.videoBasic)}</p>
-            <p className="text-xs text-gray-500">Video (taxminan)</p>
-          </div>
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 text-center">
-            <FiEdit3 className="w-10 h-10 mx-auto mb-2 text-green-500" aria-hidden />
-            <p className="text-3xl font-black text-green-600">{Math.floor(stats.tokensRemaining / planTokenCosts.copywriter)}</p>
-            <p className="text-xs text-gray-500">Matn (taxminan)</p>
-          </div>
-        </div>
+        </section>
 
-        {/* Upgrade Banner */}
-        {(!user?.subscription_plan || user?.subscription_plan === 'free' || user?.subscription_plan === 'starter') && (
-          <div className="bg-gradient-to-r from-purple-600 via-pink-600 to-rose-600 rounded-3xl p-8 text-white shadow-2xl">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-bold text-slate-900">Taxminiy imkoniyat</h2>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <EstimateCard title="Oddiy rasm" value={estimateUsage(planTokenCosts.basic)} tone="text-blue-700" icon={<FiImage className="h-5 w-5" />} />
+            <EstimateCard title="Pro rasm" value={estimateUsage(planTokenCosts.pro)} tone="text-indigo-700" icon={<FiZap className="h-5 w-5" />} />
+            <EstimateCard title="Video" value={estimateUsage(planTokenCosts.videoBasic)} tone="text-violet-700" icon={<FiFilm className="h-5 w-5" />} />
+            <EstimateCard title="Copywriter" value={estimateUsage(planTokenCosts.copywriter)} tone="text-emerald-700" icon={<FiSearch className="h-5 w-5" />} />
+          </div>
+        </section>
+
+        {(!user?.subscription_plan || user.subscription_plan === 'free' || user.subscription_plan === 'starter') && (
+          <section className="rounded-3xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-7 text-white shadow-2xl shadow-blue-200/30">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <h3 className="text-2xl font-black mb-2 flex items-center gap-2">
-                  <FaGem aria-hidden className="text-white" />
-                  {plan === 'starter' ? "Pro ga o'ting!" : "Premium-ga o'ting!"}
+                <h3 className="mb-1 flex items-center gap-2 text-2xl font-black">
+                  <FaGem className="text-white" /> {plan === 'starter' ? "Pro ga o'ting" : "Starter bilan boshlang"}
                 </h3>
                 <p className="text-white/80">
-                  {plan === 'starter' 
-                    ? "Pro tarif bilan 350 token, Veo 3 Pro video va ko'proq imkoniyatlar!"
-                    : "Unlimited generations, priority support, advanced features va ko'p narsalar!"
-                  }
+                  Ko'proq token, kengroq studio imkoniyatlari va tezroq workflow uchun tarifni yangilang.
                 </p>
               </div>
               <Link
                 href="/pricing"
-                className="inline-flex items-center justify-center px-8 py-4 bg-white text-purple-600 rounded-xl font-bold hover:shadow-xl transition-all text-lg"
+                className="inline-flex items-center justify-center rounded-xl bg-white px-7 py-3 text-base font-bold text-indigo-700"
               >
-                <span className="inline-flex items-center gap-2">
-                  Tariflarni ko'rish <FiArrowRight aria-hidden />
-                </span>
+                Tariflarni ko'rish <FiArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </div>
-          </div>
+          </section>
         )}
       </div>
+    </div>
+  );
+}
+
+function StudioCard({
+  href,
+  title,
+  description,
+  badge,
+  icon,
+  gradient,
+}: {
+  href: string;
+  title: string;
+  description: string;
+  badge: string;
+  icon: React.ReactNode;
+  gradient: string;
+}) {
+  return (
+    <Link href={href} className="group">
+      <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+        <div className={`mb-4 inline-flex rounded-xl bg-gradient-to-r p-3 text-white ${gradient}`}>
+          {icon}
+        </div>
+        <h3 className="text-lg font-bold text-slate-900">{title}</h3>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+        <div className="mt-4 inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+          {badge}
+        </div>
+      </article>
+    </Link>
+  );
+}
+
+function TokenCard({
+  title,
+  value,
+  subtitle,
+  icon,
+  tone,
+}: {
+  title: string;
+  value: number;
+  subtitle: string;
+  icon: React.ReactNode;
+  tone: 'emerald' | 'blue' | 'amber' | 'violet' | 'rose' | 'green';
+}) {
+  const toneMap: Record<string, string> = {
+    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    blue: 'border-blue-200 bg-blue-50 text-blue-700',
+    amber: 'border-amber-200 bg-amber-50 text-amber-700',
+    violet: 'border-violet-200 bg-violet-50 text-violet-700',
+    rose: 'border-rose-200 bg-rose-50 text-rose-700',
+    green: 'border-green-200 bg-green-50 text-green-700',
+  };
+
+  return (
+    <div className={`rounded-2xl border p-4 ${toneMap[tone]}`}>
+      <div className="mb-2 inline-flex rounded-lg bg-white p-2">{icon}</div>
+      <p className="text-xs font-semibold">{title}</p>
+      <p className="mt-1 text-2xl font-black">{value}</p>
+      <p className="text-xs opacity-80">{subtitle}</p>
+    </div>
+  );
+}
+
+function EstimateCard({
+  title,
+  value,
+  tone,
+  icon,
+}: {
+  title: string;
+  value: string;
+  tone: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center">
+      <div className={`mx-auto mb-2 inline-flex rounded-lg bg-white p-2 ${tone}`}>{icon}</div>
+      <p className="text-xs text-slate-500">{title}</p>
+      <p className={`text-2xl font-black ${tone}`}>{value}</p>
+      <p className="text-xs text-slate-400">taxminan so'rov</p>
     </div>
   );
 }

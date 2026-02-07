@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
+import { FiArrowLeft } from 'react-icons/fi';
 import { useToast } from './ToastProvider';
 import { getTelegramSubscribeUrl } from '@/lib/telegram';
 import {
@@ -57,7 +59,7 @@ interface UserData {
 // ============ COMPONENT ============
 const CopywriterStudio: React.FC = () => {
   const toast = useToast();
-  
+
   // User state
   const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -265,6 +267,9 @@ const CopywriterStudio: React.FC = () => {
       <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-3xl p-8 text-white shadow-2xl shadow-blue-200/30">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="flex items-center gap-5">
+            <Link href="/dashboard" className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl hover:bg-white/30 transition text-white">
+              <FiArrowLeft className="w-6 h-6" />
+            </Link>
             <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
               <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -282,8 +287,8 @@ const CopywriterStudio: React.FC = () => {
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-yellow-400/30 rounded-xl">
                   <svg className="w-6 h-6 text-yellow-200" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 100-12 6 6 0 000 12z"/>
-                    <path d="M10 6a1 1 0 011 1v2h2a1 1 0 110 2h-2v2a1 1 0 11-2 0v-2H7a1 1 0 110-2h2V7a1 1 0 011-1z"/>
+                    <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 100-12 6 6 0 000 12z" />
+                    <path d="M10 6a1 1 0 011 1v2h2a1 1 0 110 2h-2v2a1 1 0 11-2 0v-2H7a1 1 0 110-2h2V7a1 1 0 011-1z" />
                   </svg>
                 </div>
                 <div>
@@ -334,11 +339,10 @@ const CopywriterStudio: React.FC = () => {
                 <button
                   key={mp}
                   onClick={() => setSelectedMarketplace(mp)}
-                  className={`px-5 py-3 rounded-xl text-sm font-semibold transition-all ${
-                    selectedMarketplace === mp
-                      ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg scale-105'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
+                  className={`px-5 py-3 rounded-xl text-sm font-semibold transition-all ${selectedMarketplace === mp
+                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg scale-105'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
                 >
                   {mp}
                 </button>
@@ -420,7 +424,7 @@ const CopywriterStudio: React.FC = () => {
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-orange-100 rounded-lg">
                   <svg className="w-5 h-5 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 100-12 6 6 0 000 12z"/>
+                    <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 100-12 6 6 0 000 12z" />
                   </svg>
                 </div>
                 <div>
@@ -439,11 +443,10 @@ const CopywriterStudio: React.FC = () => {
           <button
             onClick={handleGenerate}
             disabled={generating || !canGenerate}
-            className={`w-full py-5 rounded-2xl font-bold text-lg transition-all ${
-              generating || !canGenerate
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:shadow-xl hover:scale-[1.02]'
-            }`}
+            className={`w-full py-5 rounded-2xl font-bold text-lg transition-all ${generating || !canGenerate
+              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:shadow-xl hover:scale-[1.02]'
+              }`}
           >
             {generating ? (
               <div className="flex items-center justify-center gap-3">
@@ -479,21 +482,19 @@ const CopywriterStudio: React.FC = () => {
                           <div className="flex gap-2">
                             <button
                               onClick={() => copyToClipboard(results[key], key, 'UZ')}
-                              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                                copiedKey === `${key}-UZ`
-                                  ? 'bg-green-500 text-white'
-                                  : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                              }`}
+                              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${copiedKey === `${key}-UZ`
+                                ? 'bg-green-500 text-white'
+                                : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                                }`}
                             >
                               {copiedKey === `${key}-UZ` ? '✓ Nusxalandi' : 'UZ nusxa'}
                             </button>
                             <button
                               onClick={() => copyToClipboard(results[key], key, 'RU')}
-                              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                                copiedKey === `${key}-RU`
-                                  ? 'bg-green-500 text-white'
-                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                              }`}
+                              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${copiedKey === `${key}-RU`
+                                ? 'bg-green-500 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
                             >
                               {copiedKey === `${key}-RU` ? '✓ Скопировано' : 'RU копия'}
                             </button>
@@ -532,11 +533,10 @@ const CopywriterStudio: React.FC = () => {
                               </div>
                               <button
                                 onClick={() => copyToClipboard(results[key], key)}
-                                className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                                  copiedKey === key
-                                    ? 'bg-green-500 text-white'
-                                    : 'bg-white/10 text-white hover:bg-white/20'
-                                }`}
+                                className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${copiedKey === key
+                                  ? 'bg-green-500 text-white'
+                                  : 'bg-white/10 text-white hover:bg-white/20'
+                                  }`}
                               >
                                 {copiedKey === key ? '✓' : 'Nusxa'}
                               </button>
