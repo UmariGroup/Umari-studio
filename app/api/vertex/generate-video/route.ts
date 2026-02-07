@@ -39,6 +39,26 @@ function getVideoServiceType(mode: VideoMode): string {
   return 'video_generate_basic';
 }
 
+function getTargetVideoDurationSeconds(plan: string, mode: VideoMode): number | null {
+  if (plan === 'starter') {
+    return mode === 'basic' ? 5 : null;
+  }
+
+  if (plan === 'pro') {
+    if (mode === 'basic') return 6;
+    if (mode === 'pro') return 6;
+    return null;
+  }
+
+  if (plan === 'business_plus') {
+    if (mode === 'basic') return 5;
+    if (mode === 'pro') return 7;
+    if (mode === 'premium') return 10;
+  }
+
+  return null;
+}
+
 function getMonthlyVideoLimit(plan: string, mode: VideoMode): number | null {
   if (plan === 'pro') {
     if (mode === 'pro') return 4;
@@ -158,6 +178,7 @@ export async function POST(req: NextRequest) {
     }
 
     const safePrompt = prompt.slice(0, policy.maxPromptChars);
+    const targetDurationSeconds = getTargetVideoDurationSeconds(plan, mode);
 
     const safeImages = images.slice(0, policy.maxImages);
 
@@ -201,7 +222,18 @@ export async function POST(req: NextRequest) {
 
     console.log(`[GenerateVideo] Plan=${plan}, Mode=${mode}, Model=${selectedModel}`);
 
-    const rawVideoUrl = await generateMarketplaceVideo(safePrompt, safeImages, selectedModel, aspectRatio);
+    const durationPrompt =
+      targetDurationSeconds && targetDurationSeconds > 0
+        ? `${safePrompt}\n\nCRITICAL: Final video duration must be exactly ${targetDurationSeconds} seconds.`
+        : safePrompt;
+
+    const rawVideoUrl = await generateMarketplaceVideo(
+      durationPrompt,
+      safeImages,
+      selectedModel,
+      aspectRatio,
+      targetDurationSeconds || undefined
+    );
     let persisted: string | null = null;
     try {
       persisted = await tryPersistVideoDataUrlToPublic(rawVideoUrl);
@@ -238,7 +270,13 @@ export async function POST(req: NextRequest) {
       void (async () => {
         try {
           // Prefer upsampling the generated video output if it's a data URL / GCS URI.
-          const upscaledRaw = await generateMarketplaceVideoUpsampled(safePrompt, safeImages, aspectRatio, rawVideoUrl);
+          const upscaledRaw = await generateMarketplaceVideoUpsampled(
+            durationPrompt,
+            safeImages,
+            aspectRatio,
+            rawVideoUrl,
+            targetDurationSeconds || undefined
+          );
           let upscaledPersisted: string | null = null;
           try {
             upscaledPersisted = await tryPersistVideoDataUrlToPublic(upscaledRaw);
@@ -290,6 +328,7 @@ export async function POST(req: NextRequest) {
       success: true,
       videoUrl,
       upscaleJobId,
+      target_duration_seconds: targetDurationSeconds,
       tokens_charged: reservedTokens,
       tokens_remaining: user.role === 'admin' ? 999999 : Number(tokensRemaining.toFixed(2)),
     });

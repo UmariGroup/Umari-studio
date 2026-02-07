@@ -309,7 +309,8 @@ async function vertexPredictVeo(
   aspectRatio: string,
   modelOverride?: string,
   image?: string | null,
-  video?: string | null
+  video?: string | null,
+  durationSeconds?: number | null
 ): Promise<string> {
 
   // Use a default Veo model if none provided
@@ -355,7 +356,9 @@ async function vertexPredictVeo(
     parameters: {
       sampleCount: 1,
       aspectRatio: normalizeAspectRatio(aspectRatio),
-      // Veo might support 'frameRate', 'durationSeconds', etc.
+      ...(Number.isFinite(Number(durationSeconds)) && Number(durationSeconds) > 0
+        ? { durationSeconds: Math.max(1, Math.round(Number(durationSeconds))) }
+        : {}),
     },
   };
 
@@ -439,17 +442,19 @@ export async function generateMarketplaceVideo(
   prompt: string,
   image?: string | string[],
   model = 'veo-3.0-fast-generate-001',
-  aspectRatio = '16:9'
+  aspectRatio = '16:9',
+  durationSeconds?: number
 ): Promise<string> {
   const firstImage = Array.isArray(image) ? image.find(Boolean) : image;
-  return vertexPredictVeo(prompt, aspectRatio, model, firstImage || undefined, null);
+  return vertexPredictVeo(prompt, aspectRatio, model, firstImage || undefined, null, durationSeconds);
 }
 
 export async function generateMarketplaceVideoUpsampled(
   prompt: string,
   image?: string | string[],
   aspectRatio: string = '16:9',
-  sourceVideoUrl?: string | null
+  sourceVideoUrl?: string | null,
+  durationSeconds?: number
 ): Promise<string> {
   const firstImage = Array.isArray(image) ? image.find(Boolean) : image;
   return vertexPredictVeo(
@@ -457,7 +462,8 @@ export async function generateMarketplaceVideoUpsampled(
     aspectRatio,
     'veo3_upsampler_video_generation',
     firstImage || undefined,
-    sourceVideoUrl || null
+    sourceVideoUrl || null,
+    durationSeconds
   );
 }
 
