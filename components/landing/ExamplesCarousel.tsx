@@ -30,13 +30,24 @@ const exampleImages = [
 const firstRow = [...exampleImages, ...exampleImages];
 const secondRow = [...exampleImages.slice(4), ...exampleImages.slice(0, 4), ...exampleImages.slice(4), ...exampleImages.slice(0, 4)];
 
-function ExampleCard({ src, index }: { src: string; index: number }) {
+function ExampleCard({
+  src,
+  index,
+  priority = false,
+}: {
+  src: string;
+  index: number;
+  priority?: boolean;
+}) {
   return (
     <div className="examples-card group relative aspect-[3/4] w-[132px] shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:w-[168px] md:w-[200px]">
       <Image
         src={src}
         alt={`Umari examples ${index + 1}`}
         fill
+        priority={priority}
+        loading={priority ? 'eager' : 'lazy'}
+        sizes="(max-width: 640px) 132px, (max-width: 768px) 168px, 200px"
         className="object-cover transition-transform duration-500 group-hover:scale-105"
       />
       <div className="absolute inset-0 bg-gradient-to-t from-slate-900/35 via-transparent to-transparent" />
@@ -67,7 +78,7 @@ export function ExamplesCarousel() {
 
         <div className="examples-marquee">
           {firstRow.map((src, index) => (
-            <ExampleCard key={`row1-${index}-${src}`} src={src} index={index} />
+            <ExampleCard key={`row1-${index}-${src}`} src={src} index={index} priority={index < 4} />
           ))}
         </div>
 
