@@ -8,12 +8,12 @@ import { Plus, Minus } from 'lucide-react';
 
 const faqs = [
   {
-    question: "Free tarifda nechta token beriladi?",
-    answer: "Ro'yxatdan o'tganda Free foydalanuvchiga 5 ta sinov token beriladi. Bu tokenlar bilan basic image workflow'ni sinab ko'rishingiz mumkin.",
+    question: "Bepul tarifda nechta token beriladi?",
+    answer: "Ro'yxatdan o'tganda bepul foydalanuvchiga 5 ta sinov token beriladi. Bu tokenlar bilan oddiy rasm ish jarayonini sinab ko'rishingiz mumkin.",
   },
   {
     question: "Tokenlar qanday yechiladi?",
-    answer: "Tokenlar har bir request uchun yechiladi. Masalan, Business+ pro image so'rovi 5 token bo'lsa, nechta output qaytishidan qat'i nazar bitta request uchun 5 token hisoblanadi.",
+    answer: "Tokenlar har bir so'rov uchun yechiladi. Masalan, Business+ pro rasm so'rovi 5 token bo'lsa, nechta natija qaytishidan qat'i nazar bitta so'rov uchun 5 token hisoblanadi.",
   },
   {
     question: "Tarifni qanday faollashtiraman?",
@@ -21,7 +21,7 @@ const faqs = [
   },
   {
     question: "Qaysi marketplace uchun mos?",
-    answer: "Umari Studio Uzum, Wildberries va boshqa e-commerce kanallari uchun mos. Rasm, video va copy natijalari listing workflow'ga mos formatda ishlab chiqiladi.",
+    answer: "Umari Studio Uzum, Wildberries va boshqa onlayn savdo kanallari uchun mos. Rasm, video va copy natijalari listing ish jarayoniga mos formatda ishlab chiqiladi.",
   },
   {
     question: "Oylik tariflar qanday?",
@@ -36,7 +36,7 @@ export function FAQ() {
     <section id="faq" className="bg-white py-20">
       <Container>
         <div className="mb-14 flex flex-col items-center text-center">
-          <Badge variant="slate" className="mb-4">FAQ</Badge>
+          <Badge variant="slate" className="mb-4">Savol-javob</Badge>
           <h2 className="text-3xl font-bold tracking-tight text-slate-900 lg:text-5xl">Ko'p so'raladigan savollar</h2>
           <p className="mt-4 max-w-2xl text-slate-600">
             Tarif, token va foydalanish bo'yicha asosiy ma'lumotlar shu yerda jamlangan.

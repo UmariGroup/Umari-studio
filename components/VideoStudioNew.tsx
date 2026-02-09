@@ -83,7 +83,7 @@ const getVideoModesForPlan = (plan: SubscriptionPlan): VideoModeConfig[] => {
       },
       {
         id: 'pro',
-        name: 'Pro Video',
+        name: 'Pro video',
         model: 'veo-3.0-generate-001',
         duration: 6,
         tokenCost: 35,
@@ -107,7 +107,7 @@ const getVideoModesForPlan = (plan: SubscriptionPlan): VideoModeConfig[] => {
       },
       {
         id: 'pro',
-        name: 'Pro Video',
+        name: 'Pro video',
         model: 'veo-3.0-fast-generate-001',
         duration: 6,
         tokenCost: 30,
@@ -125,7 +125,7 @@ const getVideoModesForPlan = (plan: SubscriptionPlan): VideoModeConfig[] => {
         tokenCost: 45,
         monthlyLimit: 5,
         description: 'Avval FAST video chiqadi, keyin upsampler bilan yaxshilanadi',
-        features: ['8 soniya', 'Max 4 ta rasm', 'Text: 150', 'Background upscale'],
+        features: ['8 soniya', 'Maks 4 ta rasm', 'Matn: 150', 'Fon upscale'],
         available: true,
       },
     ],
@@ -381,7 +381,7 @@ const VideoStudio: React.FC = () => {
               <FiVideo className="w-10 h-10" aria-hidden />
             </div>
             <div>
-              <h1 className="text-3xl font-black tracking-tight">Video Studio</h1>
+              <h1 className="text-3xl font-black tracking-tight">Video studiya</h1>
               <p className="text-white/80 text-sm mt-1">Rasmlardan jonli video yarating (Veo AI)</p>
             </div>
           </div>
@@ -394,7 +394,7 @@ const VideoStudio: React.FC = () => {
                   <FaCoins className="w-6 h-6 text-yellow-300" aria-hidden />
                 </div>
                 <div>
-                  <p className="text-xs text-white/60 uppercase tracking-wider font-medium">Qolgan Token</p>
+                  <p className="text-xs text-white/60 uppercase tracking-wider font-medium">Qolgan token</p>
                   <p className="text-2xl font-black">{isAdmin ? '∞' : tokensRemaining.toLocaleString()}</p>
                 </div>
               </div>

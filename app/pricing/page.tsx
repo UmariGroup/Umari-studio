@@ -206,7 +206,7 @@ export default function PricingPage() {
             <div className="mt-6 inline-flex items-center gap-3 bg-white/10 backdrop-blur-sm rounded-full px-6 py-3 border border-white/20">
               <span className="text-white/80">Hozirgi tarif:</span>
               <span className="font-bold text-white capitalize">
-                {currentPlan === 'business_plus' ? 'Business+' : currentPlan === 'free' ? 'Free' : currentPlan}
+                {currentPlan === 'business_plus' ? 'Business+' : currentPlan === 'free' ? 'Bepul' : currentPlan}
               </span>
               <span className="text-white/60">|</span>
               <span className="text-white/80">{user.tokens_remaining} token</span>

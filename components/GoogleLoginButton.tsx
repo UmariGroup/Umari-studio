@@ -40,7 +40,7 @@ export default function GoogleLoginButton({ onSuccess }: { onSuccess?: () => voi
           router.push('/dashboard');
         }
       } else {
-        throw new Error(data.error || 'Google authentication failed');
+        throw new Error(data.error || 'Google orqali kirish amalga oshmadi');
       }
     } catch (error) {
       console.error('Google login error:', error);
@@ -66,7 +66,7 @@ export default function GoogleLoginButton({ onSuccess }: { onSuccess?: () => voi
     loadGoogleIdentityScript()
       .then(() => {
         if (cancelled) return;
-        if (!window.google?.accounts?.id) throw new Error('Google Identity Services is not available');
+        if (!window.google?.accounts?.id) throw new Error('Google Identity Services mavjud emas');
 
         window.google.accounts.id.initialize({
           client_id: clientId,
@@ -80,7 +80,7 @@ export default function GoogleLoginButton({ onSuccess }: { onSuccess?: () => voi
           size: 'large',
           width: '100%',
           text: 'signin_with',
-          locale: 'en',
+          locale: 'uz',
         });
 
         renderedRef.current = true;

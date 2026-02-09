@@ -43,7 +43,7 @@ function ExampleCard({
     <div className="examples-card group relative aspect-[3/4] w-[132px] shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:w-[168px] md:w-[200px]">
       <Image
         src={src}
-        alt={`Umari examples ${index + 1}`}
+        alt={`Umari namuna ${index + 1}`}
         fill
         priority={priority}
         loading={priority ? 'eager' : 'lazy'}
@@ -66,7 +66,7 @@ export function ExamplesCarousel() {
           viewport={{ once: true }}
           className="mb-10 text-center"
         >
-          <Badge variant="violet" className="mb-4">Examples</Badge>
+          <Badge variant="violet" className="mb-4">Namunalar</Badge>
           <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-5xl">Ishlardan jonli namunalar</h2>
           
         </motion.div>

@@ -118,7 +118,7 @@ export default function AdminDashboard() {
 
           <div className="flex items-center gap-2">
             <Link href="/dashboard" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
-              Dashboard
+              Boshqaruv
             </Link>
             <button
               onClick={handleLogout}
@@ -146,7 +146,7 @@ export default function AdminDashboard() {
               icon={<FiCheck className="h-5 w-5" />}
             />
             <StatCard
-              label="Free foydalanuvchilar"
+              label="Bepul foydalanuvchilar"
               value={loading ? '...' : stats.freeUsers}
               accent="text-amber-700"
               icon={<FiClock className="h-5 w-5" />}
@@ -171,11 +171,11 @@ export default function AdminDashboard() {
             <FiBarChart2 className="text-blue-600" /> Tariflar bo'yicha taqsimot
           </h2>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-            <PlanMiniCard title="Free" users={stats.freeUsers} meta={`${FREE_TRIAL_TOKENS} token sinov`} tone="text-slate-700 border-slate-200 bg-slate-50" />
+            <PlanMiniCard title="Bepul" users={stats.freeUsers} meta={`${FREE_TRIAL_TOKENS} token sinov`} tone="text-slate-700 border-slate-200 bg-slate-50" />
             <PlanMiniCard title="Starter" users={stats.starterUsers || 0} meta={`$9/oy • ${SUBSCRIPTION_PLANS.starter.monthlyTokens} token`} tone="text-emerald-700 border-emerald-200 bg-emerald-50" />
             <PlanMiniCard title="Pro" users={stats.proUsers || 0} meta={`$19/oy • ${SUBSCRIPTION_PLANS.pro.monthlyTokens} token`} tone="text-blue-700 border-blue-200 bg-blue-50" />
             <PlanMiniCard title="Business+" users={stats.businessUsers || 0} meta={`$29/oy • ${SUBSCRIPTION_PLANS.business_plus.monthlyTokens} token`} tone="text-violet-700 border-violet-200 bg-violet-50" />
-            <PlanMiniCard title="Expired" users={stats.expiredUsers || 0} meta="Muddati tugagan" tone="text-rose-700 border-rose-200 bg-rose-50" />
+            <PlanMiniCard title="Tugagan" users={stats.expiredUsers || 0} meta="Muddati tugagan" tone="text-rose-700 border-rose-200 bg-rose-50" />
           </div>
         </section>
 
@@ -211,8 +211,8 @@ export default function AdminDashboard() {
               subtitle="$9/oy"
               bullets={[
                 `${SUBSCRIPTION_PLANS.starter.monthlyTokens} token / oy`,
-                'Image: Basic + Pro',
-                'Video: Umari Fast',
+                'Rasm: Oddiy + Pro',
+                'Video: Umari Flash',
                 'Copywriter: 18 blok',
               ]}
             />
@@ -221,9 +221,9 @@ export default function AdminDashboard() {
               subtitle="$19/oy"
               bullets={[
                 `${SUBSCRIPTION_PLANS.pro.monthlyTokens} token / oy`,
-                'Image: Basic + Pro',
-                'Video: Fast + Pro',
-                'Katalog workflow',
+                'Rasm: Oddiy + Pro',
+                'Video: Flash + Pro',
+                'Katalog ish jarayoni',
               ]}
             />
             <PlanSummary
@@ -231,9 +231,9 @@ export default function AdminDashboard() {
               subtitle="$29/oy"
               bullets={[
                 `${SUBSCRIPTION_PLANS.business_plus.monthlyTokens} token / oy`,
-                'Eng kuchli image rejim',
+                'Eng kuchli rasm rejimi',
                 "Ko'p video va rakurs",
-                'Premium throughput',
+                'Yuqori throughput',
               ]}
             />
           </div>

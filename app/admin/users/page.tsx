@@ -141,7 +141,7 @@ export default function AdminUsersPage() {
 
       const data = await response.json();
       if (!response.ok || !data?.success) {
-        throw new Error(data?.error || 'Failed to activate subscription');
+        throw new Error(data?.error || 'Obunani faollashtirib bo\'lmadi');
       }
 
       setUsers(users.map((u) => (u.id === userId ? { ...u, ...data.user } : u)));
@@ -164,7 +164,7 @@ export default function AdminUsersPage() {
 
       const data = await response.json();
       if (!response.ok || !data?.success) {
-        throw new Error(data?.error || 'Failed to expire subscription');
+        throw new Error(data?.error || 'Obunani tugatib bo\'lmadi');
       }
 
       setUsers(users.map((u) => (u.id === userId ? { ...u, ...data.user } : u)));
@@ -213,7 +213,7 @@ export default function AdminUsersPage() {
               className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
               <option value="" className="bg-slate-800">Barcha rollar</option>
-              <option value="user" className="bg-slate-800">User</option>
+              <option value="user" className="bg-slate-800">Foydalanuvchi</option>
               <option value="admin" className="bg-slate-800">Admin</option>
             </select>
             <select
@@ -222,9 +222,9 @@ export default function AdminUsersPage() {
               className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
               <option value="" className="bg-slate-800">Barcha statuslar</option>
-              <option value="free" className="bg-slate-800">Free</option>
-              <option value="active" className="bg-slate-800">Active</option>
-              <option value="expired" className="bg-slate-800">Expired</option>
+              <option value="free" className="bg-slate-800">Bepul</option>
+              <option value="active" className="bg-slate-800">Faol</option>
+              <option value="expired" className="bg-slate-800">Tugagan</option>
             </select>
             <button
               onClick={() => {
@@ -295,17 +295,17 @@ export default function AdminUsersPage() {
                           planColor === 'emerald' ? 'bg-emerald-500/20 text-emerald-300' :
                           'bg-gray-500/20 text-gray-300'
                         }`}>
-                          {user.subscription_plan === 'business_plus' ? 'Business+' : user.subscription_plan || 'free'}
+                          {user.subscription_plan === 'business_plus' ? 'Business+' : user.subscription_plan === 'free' ? 'Bepul' : (user.subscription_plan || 'Bepul')}
                         </span>
                       </div>
                       <div className="text-center">
-                        <p className="text-white/40 text-xs mb-1">Status</p>
+                        <p className="text-white/40 text-xs mb-1">Holat</p>
                         <span className={`px-3 py-1 rounded-lg text-sm font-bold ${
                           statusColor === 'emerald' ? 'bg-emerald-500/20 text-emerald-300' :
                           statusColor === 'red' ? 'bg-red-500/20 text-red-300' :
                           'bg-gray-500/20 text-gray-300'
                         }`}>
-                          {user.subscription_status}
+                          {user.subscription_status === 'active' ? 'Faol' : user.subscription_status === 'expired' ? 'Tugagan' : user.subscription_status}
                         </span>
                       </div>
                       <div className="text-center">
@@ -399,21 +399,21 @@ export default function AdminUsersPage() {
               </p>
               <p className="flex gap-2">
                 <FiCheckCircle className="w-5 h-5 text-emerald-300 mt-0.5 flex-shrink-0" aria-hidden />
-                <span>Free foydalanuvchiga {FREE_TRIAL_TOKENS} token sinov beriladi</span>
+                <span>Bepul foydalanuvchiga {FREE_TRIAL_TOKENS} token sinov beriladi</span>
               </p>
             </div>
             <div className="space-y-2">
               <p className="flex gap-2">
                 <FiAlertTriangle className="w-5 h-5 text-yellow-300 mt-0.5 flex-shrink-0" aria-hidden />
-                <span><strong className="text-white">Tugatish</strong> - obunani toxtatadi va tokenlarni 0 qiladi</span>
+                <span><strong className="text-white">Tugatish</strong> - obunani to'xtatadi va tokenlarni 0 qiladi</span>
               </p>
               <p className="flex gap-2">
                 <FiAlertTriangle className="w-5 h-5 text-yellow-300 mt-0.5 flex-shrink-0" aria-hidden />
-                <span>Muddat tugagan lekin token qolgan bolsa - tokenlar yoqoladi</span>
+                <span>Muddat tugagan, lekin token qolgan bo'lsa - tokenlar yo'qoladi</span>
               </p>
               <p className="flex gap-2">
                 <FiAlertTriangle className="w-5 h-5 text-yellow-300 mt-0.5 flex-shrink-0" aria-hidden />
-                <span>Admin foydalanuvchilarni ozgartirish mumkin emas</span>
+                <span>Admin foydalanuvchilarni o'zgartirish mumkin emas</span>
               </p>
             </div>
           </div>

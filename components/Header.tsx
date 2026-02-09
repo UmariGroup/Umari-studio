@@ -21,7 +21,7 @@ function Logo() {
       <span className="h-9 w-9 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white font-black text-lg grid place-items-center">
         U
       </span>
-      <span className="text-lg sm:text-xl font-black tracking-tight text-slate-900">Umari AI Studio</span>
+      <span className="text-lg sm:text-xl font-black tracking-tight text-slate-900">Umari AI studiya</span>
     </Link>
   );
 }
@@ -74,16 +74,16 @@ export default function Header() {
 
           <nav className="hidden md:flex items-center gap-2 text-sm">
             <Link href="/dashboard" className="px-3 py-2 rounded-lg text-slate-700 hover:text-slate-900 hover:bg-slate-100">
-              Dashboard
+              Boshqaruv
             </Link>
             <Link href="/marketplace" className="px-3 py-2 rounded-lg text-slate-700 hover:text-slate-900 hover:bg-slate-100">
-              Marketplace Studio
+              Market studiya
             </Link>
             <Link href="/video-studio" className="px-3 py-2 rounded-lg text-slate-700 hover:text-slate-900 hover:bg-slate-100">
-              Video Studio
+              Video studiya
             </Link>
             <Link href="/copywriter" className="px-3 py-2 rounded-lg text-slate-700 hover:text-slate-900 hover:bg-slate-100">
-              Copywriter
+              Copywriter studiya
             </Link>
             {user?.role === 'admin' && (
               <Link href="/admin" className="px-3 py-2 rounded-lg text-blue-700 hover:text-blue-900 hover:bg-blue-50">
@@ -109,7 +109,7 @@ export default function Header() {
           <button
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             className="md:hidden p-2 rounded-lg border border-slate-200 text-slate-700"
-            aria-label="Toggle menu"
+            aria-label="Menyuni ochish/yopish"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               {mobileMenuOpen ? (
@@ -124,10 +124,10 @@ export default function Header() {
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-slate-200 bg-white">
             <div className="px-4 py-3 flex flex-col gap-2 text-sm">
-              <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Dashboard</Link>
-              <Link href="/marketplace" onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Marketplace Studio</Link>
-              <Link href="/video-studio" onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Video Studio</Link>
-              <Link href="/copywriter" onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Copywriter</Link>
+              <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Boshqaruv</Link>
+              <Link href="/marketplace" onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Market studiya</Link>
+              <Link href="/video-studio" onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Video studiya</Link>
+              <Link href="/copywriter" onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Copywriter studiya</Link>
               {user?.role === 'admin' && (
                 <Link href="/admin" onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded text-blue-700 hover:bg-blue-50">Admin</Link>
               )}
@@ -150,7 +150,7 @@ export default function Header() {
         <Logo />
         <div className="flex items-center gap-3">
           <Link href="/pricing" className="hidden sm:inline-flex px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">
-            Pricing
+            Narxlar
           </Link>
           <Link href="/login" className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800">
             Kirish

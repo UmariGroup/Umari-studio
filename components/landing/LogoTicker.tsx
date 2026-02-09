@@ -17,7 +17,7 @@ export function LogoTicker() {
         <section className="py-8 md:py-12 bg-white border-b border-slate-100 overflow-hidden">
             <Container>
                 <div className="flex items-center gap-8">
-                    <span className="text-sm font-medium text-slate-500 whitespace-nowrap">Trusted by industry leaders:</span>
+                    <span className="text-sm font-medium text-slate-500 whitespace-nowrap">Yetakchi brendlar tanlovi:</span>
                     <div className="flex-1 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black,transparent)]">
                         <motion.div
                             className="flex gap-14 pr-14"

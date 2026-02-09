@@ -35,107 +35,93 @@ export default function LoginPage() {
           router.push('/dashboard');
         }
       } else {
-        setError(data.message || 'Login failed');
+        setError(data.message || 'Kirish amalga oshmadi');
       }
-    } catch (err) {
-      setError('An error occurred. Please try again.');
+    } catch {
+      setError('Xatolik yuz berdi. Qayta urinib ko\'ring.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <>
-      <div className="min-h-screen bg-white flex items-center justify-center px-4">
-        <div className="max-w-md w-full">
-          <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-lg">
-            <div className="text-center mb-8">
-              <div className="flex items-center justify-center mb-4">
-                <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center mr-3">
-                  <span className="text-white font-bold text-2xl">U</span>
-                </div>
-                <span className="text-2xl font-bold text-gray-900">Umari Studio</span>
+    <div className="min-h-screen bg-white px-4 flex items-center justify-center">
+      <div className="w-full max-w-md">
+        <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-lg">
+          <div className="mb-8 text-center">
+            <div className="mb-4 flex items-center justify-center">
+              <div className="mr-3 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600">
+                <span className="text-2xl font-bold text-white">U</span>
               </div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                Xush kelibsiz!
-              </h1>
-              <p className="text-gray-600">
-                AI-powered studiyangizga kiring
-              </p>
+              <span className="text-2xl font-bold text-gray-900">Umari Studio</span>
+            </div>
+            <h1 className="mb-2 text-2xl font-bold text-gray-900">Xush kelibsiz!</h1>
+            <p className="text-gray-600">AI studiyangizga kiring</p>
+          </div>
+
+          {error ? (
+            <div className="mb-6 rounded-lg border border-red-500/50 bg-red-500/20 p-4">
+              <p className="text-sm text-red-300">{error}</p>
+            </div>
+          ) : null}
+
+          <div className="mb-6">
+            <GoogleLoginButton />
+          </div>
+
+          <div className="relative mb-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-600" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="bg-transparent px-2 text-gray-400">yoki email bilan</span>
+            </div>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                placeholder="email@manzil.com"
+                required
+              />
             </div>
 
-            {error && (
-              <div className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg">
-                <p className="text-red-300 text-sm">{error}</p>
-              </div>
-            )}
-
-            {/* Google Login */}
-            <div className="mb-6">
-              <GoogleLoginButton />
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">Parol</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                placeholder="Parolingizni kiriting"
+                required
+              />
             </div>
 
-            <div className="relative mb-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-600"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="bg-transparent px-2 text-gray-400">yoki email bilan</span>
-              </div>
-            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-lg bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Kirilmoqda...' : 'Kirish'}
+            </button>
+          </form>
 
-            <form onSubmit={handleLogin} className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
-                  placeholder="your@email.com"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Parol
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
-                  placeholder="••••••••"
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition disabled:opacity-50"
-              >
-                {loading ? 'Kirish...' : 'Kirish'}
-              </button>
-            </form>
-
-            <div className="mt-6 text-center text-gray-400">
-              <p>
-                Akkauntingiz yo'qmi?{' '}
-                <Link href="/register" className="text-blue-600 hover:text-blue-700">
-                  Ro'yxatdan o'tish
-                </Link>
-              </p>
-            </div>
-
-            <div className="mt-6 pt-6 border-t border-white/20">
-            </div>
+          <div className="mt-6 text-center text-gray-400">
+            <p>
+              Akkauntingiz yo'qmi?{' '}
+              <Link href="/register" className="text-blue-600 hover:text-blue-700">
+                Ro'yxatdan o'tish
+              </Link>
+            </p>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

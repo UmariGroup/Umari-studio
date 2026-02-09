@@ -429,7 +429,7 @@ const MarketplaceStudio: React.FC = () => {
     }
 
     if (!prompt.trim()) {
-      toast.error('Prompt kiriting!');
+      toast.error('So\'rov matnini kiriting!');
       return;
     }
 
@@ -580,7 +580,7 @@ const MarketplaceStudio: React.FC = () => {
               </svg>
             </div>
             <div>
-              <h1 className="text-3xl font-black tracking-tight">Market Studio</h1>
+              <h1 className="text-3xl font-black tracking-tight">Market studiya</h1>
               <p className="text-white/80 text-sm mt-1">AI orqali professional mahsulot rasmlari yarating</p>
             </div>
           </div>
@@ -620,7 +620,7 @@ const MarketplaceStudio: React.FC = () => {
             </div>
             <div>
               <h3 className="font-bold text-amber-800">Premium obuna kerak!</h3>
-              <p className="text-amber-700 text-sm">Marketplace Studio dan foydalanish uchun Starter yoki undan yuqori obunaga o'ting.</p>
+              <p className="text-amber-700 text-sm">Market Studio dan foydalanish uchun Starter yoki undan yuqori obunaga o'ting.</p>
             </div>
             <button
               type="button"
@@ -677,7 +677,7 @@ const MarketplaceStudio: React.FC = () => {
       {/* Pro Model Selection */}
       {imageMode === 'pro' && config.proModels.length > 1 && (
         <div className="bg-blue-50 rounded-2xl p-6 border border-blue-200">
-          <h3 className="font-semibold text-blue-800 mb-4">Pro Model tanlang</h3>
+          <h3 className="font-semibold text-blue-800 mb-4">Pro modelni tanlang</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {config.proModels.map((model) => (
               <button
@@ -797,7 +797,7 @@ const MarketplaceStudio: React.FC = () => {
 
           {/* Prompt */}
           <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-            <h3 className="font-bold text-gray-800 mb-4">Prompt</h3>
+            <h3 className="font-bold text-gray-800 mb-4">So'rov matni</h3>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}

@@ -169,7 +169,7 @@ export default function SubscriptionPlansAdminPage() {
             </Link>
             <div>
               <h1 className="text-2xl font-black">Tariflar (DB)</h1>
-              <p className="text-white/50 text-sm">Pricing sahifasi shu jadvaldan oladi</p>
+              <p className="text-white/50 text-sm">Narxlar sahifasi shu jadvaldan oladi</p>
             </div>
           </div>
 
@@ -201,7 +201,7 @@ export default function SubscriptionPlansAdminPage() {
           </div>
 
           {loading ? (
-            <div className="p-6 text-white/60">Yuklanmoqda…</div>
+            <div className="p-6 text-white/60">Yuklanmoqda...</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -348,7 +348,7 @@ export default function SubscriptionPlansAdminPage() {
                     value={formFeaturesText}
                     onChange={(e) => setFormFeaturesText(e.target.value)}
                     className="mt-1 w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[140px]"
-                    placeholder="140 token/oy\nRasm: Basic+Pro\nVideo: Veo 3 Fast"
+                    placeholder="140 token/oy\nRasm: Oddiy + Pro\nVideo: Umari Flash"
                   />
                 </div>
               </div>

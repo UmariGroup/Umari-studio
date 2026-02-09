@@ -276,7 +276,7 @@ const CopywriterStudio: React.FC = () => {
               </svg>
             </div>
             <div>
-              <h1 className="text-3xl font-black tracking-tight">Copywriter Studio</h1>
+              <h1 className="text-3xl font-black tracking-tight">Copywriter studiya</h1>
               <p className="text-white/80 text-sm mt-1">AI yordamida marketplace uchun kontentlar yarating</p>
             </div>
           </div>
@@ -316,7 +316,7 @@ const CopywriterStudio: React.FC = () => {
             </div>
             <div>
               <h3 className="font-bold text-amber-800">Premium obuna kerak!</h3>
-              <p className="text-amber-700 text-sm">Copywriter Studio dan foydalanish uchun Starter yoki undan yuqori obunaga oting.</p>
+              <p className="text-amber-700 text-sm">Copywriter studiyadan foydalanish uchun Starter yoki undan yuqori obunaga o'ting.</p>
             </div>
             <button
               type="button"

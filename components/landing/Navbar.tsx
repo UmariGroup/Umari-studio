@@ -33,25 +33,25 @@ export function Navbar() {
                     {/* Desktop Nav */}
                     <nav className="hidden md:flex items-center gap-8">
                         <Link href="#features" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
-                            Features
+                            Imkoniyatlar
                         </Link>
                         <Link href="#examples" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
-                            Examples
+                            Namunalar
                         </Link>
                         <Link href="#pricing" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
-                            Pricing
+                            Narxlar
                         </Link>
                         <Link href="#faq" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
-                            FAQ
+                            Savol-javob
                         </Link>
                     </nav>
 
                     <div className="hidden md:flex items-center gap-3">
                         <Link href="/login">
-                            <Button variant="ghost" size="sm">Log in</Button>
+                            <Button variant="ghost" size="sm">Kirish</Button>
                         </Link>
                         <Link href="/register">
-                            <Button size="sm">Get Started</Button>
+                            <Button size="sm">Boshlash</Button>
                         </Link>
                     </div>
 
@@ -74,15 +74,15 @@ export function Navbar() {
                     exit={{ opacity: 0, y: -20 }}
                     className="absolute top-full left-4 right-4 mt-2 p-4 bg-white rounded-2xl border border-slate-200 shadow-xl md:hidden flex flex-col gap-4"
                 >
-                    <Link href="#features" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Features</Link>
-                    <Link href="#examples" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Examples</Link>
-                    <Link href="#pricing" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Pricing</Link>
+                    <Link href="#features" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Imkoniyatlar</Link>
+                    <Link href="#examples" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Namunalar</Link>
+                    <Link href="#pricing" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Narxlar</Link>
                     <div className="h-px bg-slate-100" />
                     <Link href="/login" onClick={() => setIsMobileMenuOpen(false)}>
-                        <Button variant="ghost" className="w-full justify-start">Log in</Button>
+                        <Button variant="ghost" className="w-full justify-start">Kirish</Button>
                     </Link>
                     <Link href="/register" onClick={() => setIsMobileMenuOpen(false)}>
-                        <Button className="w-full">Get Started</Button>
+                        <Button className="w-full">Boshlash</Button>
                     </Link>
                 </motion.div>
             )}

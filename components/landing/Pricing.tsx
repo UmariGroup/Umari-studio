@@ -34,8 +34,8 @@ const plans: LandingPlan[] = [
     monthlyTokens: 140,
     features: [
       '140 token/oy',
-      'Image: Basic + Pro',
-      'Video: Umari Fast',
+      "Rasm: Oddiy + Pro",
+      'Video: Umari Flash',
       "Copywriter: 18 blok (qisqa)",
     ],
     tokenPricing: {
@@ -54,9 +54,9 @@ const plans: LandingPlan[] = [
     monthlyTokens: 350,
     features: [
       '350 token/oy',
-      'Pro image + pro video',
-      'Marketplace/katalog uchun',
-      'Kengaytirilgan workflow',
+      'Pro rasm + pro video',
+      'Marketplace/katalog uchun mos',
+      'Kengaytirilgan ish jarayoni',
     ],
     tokenPricing: {
       imageBasic: '1.5',
@@ -74,9 +74,9 @@ const plans: LandingPlan[] = [
     monthlyTokens: 600,
     features: [
       '600 token/oy',
-      'Eng kuchli image rejim',
+      'Eng kuchli rasm rejimi',
       "Ko'p video va rakurs",
-      'Yuqori throughput',
+      'Yuqori tezlik va hajm',
     ],
     tokenPricing: {
       imageBasic: '1',
@@ -98,7 +98,7 @@ export function Pricing() {
     <section id="pricing" className="bg-slate-50 py-20">
       <Container>
         <div className="mb-10 text-center">
-          <Badge variant="blue" className="mb-4">Pricing</Badge>
+          <Badge variant="blue" className="mb-4">Narxlar</Badge>
           <h2 className="text-3xl font-bold tracking-tight text-slate-900 lg:text-5xl">Oylik tariflar</h2>
           <p className="mx-auto mt-4 max-w-2xl text-slate-600">
             Faqat oylik to'lov mavjud. Tarifni tanlang va tugma orqali Telegram'da @Ostudio22 ga so'rov yuboring.

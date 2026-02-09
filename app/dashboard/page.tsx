@@ -138,19 +138,19 @@ export default function DashboardPage() {
         <section className="overflow-hidden rounded-3xl border border-blue-200/60 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-6 text-white shadow-2xl shadow-blue-200/30 sm:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-sm font-semibold text-white/80">Umari Dashboard</p>
+              <p className="text-sm font-semibold text-white/80">Umari boshqaruv paneli</p>
               <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">
                 Assalomu alaykum{user?.first_name ? `, ${user.first_name}` : ''}
               </h1>
               <p className="mt-2 text-sm text-white/80">
-                Barcha studiyalar bitta joyda: Marketplace, Video va Copywriter.
+                Barcha studiyalar bitta joyda: Market, Video va Copywriter.
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:gap-4">
               <div className="rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur">
                 <p className="text-xs text-white/70">Tarif</p>
-                <p className="text-xl font-bold">{plan === 'business_plus' ? 'Business+' : (planLabelUz(plan) || 'Free')}</p>
+                <p className="text-xl font-bold">{plan === 'business_plus' ? 'Business+' : (planLabelUz(plan) || 'Bepul')}</p>
               </div>
               <div className="rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur">
                 <p className="text-xs text-white/70">Qolgan token</p>
@@ -162,7 +162,7 @@ export default function DashboardPage() {
           {!isAdmin && (
             <div className="mt-6">
               <div className="mb-2 flex items-center justify-between text-xs text-white/80">
-                <span>Token progress</span>
+                <span>Token holati</span>
                 <span>{tokenPercentage}%</span>
               </div>
               <div className="h-2.5 overflow-hidden rounded-full bg-white/20">
@@ -218,7 +218,7 @@ export default function DashboardPage() {
                     href={`/pricing?plan=${encodeURIComponent(access.recommendedPlan)}`}
                     className="inline-flex items-center justify-center rounded-xl border border-rose-300 bg-white px-5 py-3 font-semibold text-rose-700"
                   >
-                    {planLabelUz(access.recommendedPlan) || 'Upgrade'} ga o'tish
+                    {planLabelUz(access.recommendedPlan) || 'Yuqori tarif'}ga o'tish
                   </Link>
                 )}
               </div>
@@ -231,7 +231,7 @@ export default function DashboardPage() {
             <span className="rounded-xl bg-blue-100 p-2 text-blue-700"><FaCoins className="h-5 w-5" /></span>
             <h2 className="text-lg font-bold text-slate-900">Token narxlari</h2>
             <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-              {plan === 'business_plus' ? 'Business+' : (planLabelUz(plan) || 'Free')}
+              {plan === 'business_plus' ? 'Business+' : (planLabelUz(plan) || 'Bepul')}
             </span>
           </div>
 
@@ -241,7 +241,7 @@ export default function DashboardPage() {
             <TokenCard title="Oddiy video" value={planTokenCosts.videoBasic} subtitle="token / video" tone="amber" icon={<FiVideo className="h-5 w-5" />} />
             {planTokenCosts.videoPro ? <TokenCard title="Pro video" value={planTokenCosts.videoPro} subtitle="token / video" tone="violet" icon={<FiFilm className="h-5 w-5" />} /> : null}
             {planTokenCosts.videoPremium ? <TokenCard title="Premium video" value={planTokenCosts.videoPremium} subtitle="token / video" tone="rose" icon={<FaGem className="h-5 w-5" />} /> : null}
-            <TokenCard title="Copywriter" value={planTokenCosts.copywriter} subtitle="token / matn" tone="green" icon={<FiEdit3 className="h-5 w-5" />} />
+            <TokenCard title="Copywriter studiya" value={planTokenCosts.copywriter} subtitle="token / matn" tone="green" icon={<FiEdit3 className="h-5 w-5" />} />
           </div>
         </section>
 
@@ -250,15 +250,15 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StudioCard
               href="/marketplace"
-              title="Marketplace Studio"
-              description="Mahsulot rasmlari, listingga tayyor format va marketplace workflow."
+              title="Market studiya"
+              description="Mahsulot rasmlari, listingga tayyor format va marketplace ish jarayoni."
               badge={`So'rov: ${planTokenCosts.basic} - ${planTokenCosts.pro} token`}
               icon={<FiImage className="h-6 w-6" />}
               gradient="from-blue-500 to-indigo-600"
             />
             <StudioCard
               href="/video-studio"
-              title="Video Studio"
+              title="Video studiya"
               description="Mahsulot rasmlaridan tez promo video va reklama variantlari."
               badge={`Video: ${planTokenCosts.videoBasic}${planTokenCosts.videoPro ? ` - ${planTokenCosts.videoPremium || planTokenCosts.videoPro}` : ''} token`}
               icon={<FiVideo className="h-6 w-6" />}
@@ -266,7 +266,7 @@ export default function DashboardPage() {
             />
             <StudioCard
               href="/copywriter"
-              title="Copywriter Studio"
+              title="Copywriter studiya"
               description="UZ/RU marketplace matnlari, 18 blokli strukturada kontent yaratish."
               badge={`Matn: ${planTokenCosts.copywriter} token`}
               icon={<FiEdit3 className="h-6 w-6" />}
@@ -274,7 +274,7 @@ export default function DashboardPage() {
             />
             <StudioCard
               href="/chat"
-              title="AI Chat"
+              title="AI suhbat"
               description="Savol-javob, kontent va strategiya bo'yicha yordamchi chat."
               badge="24/7 yordam"
               icon={<FiMessageSquare className="h-6 w-6" />}
@@ -288,8 +288,8 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <EstimateCard title="Oddiy rasm" value={estimateUsage(planTokenCosts.basic)} tone="text-blue-700" icon={<FiImage className="h-5 w-5" />} />
             <EstimateCard title="Pro rasm" value={estimateUsage(planTokenCosts.pro)} tone="text-indigo-700" icon={<FiZap className="h-5 w-5" />} />
-            <EstimateCard title="Video" value={estimateUsage(planTokenCosts.videoBasic)} tone="text-violet-700" icon={<FiFilm className="h-5 w-5" />} />
-            <EstimateCard title="Copywriter" value={estimateUsage(planTokenCosts.copywriter)} tone="text-emerald-700" icon={<FiSearch className="h-5 w-5" />} />
+            <EstimateCard title="Video studiya" value={estimateUsage(planTokenCosts.videoBasic)} tone="text-violet-700" icon={<FiFilm className="h-5 w-5" />} />
+            <EstimateCard title="Copywriter studiya" value={estimateUsage(planTokenCosts.copywriter)} tone="text-emerald-700" icon={<FiSearch className="h-5 w-5" />} />
           </div>
         </section>
 
@@ -301,7 +301,7 @@ export default function DashboardPage() {
                   <FaGem className="text-white" /> {plan === 'starter' ? "Pro ga o'ting" : "Starter bilan boshlang"}
                 </h3>
                 <p className="text-white/80">
-                  Ko'proq token, kengroq studio imkoniyatlari va tezroq workflow uchun tarifni yangilang.
+                  Ko'proq token, kengroq studio imkoniyatlari va tezroq ish jarayoni uchun tarifni yangilang.
                 </p>
               </div>
               <Link

@@ -5,8 +5,8 @@ import Footer from '../components/Footer';
 import ToastProvider from '../components/ToastProvider';
 
 export const metadata: Metadata = {
-  title: 'Umari Studio - AI Content Creation',
-  description: 'Professional AI-powered content creation platform',
+  title: 'Umari Studio - AI kontent platformasi',
+  description: 'Professional AI yordamida kontent yaratish platformasi',
 };
 
 export default function RootLayout({
@@ -15,7 +15,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="uz">
       <body>
         <ToastProvider>
           <div className="min-h-screen flex flex-col">
