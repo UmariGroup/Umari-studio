@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { normalizeSubscriptionPlan, SUBSCRIPTION_PLANS, SubscriptionPlan } from '@/lib/subscription';
+import { applyReferralRewardForPurchase, ensureReferralSchema } from '@/lib/referral';
 
 const PLAN_DB_NAME: Record<SubscriptionPlan, string> = {
   free: 'Free',
@@ -41,6 +42,8 @@ export async function POST(req: NextRequest) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
+
+    await ensureReferralSchema(client);
 
     // Backward-compatible DB migration
     await client.query(
@@ -114,6 +117,9 @@ export async function POST(req: NextRequest) {
       [plan, durationMonths, tokensAllocated, userId]
     );
 
+    // Referral reward (one-time per referred user)
+    const referralReward = await applyReferralRewardForPurchase(client, userId, plan);
+
     const historyRes = await client.query(
       `INSERT INTO subscriptions_history (user_id, plan_id, started_at, expires_at, price_paid, tokens_allocated, status)
        VALUES ($1, $2, NOW(), NOW() + ($3 * INTERVAL '1 month'), $4, $5, 'active')
@@ -144,6 +150,7 @@ export async function POST(req: NextRequest) {
       success: true,
       user: updateUserRes.rows[0],
       subscription_history_id: historyRes.rows[0]?.id || null,
+      referral_reward: referralReward,
     });
   } catch (error) {
     try {

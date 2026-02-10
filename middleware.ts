@@ -28,16 +28,32 @@ export async function middleware(request: NextRequest) {
   const pathname = locale?.strippedPathname ?? originalPathname;
   const localePrefix = locale ? `/${locale.lang}` : '';
 
+  // Referral capture: persist ?ref=CODE in a cookie so auth routes can attach it.
+  const refParam = request.nextUrl.searchParams.get('ref') || request.nextUrl.searchParams.get('referral');
+  const referralFromUrl = refParam ? String(refParam).trim().toUpperCase() : '';
+  const referralIsValid = /^[A-Z0-9]{6,16}$/.test(referralFromUrl);
+
+  const withReferralCookie = (res: NextResponse) => {
+    if (referralIsValid) {
+      res.cookies.set('referral_code', referralFromUrl, {
+        path: '/',
+        maxAge: 60 * 60 * 24 * 30,
+        sameSite: 'lax',
+      });
+    }
+    return res;
+  };
+
   // Allow public/static asset files to pass through without locale redirects.
   // Otherwise requests like /examples/foo.png would be redirected to /uz/examples/foo.png and 404.
   const isPublicAsset = /\.(?:png|jpg|jpeg|gif|webp|avif|svg|ico|css|js|map|txt|xml|json|woff2?|ttf|eot)$/i.test(originalPathname);
   if (isPublicAsset) {
-    return NextResponse.next();
+    return withReferralCookie(NextResponse.next());
   }
 
   // Avoid locale prefixes for API routes
   if (locale && pathname.startsWith('/api')) {
-    return NextResponse.redirect(new URL(pathname, request.url));
+    return withReferralCookie(NextResponse.redirect(new URL(pathname, request.url)));
   }
 
   // Block Next.js Server Action calls early.
@@ -46,13 +62,15 @@ export async function middleware(request: NextRequest) {
   // "Failed to find Server Action ...".
   const nextAction = request.headers.get('next-action');
   if (request.method === 'POST' && nextAction) {
-    return new NextResponse('Bad Request', {
+    return withReferralCookie(
+      new NextResponse('Bad Request', {
       status: 400,
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-store',
       },
-    });
+      })
+    );
   }
 
   // Default locale routing: if there is no /uz or /ru prefix, redirect.
@@ -70,7 +88,7 @@ export async function middleware(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 365,
       sameSite: 'lax',
     });
-    return response;
+    return withReferralCookie(response);
   }
 
   const authToken = request.cookies.get('auth_token')?.value;
@@ -91,17 +109,17 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith('/admin')) {
     // Require authentication
     if (!authToken || !userPayload) {
-      return NextResponse.redirect(new URL(`${localePrefix}/login`, request.url));
+      return withReferralCookie(NextResponse.redirect(new URL(`${localePrefix}/login`, request.url)));
     }
 
     // Require admin role
     if (userPayload.role !== 'admin') {
-      return NextResponse.redirect(new URL(`${localePrefix}/dashboard`, request.url));
+      return withReferralCookie(NextResponse.redirect(new URL(`${localePrefix}/dashboard`, request.url)));
     }
 
     // Admins don't need subscription check - they have full access
     if (!locale) {
-      return NextResponse.next();
+      return withReferralCookie(NextResponse.next());
     }
 
     const headers = new Headers(request.headers);
@@ -114,7 +132,7 @@ export async function middleware(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 365,
       sameSite: 'lax',
     });
-    return response;
+    return withReferralCookie(response);
   }
 
   // ============================================
@@ -123,7 +141,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith('/dashboard')) {
     // Require authentication
     if (!authToken || !userPayload) {
-      return NextResponse.redirect(new URL(`${localePrefix}/login`, request.url));
+      return withReferralCookie(NextResponse.redirect(new URL(`${localePrefix}/login`, request.url)));
     }
   }
 
@@ -132,7 +150,7 @@ export async function middleware(request: NextRequest) {
   // ============================================
   if (pathname === '/pricing') {
     if (authToken && userPayload && userPayload.subscription_status === 'active') {
-      return NextResponse.redirect(new URL(`${localePrefix}/dashboard`, request.url));
+      return withReferralCookie(NextResponse.redirect(new URL(`${localePrefix}/dashboard`, request.url)));
     }
   }
 
@@ -142,9 +160,9 @@ export async function middleware(request: NextRequest) {
   if (pathname === '/login' || pathname === '/register') {
     if (authToken && userPayload) {
       if (userPayload.role === 'admin') {
-        return NextResponse.redirect(new URL(`${localePrefix}/admin`, request.url));
+        return withReferralCookie(NextResponse.redirect(new URL(`${localePrefix}/admin`, request.url)));
       }
-      return NextResponse.redirect(new URL(`${localePrefix}/dashboard`, request.url));
+      return withReferralCookie(NextResponse.redirect(new URL(`${localePrefix}/dashboard`, request.url)));
     }
   }
 
@@ -160,7 +178,7 @@ export async function middleware(request: NextRequest) {
     response.headers.set('X-XSS-Protection', '1; mode=block');
     response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     
-    return response;
+    return withReferralCookie(response);
   }
 
   if (locale) {
@@ -175,10 +193,10 @@ export async function middleware(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 365,
       sameSite: 'lax',
     });
-    return response;
+    return withReferralCookie(response);
   }
 
-  return NextResponse.next();
+  return withReferralCookie(NextResponse.next());
 }
 
 export const config = {

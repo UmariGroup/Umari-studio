@@ -3,6 +3,25 @@
 -- Backward compatible migration bits (safe to run multiple times)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_username TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_at TIMESTAMP;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code_unique
+  ON users (referral_code)
+  WHERE referral_code IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS referral_rewards (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  referrer_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  referred_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  plan VARCHAR(50) NOT NULL CHECK (plan IN ('starter', 'pro', 'business_plus')),
+  tokens_awarded INT NOT NULL CHECK (tokens_awarded > 0),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (referred_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_referral_rewards_referrer ON referral_rewards(referrer_user_id);
 
 -- Insert default subscription plans
 INSERT INTO subscription_plans (name, duration_months, price, tokens_included, features, description)

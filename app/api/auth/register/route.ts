@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { getClient, query } from '@/lib/db';
 import { generateToken, hashPassword } from '@/lib/auth';
 import { validateEmail, validatePassword, sanitizeInput } from '@/lib/password';
+import { REFERRAL_COOKIE_NAME, ensureReferralSchema, ensureUserReferralCode, maybeAttachReferralToUser } from '@/lib/referral';
 
 export async function POST(req: NextRequest) {
   try {
     const { email, password, first_name, last_name } = await req.json();
+    const referralCookie = req.cookies.get(REFERRAL_COOKIE_NAME)?.value;
 
     // 🔐 Validate email
     const emailValidation = validateEmail(email);
@@ -45,15 +47,41 @@ export async function POST(req: NextRequest) {
     // 🔐 Hash password with bcrypt 12 rounds
     const password_hash = await hashPassword(password);
 
-    // Create user
-    const result = await query(
-      `INSERT INTO users (email, password_hash, first_name, last_name, role, subscription_status, tokens_remaining)
-       VALUES ($1, $2, $3, $4, 'user', 'free', 0)
-       RETURNING id, email, first_name, last_name, role, subscription_status`,
-      [email.toLowerCase(), password_hash, sanitizedFirstName, sanitizedLastName]
-    );
+    // Create user + referral ops in a transaction (backward compatible migrations)
+    const client = await getClient();
+    let user: any;
+    let referralAttached = false;
+    try {
+      await client.query('BEGIN');
+      await ensureReferralSchema(client);
 
-    const user = result.rows[0];
+      const result = await client.query(
+        `INSERT INTO users (email, password_hash, first_name, last_name, role, subscription_status, tokens_remaining)
+         VALUES ($1, $2, $3, $4, 'user', 'free', 0)
+         RETURNING id, email, first_name, last_name, role, subscription_status`,
+        [email.toLowerCase(), password_hash, sanitizedFirstName, sanitizedLastName]
+      );
+
+      user = result.rows[0];
+
+      // Ensure every user has their own referral code
+      await ensureUserReferralCode(client, user.id);
+
+      // Attach referral if present
+      const attachRes = await maybeAttachReferralToUser(client, user.id, referralCookie);
+      referralAttached = attachRes.attached;
+
+      await client.query('COMMIT');
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // ignore
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
 
     // Generate token
     const token = generateToken({
@@ -85,6 +113,14 @@ export async function POST(req: NextRequest) {
       maxAge: 7 * 24 * 60 * 60,
       path: '/',
     });
+
+    if (referralAttached) {
+      response.cookies.set(REFERRAL_COOKIE_NAME, '', {
+        path: '/',
+        maxAge: 0,
+        sameSite: 'lax',
+      });
+    }
 
     return response;
   } catch (error) {

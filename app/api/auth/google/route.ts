@@ -3,10 +3,13 @@ import { query } from '@/lib/db';
 import { generateToken } from '@/lib/auth';
 import { OAuth2Client } from 'google-auth-library';
 import { FREE_TRIAL_TOKENS } from '@/lib/subscription-plans';
+import { getClient } from '@/lib/db';
+import { REFERRAL_COOKIE_NAME, ensureReferralSchema, ensureUserReferralCode, maybeAttachReferralToUser } from '@/lib/referral';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    const referralCookie = req.cookies.get(REFERRAL_COOKIE_NAME)?.value;
     const credential: string | undefined = body?.credential;
 
     if (!credential) {
@@ -80,6 +83,27 @@ export async function POST(req: NextRequest) {
       [user.id]
     );
 
+    // Referral ops (best-effort)
+    let referralAttached = false;
+    const client = await getClient();
+    try {
+      await client.query('BEGIN');
+      await ensureReferralSchema(client);
+      await ensureUserReferralCode(client, user.id);
+      const attachRes = await maybeAttachReferralToUser(client, user.id, referralCookie);
+      referralAttached = attachRes.attached;
+      await client.query('COMMIT');
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // ignore
+      }
+      console.warn('Referral attach failed on google auth:', err);
+    } finally {
+      client.release();
+    }
+
     // Generate token
     const token = generateToken({
       id: user.id,
@@ -106,6 +130,14 @@ export async function POST(req: NextRequest) {
       maxAge: 7 * 24 * 60 * 60,
       path: '/',
     });
+
+    if (referralAttached) {
+      response.cookies.set(REFERRAL_COOKIE_NAME, '', {
+        path: '/',
+        maxAge: 0,
+        sameSite: 'lax',
+      });
+    }
 
     return response;
   } catch (error) {

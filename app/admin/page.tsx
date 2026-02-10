@@ -29,6 +29,30 @@ interface DashboardStats {
   totalTokensUsed: number;
 }
 
+interface AdminReferralTopReferrer {
+  id: string;
+  email: string;
+  first_name: string | null;
+  invited_count: number;
+  rewards_count: number;
+  tokens_awarded: number;
+}
+
+interface AdminReferralStats {
+  totals: {
+    invited_users: number;
+    rewarded_users: number;
+    tokens_awarded: number;
+  };
+  by_plan: {
+    starter?: { rewards_count: number; tokens_awarded: number };
+    pro?: { rewards_count: number; tokens_awarded: number };
+    business_plus?: { rewards_count: number; tokens_awarded: number };
+    [key: string]: { rewards_count: number; tokens_awarded: number } | undefined;
+  };
+  top_referrers: AdminReferralTopReferrer[];
+}
+
 const QUICK_ACTIONS = [
   {
     href: '/admin/users',
@@ -73,6 +97,7 @@ export default function AdminDashboard() {
     totalTokensUsed: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [referralStats, setReferralStats] = useState<AdminReferralStats | null>(null);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -81,6 +106,18 @@ export default function AdminDashboard() {
         const data = await response.json();
         if (data.success) {
           setStats(data.stats);
+        }
+
+        const referralRes = await fetch('/api/admin/referrals/stats');
+        if (referralRes.ok) {
+          const referralData = await referralRes.json();
+          if (referralData?.success) {
+            setReferralStats({
+              totals: referralData.totals,
+              by_plan: referralData.by_plan || {},
+              top_referrers: Array.isArray(referralData.top_referrers) ? referralData.top_referrers : [],
+            });
+          }
         }
       } catch (error) {
         console.error('Error fetching stats:', error);
@@ -151,6 +188,86 @@ export default function AdminDashboard() {
             <PlanMiniCard title="Pro" users={stats.proUsers || 0} meta={`$19/oy • ${SUBSCRIPTION_PLANS.pro.monthlyTokens} token`} tone="text-blue-700 border-blue-200 bg-blue-50" />
             <PlanMiniCard title="Business+" users={stats.businessUsers || 0} meta={`$29/oy • ${SUBSCRIPTION_PLANS.business_plus.monthlyTokens} token`} tone="text-violet-700 border-violet-200 bg-violet-50" />
             <PlanMiniCard title="Tugagan" users={stats.expiredUsers || 0} meta="Muddati tugagan" tone="text-rose-700 border-rose-200 bg-rose-50" />
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-5 inline-flex items-center gap-2 text-lg font-bold text-slate-900">
+            <FiUsers className="text-emerald-600" /> Referral statistikasi
+          </h2>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs text-slate-500">Jami taklif qilinganlar</p>
+              <p className="mt-1 text-2xl font-black text-slate-900">{loading ? '...' : (referralStats?.totals?.invited_users ?? 0)}</p>
+              <p className="mt-1 text-xs text-slate-500">referral biriktirilgan userlar</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs text-slate-500">Bonus olganlar</p>
+              <p className="mt-1 text-2xl font-black text-slate-900">{loading ? '...' : (referralStats?.totals?.rewarded_users ?? 0)}</p>
+              <p className="mt-1 text-xs text-slate-500">1-marta sotib olish bo‘yicha</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs text-slate-500">Jami bonus token</p>
+              <p className="mt-1 text-2xl font-black text-slate-900">{loading ? '...' : (referralStats?.totals?.tokens_awarded ?? 0)}</p>
+              <p className="mt-1 text-xs text-slate-500">referrer’lar balansiga qo‘shilgan</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-emerald-50 to-blue-50 p-4">
+              <p className="text-xs font-semibold text-slate-700">Plan bo‘yicha</p>
+              <div className="mt-2 space-y-1 text-sm text-slate-700">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold">Starter</span>
+                  <span>{referralStats?.by_plan?.starter?.rewards_count ?? 0} / {referralStats?.by_plan?.starter?.tokens_awarded ?? 0} token</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold">Pro</span>
+                  <span>{referralStats?.by_plan?.pro?.rewards_count ?? 0} / {referralStats?.by_plan?.pro?.tokens_awarded ?? 0} token</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold">Business+</span>
+                  <span>{referralStats?.by_plan?.business_plus?.rewards_count ?? 0} / {referralStats?.by_plan?.business_plus?.tokens_awarded ?? 0} token</span>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">format: bonuslar soni / token</p>
+            </div>
+          </div>
+
+          <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Top referrer</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Taklif</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Bonuslar</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Token</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 bg-white">
+                  {(referralStats?.top_referrers || []).length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                        {loading ? 'Yuklanmoqda...' : 'Hozircha referral ma’lumot yo‘q.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    (referralStats?.top_referrers || []).map((r) => (
+                      <tr key={r.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-slate-900">{r.first_name || 'User'}</div>
+                          <div className="text-xs text-slate-500">{r.email}</div>
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-slate-700">{r.invited_count}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-700">{r.rewards_count}</td>
+                        <td className="px-4 py-3">
+                          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">{r.tokens_awarded}</span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
 

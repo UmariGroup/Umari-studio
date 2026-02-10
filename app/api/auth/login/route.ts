@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { generateToken, comparePassword } from '@/lib/auth';
 import { validateEmail, validatePassword } from '@/lib/password';
+import { getClient } from '@/lib/db';
+import { REFERRAL_COOKIE_NAME, ensureReferralSchema, ensureUserReferralCode, maybeAttachReferralToUser } from '@/lib/referral';
 
 export async function POST(req: NextRequest) {
   try {
     const { email, password } = await req.json();
+    const referralCookie = req.cookies.get(REFERRAL_COOKIE_NAME)?.value;
 
     // 🔐 Validate email format
     const emailValidation = validateEmail(email);
@@ -64,6 +67,30 @@ export async function POST(req: NextRequest) {
       [user.id]
     );
 
+    // Referral ops (best-effort)
+    let referralAttached = false;
+    if (referralCookie) {
+      const client = await getClient();
+      try {
+        await client.query('BEGIN');
+        await ensureReferralSchema(client);
+        await ensureUserReferralCode(client, user.id);
+        const attachRes = await maybeAttachReferralToUser(client, user.id, referralCookie);
+        referralAttached = attachRes.attached;
+        await client.query('COMMIT');
+      } catch (err) {
+        try {
+          await client.query('ROLLBACK');
+        } catch {
+          // ignore
+        }
+        // Don't block login on referral issues
+        console.warn('Referral attach failed on login:', err);
+      } finally {
+        client.release();
+      }
+    }
+
     // Generate token
     const token = generateToken({
       id: user.id,
@@ -91,6 +118,14 @@ export async function POST(req: NextRequest) {
       maxAge: 7 * 24 * 60 * 60,
       path: '/',
     });
+
+    if (referralAttached) {
+      response.cookies.set(REFERRAL_COOKIE_NAME, '', {
+        path: '/',
+        maxAge: 0,
+        sameSite: 'lax',
+      });
+    }
 
     return response;
   } catch (error: any) {

@@ -41,6 +41,31 @@ interface TokenCostInfo {
   copywriter: number;
 }
 
+interface ReferralInvitedUser {
+  id: string;
+  email_masked: string | null;
+  first_name: string | null;
+  created_at: string | null;
+  referred_at: string | null;
+  subscription_plan: string | null;
+  subscription_status: string | null;
+  reward: {
+    tokens_awarded: number;
+    plan: string;
+    created_at: string | null;
+  } | null;
+}
+
+interface ReferralData {
+  referral_code: string | null;
+  stats: {
+    invited_count: number;
+    rewards_count: number;
+    tokens_earned: number;
+  };
+  invited_users: ReferralInvitedUser[];
+}
+
 const TOKEN_COSTS: Record<string, TokenCostInfo> = {
   free: { basic: 2, pro: 999, videoBasic: 999, copywriter: 999 },
   starter: { basic: 2, pro: 7, videoBasic: 15, copywriter: 3 },
@@ -65,6 +90,10 @@ export default function DashboardPage() {
     tokensTotal: 0,
   });
   const [loading, setLoading] = useState(true);
+
+  const [referral, setReferral] = useState<ReferralData | null>(null);
+  const [referralLink, setReferralLink] = useState<string>('');
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
 
   const isAdmin = user?.role === 'admin';
   const plan = user?.subscription_plan || 'free';
@@ -92,6 +121,23 @@ export default function DashboardPage() {
             tokensUsed: Number(data.user.tokens_used || (data.user.tokens_total - data.user.tokens_remaining) || 0),
             tokensTotal: Number(data.user.tokens_total || 0),
           });
+
+          // Fetch referral info (best-effort)
+          try {
+            const refRes = await fetch('/api/referrals');
+            if (refRes.ok) {
+              const refData = await refRes.json();
+              if (refData?.success) {
+                setReferral({
+                  referral_code: refData.referral_code || null,
+                  stats: refData.stats,
+                  invited_users: Array.isArray(refData.invited_users) ? refData.invited_users : [],
+                });
+              }
+            }
+          } catch (e) {
+            // ignore
+          }
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
@@ -103,6 +149,32 @@ export default function DashboardPage() {
 
     void fetchUserData();
   }, []);
+
+  useEffect(() => {
+    const code = referral?.referral_code;
+    if (!code) return;
+    try {
+      const path = window.location.pathname || '/';
+      const m = path.match(/^\/(uz|ru)(?=\/|$)/);
+      const langPrefix = m ? `/${m[1]}` : '';
+      const origin = window.location.origin;
+      setReferralLink(`${origin}${langPrefix}/?ref=${encodeURIComponent(code)}`);
+    } catch {
+      // ignore
+    }
+  }, [referral?.referral_code]);
+
+  const copyReferralLink = async () => {
+    if (!referralLink) return;
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      setCopyStatus('copied');
+      window.setTimeout(() => setCopyStatus('idle'), 1500);
+    } catch {
+      setCopyStatus('error');
+      window.setTimeout(() => setCopyStatus('idle'), 2000);
+    }
+  };
 
   const tokenPercentage = stats.tokensTotal > 0
     ? Math.max(0, Math.min(100, Math.round((stats.tokensRemaining / stats.tokensTotal) * 100)))
@@ -225,6 +297,111 @@ export default function DashboardPage() {
             </div>
           </section>
         )}
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-black text-slate-900">Referral dasturi</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Do'stlaringizni taklif qiling. Ular tarif sotib olsa sizga bonus token beriladi.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">Starter: +30 token</span>
+                <span className="rounded-full bg-blue-50 px-3 py-1 font-semibold text-blue-700">Pro: +50 token</span>
+                <span className="rounded-full bg-violet-50 px-3 py-1 font-semibold text-violet-700">Business+: +100 token</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs text-slate-500">Takliflar</p>
+                <p className="mt-1 text-xl font-black text-slate-900">{referral?.stats?.invited_count ?? 0}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs text-slate-500">Bonuslar</p>
+                <p className="mt-1 text-xl font-black text-slate-900">{referral?.stats?.rewards_count ?? 0}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs text-slate-500">Yig'ilgan token</p>
+                <p className="mt-1 text-xl font-black text-slate-900">{referral?.stats?.tokens_earned ?? 0}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+            <p className="text-sm font-semibold text-slate-900">Sizning referral linkingiz</p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                value={referralLink || (referral?.referral_code ? `ref=${referral.referral_code}` : '')}
+                readOnly
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"
+              />
+              <button
+                onClick={copyReferralLink}
+                disabled={!referralLink}
+                className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {copyStatus === 'copied' ? 'Nusxa olindi' : copyStatus === 'error' ? 'Xatolik' : 'Copy'}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Linkni ulashing. Ular shu link orqali kirib (URL: <span className="font-semibold">ref=code</span>) tarif sotib olsa, bonus sizning balansingizga qo‘shiladi.
+            </p>
+          </div>
+
+          <div className="mt-6">
+            <h3 className="text-sm font-bold text-slate-900">Taklif qilinganlar</h3>
+            <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Foydalanuvchi</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Tarif</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Bonus</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Sana</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    {(referral?.invited_users || []).length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                          Hozircha taklif qilinganlar yo‘q.
+                        </td>
+                      </tr>
+                    ) : (
+                      (referral?.invited_users || []).map((inv) => (
+                        <tr key={inv.id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3">
+                            <div className="font-semibold text-slate-900">{inv.first_name || 'User'}</div>
+                            <div className="text-xs text-slate-500">{inv.email_masked || ''}</div>
+                          </td>
+                          <td className="px-4 py-3 text-slate-700">
+                            {inv.subscription_plan ? (inv.subscription_plan === 'business_plus' ? 'Business+' : inv.subscription_plan) : '-'}
+                          </td>
+                          <td className="px-4 py-3">
+                            {inv.reward ? (
+                              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">+{inv.reward.tokens_awarded} token</span>
+                            ) : (
+                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">kutilmoqda</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-500">
+                            {inv.reward?.created_at
+                              ? new Date(inv.reward.created_at).toLocaleDateString()
+                              : inv.created_at
+                                ? new Date(inv.created_at).toLocaleDateString()
+                                : '-'}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-5 flex items-center gap-2">

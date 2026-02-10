@@ -14,12 +14,19 @@ CREATE TABLE users (
   subscription_expires_at TIMESTAMP,
   phone TEXT,
   telegram_username TEXT,
+  referral_code TEXT,
+  referred_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  referred_at TIMESTAMP,
   tokens_remaining NUMERIC(10, 2) DEFAULT 0,
   google_id VARCHAR(255) UNIQUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   last_login_at TIMESTAMP
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code_unique
+  ON users (referral_code)
+  WHERE referral_code IS NOT NULL;
 
 -- Subscription plans table
 CREATE TABLE subscription_plans (
@@ -46,6 +53,19 @@ CREATE TABLE subscriptions_history (
   status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'expired', 'cancelled')),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Referral rewards: award once per referred user
+CREATE TABLE IF NOT EXISTS referral_rewards (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  referrer_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  referred_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  plan VARCHAR(50) NOT NULL CHECK (plan IN ('starter', 'pro', 'business_plus')),
+  tokens_awarded INT NOT NULL CHECK (tokens_awarded > 0),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (referred_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_referral_rewards_referrer ON referral_rewards(referrer_user_id);
 
 -- Token usage tracking
 CREATE TABLE token_usage (
