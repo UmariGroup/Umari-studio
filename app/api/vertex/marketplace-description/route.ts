@@ -15,6 +15,7 @@ import { query } from '@/lib/db';
 export async function POST(request: NextRequest) {
   let userId: string | null = null;
   let reservedTokens = 0;
+  let reserveMeta: { debited?: { subscription: number; referral: number }; referralDebits?: Array<{ rewardId: string; tokens: number }> } | null = null;
   try {
     const user = await getAuthenticatedUserAccount();
     userId = user.id;
@@ -64,7 +65,8 @@ export async function POST(request: NextRequest) {
 
     reservedTokens = Number(policy.costPerCard.toFixed(2));
     if (user.role !== 'admin') {
-      await reserveTokens({ userId: user.id, tokens: reservedTokens });
+      const reserveRes = await reserveTokens({ userId: user.id, tokens: reservedTokens });
+      reserveMeta = { debited: reserveRes.debited, referralDebits: reserveRes.referralDebits };
     }
 
     const generator = generateMarketplaceDescriptionStream(safeImages, marketplace, safeAdditionalInfo, {
@@ -82,7 +84,12 @@ export async function POST(request: NextRequest) {
         didComplete = true;
       } catch (err) {
         if (user.role !== 'admin' && userId && reservedTokens) {
-          await refundTokens({ userId, tokens: reservedTokens });
+          await refundTokens({
+            userId,
+            tokens: reservedTokens,
+            debited: reserveMeta?.debited,
+            referralDebits: reserveMeta?.referralDebits,
+          });
         }
         throw err;
       } finally {
@@ -118,7 +125,12 @@ export async function POST(request: NextRequest) {
 
     if (userId && reservedTokens) {
       try {
-        await refundTokens({ userId, tokens: reservedTokens });
+        await refundTokens({
+          userId,
+          tokens: reservedTokens,
+          debited: reserveMeta?.debited,
+          referralDebits: reserveMeta?.referralDebits,
+        });
       } catch {
         // ignore
       }

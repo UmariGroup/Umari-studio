@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
   let reservedTokens = 0;
   let reservedTokensRemaining = 0;
   let billingSettled = false;
+  let reserveMeta: { debited?: { subscription: number; referral: number }; referralDebits?: Array<{ rewardId: string; tokens: number }> } | null = null;
 
   try {
     await ensureImageJobsTable();
@@ -354,6 +355,7 @@ export async function POST(request: NextRequest) {
     if (user.role !== 'admin') {
       const reserveResult = await reserveTokens({ userId: user.id, tokens: reservedTokens });
       reservedTokensRemaining = reserveResult.tokensRemaining;
+      reserveMeta = { debited: reserveResult.debited, referralDebits: reserveResult.referralDebits };
     } else {
       reservedTokensRemaining = 999999;
     }
@@ -455,7 +457,12 @@ export async function POST(request: NextRequest) {
         });
         tokensCharged = reservedTokens;
       } else {
-        await refundTokens({ userId: user.id, tokens: reservedTokens });
+        await refundTokens({
+          userId: user.id,
+          tokens: reservedTokens,
+          debited: reserveMeta?.debited,
+          referralDebits: reserveMeta?.referralDebits,
+        });
         reservedTokensRemaining += reservedTokens;
         tokensRefunded = reservedTokens;
       }
@@ -568,7 +575,12 @@ export async function POST(request: NextRequest) {
 
     if (!billingSettled && userId && reservedTokens) {
       try {
-        await refundTokens({ userId, tokens: reservedTokens });
+        await refundTokens({
+          userId,
+          tokens: reservedTokens,
+          debited: reserveMeta?.debited,
+          referralDebits: reserveMeta?.referralDebits,
+        });
       } catch {
         // ignore
       }

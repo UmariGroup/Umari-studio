@@ -31,14 +31,14 @@ export async function GET(req: NextRequest) {
       `SELECT
          (SELECT COUNT(*)::int FROM users WHERE referred_by_user_id IS NOT NULL) AS invited_users,
          (SELECT COUNT(*)::int FROM referral_rewards) AS rewarded_users,
-         (SELECT COALESCE(SUM(tokens_awarded), 0)::int FROM referral_rewards) AS tokens_awarded`,
+         (SELECT COALESCE(SUM(tokens_awarded), 0)::numeric FROM referral_rewards) AS tokens_awarded`,
       []
     );
 
     const byPlanRes = await query(
       `SELECT plan,
               COUNT(*)::int AS rewards_count,
-              COALESCE(SUM(tokens_awarded), 0)::int AS tokens_awarded
+              COALESCE(SUM(tokens_awarded), 0)::numeric AS tokens_awarded
        FROM referral_rewards
        GROUP BY plan`,
       []
@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
        rewards AS (
          SELECT referrer_user_id,
                 COUNT(*)::int AS rewards_count,
-                COALESCE(SUM(tokens_awarded), 0)::int AS tokens_awarded
+                COALESCE(SUM(tokens_awarded), 0)::numeric AS tokens_awarded
          FROM referral_rewards
          GROUP BY referrer_user_id
        )
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
               u.first_name,
               COALESCE(inv.invited_count, 0)::int AS invited_count,
               COALESCE(r.rewards_count, 0)::int AS rewards_count,
-              COALESCE(r.tokens_awarded, 0)::int AS tokens_awarded
+              COALESCE(r.tokens_awarded, 0)::numeric AS tokens_awarded
        FROM users u
        LEFT JOIN invited inv ON inv.referrer_user_id = u.id
        LEFT JOIN rewards r ON r.referrer_user_id = u.id

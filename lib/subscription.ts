@@ -1,5 +1,6 @@
 import { getClient, query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { ensureReferralSchema, getActiveReferralTokenBalance, consumeReferralTokens, refundReferralTokens } from '@/lib/referral';
 
 import {
   getNextPlan,
@@ -27,6 +28,8 @@ export interface DbUserAccount {
   subscription_plan: SubscriptionPlan;
   subscription_expires_at: string | null;
   tokens_remaining: number;
+  tokens_subscription_remaining?: number;
+  tokens_referral_remaining?: number;
 }
 
 function coerceTimestampToIso(value: unknown): string | null {
@@ -132,6 +135,25 @@ export async function getAuthenticatedUserAccount(): Promise<DbUserAccount> {
   }
 
   const row = result.rows[0];
+
+  // Referral token balance (30-day grants). Best-effort for older DBs.
+  let referralTokens = 0;
+  try {
+    const refRes = await query(
+      `SELECT COALESCE(SUM(tokens_remaining), 0)::numeric AS total
+       FROM referral_rewards
+       WHERE referrer_user_id = $1
+         AND tokens_remaining > 0
+         AND (expires_at IS NULL OR expires_at > NOW())`,
+      [session.id]
+    );
+    referralTokens = Number(refRes.rows?.[0]?.total || 0);
+  } catch {
+    referralTokens = 0;
+  }
+
+  const subscriptionTokens = coerceNumeric(row.tokens_remaining);
+  const totalTokens = subscriptionTokens + (session ? referralTokens : 0);
   return {
     id: String(row.id),
     email: String(row.email),
@@ -143,7 +165,9 @@ export async function getAuthenticatedUserAccount(): Promise<DbUserAccount> {
     subscription_status: (row.subscription_status as SubscriptionStatus) || 'free',
     subscription_plan: normalizeSubscriptionPlan(row.subscription_plan),
     subscription_expires_at: coerceTimestampToIso(row.subscription_expires_at),
-    tokens_remaining: coerceNumeric(row.tokens_remaining),
+    tokens_remaining: totalTokens,
+    tokens_subscription_remaining: subscriptionTokens,
+    tokens_referral_remaining: referralTokens,
   };
 }
 
@@ -154,12 +178,17 @@ export interface ReserveTokensArgs {
 
 export interface ReserveTokensResult {
   tokensRemaining: number;
+  debited?: {
+    subscription: number;
+    referral: number;
+  };
+  referralDebits?: Array<{ rewardId: string; tokens: number }>;
 }
 
 export async function reserveTokens(args: ReserveTokensArgs): Promise<ReserveTokensResult> {
   const tokens = Number(args.tokens);
   if (!Number.isFinite(tokens) || tokens <= 0) {
-    return { tokensRemaining: 0 };
+    return { tokensRemaining: 0, debited: { subscription: 0, referral: 0 }, referralDebits: [] };
   }
 
   const client = await getClient();
@@ -199,14 +228,19 @@ export async function reserveTokens(args: ReserveTokensArgs): Promise<ReserveTok
     const user = userRes.rows[0];
     if (user.role === 'admin') {
       await client.query('COMMIT');
-      return { tokensRemaining: 999999 };
+      return { tokensRemaining: 999999, debited: { subscription: 0, referral: 0 }, referralDebits: [] };
     }
 
     const status = (user.subscription_status as SubscriptionStatus) || 'free';
     const plan = normalizeSubscriptionPlan(user.subscription_plan);
     const expiresAt = user.subscription_expires_at ? new Date(user.subscription_expires_at) : null;
 
-    if (status === 'expired' || (status === 'active' && (!expiresAt || expiresAt <= new Date()))) {
+    // Referral schema/tokens (expiring grants)
+    await ensureReferralSchema(client);
+    const referralBalance = await getActiveReferralTokenBalance(client, args.userId);
+
+    const isExpired = status === 'expired' || (status === 'active' && (!expiresAt || expiresAt <= new Date()));
+    if (isExpired && referralBalance <= 0) {
       throw new BillingError({
         status: 403,
         code: 'SUBSCRIPTION_EXPIRED',
@@ -215,8 +249,9 @@ export async function reserveTokens(args: ReserveTokensArgs): Promise<ReserveTok
       });
     }
 
-    const remaining = coerceNumeric(user.tokens_remaining);
-    if (remaining < tokens) {
+    const subscriptionRemaining = Math.max(0, coerceNumeric(user.tokens_remaining));
+    const totalRemaining = subscriptionRemaining + referralBalance;
+    if (totalRemaining < tokens) {
       throw new BillingError({
         status: 402,
         code: 'INSUFFICIENT_TOKENS',
@@ -225,17 +260,46 @@ export async function reserveTokens(args: ReserveTokensArgs): Promise<ReserveTok
       });
     }
 
-    const updateRes = await client.query(
-      `UPDATE users
-       SET tokens_remaining = tokens_remaining - $1,
-           updated_at = NOW()
-       WHERE id = $2
-       RETURNING tokens_remaining`,
-      [tokens, args.userId]
-    );
+    // Spend subscription tokens first, then referral tokens.
+    const subscriptionDebit = Number(Math.min(subscriptionRemaining, tokens).toFixed(2));
+    const referralNeed = Number((tokens - subscriptionDebit).toFixed(2));
+
+    let updatedSubscriptionRemaining = subscriptionRemaining;
+    if (subscriptionDebit > 0) {
+      const updateRes = await client.query(
+        `UPDATE users
+         SET tokens_remaining = tokens_remaining - $1,
+             updated_at = NOW()
+         WHERE id = $2
+         RETURNING tokens_remaining`,
+        [subscriptionDebit, args.userId]
+      );
+      updatedSubscriptionRemaining = coerceNumeric(updateRes.rows[0]?.tokens_remaining);
+    }
+
+    let referralDebits: Array<{ rewardId: string; tokens: number }> = [];
+    if (referralNeed > 0) {
+      const consume = await consumeReferralTokens(client, args.userId, referralNeed);
+      referralDebits = consume.debits;
+      if (consume.consumed < referralNeed) {
+        throw new BillingError({
+          status: 402,
+          code: 'INSUFFICIENT_TOKENS',
+          message: "Tokenlaringiz yetarli emas. Tarifni yangilang yoki yuqori tarifga o'ting.",
+          recommendedPlan: getNextPlan(plan),
+        });
+      }
+    }
+
+    const referralRemainingAfter = Number((referralBalance - referralNeed).toFixed(2));
+    const combinedAfter = Number((Math.max(0, updatedSubscriptionRemaining) + Math.max(0, referralRemainingAfter)).toFixed(2));
 
     await client.query('COMMIT');
-    return { tokensRemaining: coerceNumeric(updateRes.rows[0]?.tokens_remaining) };
+    return {
+      tokensRemaining: combinedAfter,
+      debited: { subscription: subscriptionDebit, referral: referralNeed },
+      referralDebits,
+    };
   } catch (err) {
     try {
       await client.query('ROLLBACK');
@@ -248,17 +312,51 @@ export async function reserveTokens(args: ReserveTokensArgs): Promise<ReserveTok
   }
 }
 
-export async function refundTokens(args: ReserveTokensArgs): Promise<void> {
+export async function refundTokens(args: ReserveTokensArgs & { referralDebits?: Array<{ rewardId: string; tokens: number }>; debited?: { subscription: number; referral: number } }): Promise<void> {
   const tokens = Number(args.tokens);
   if (!Number.isFinite(tokens) || tokens <= 0) return;
 
-  await query(
-    `UPDATE users
-     SET tokens_remaining = tokens_remaining + $1,
-         updated_at = NOW()
-     WHERE id = $2`,
-    [tokens, args.userId]
-  );
+  const subscriptionRefund = Math.max(0, Number(args.debited?.subscription ?? tokens));
+  const referralDebits = Array.isArray(args.referralDebits) ? args.referralDebits : [];
+
+  if (referralDebits.length === 0) {
+    await query(
+      `UPDATE users
+       SET tokens_remaining = tokens_remaining + $1,
+           updated_at = NOW()
+       WHERE id = $2`,
+      [subscriptionRefund, args.userId]
+    );
+    return;
+  }
+
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    await ensureReferralSchema(client);
+    if (subscriptionRefund > 0) {
+      await client.query(
+        `UPDATE users
+         SET tokens_remaining = tokens_remaining + $1,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [subscriptionRefund, args.userId]
+      );
+    }
+
+    await refundReferralTokens(client, referralDebits);
+
+    await client.query('COMMIT');
+  } catch (err) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // ignore
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export interface TokenUsageArgs {

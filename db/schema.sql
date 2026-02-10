@@ -60,7 +60,9 @@ CREATE TABLE IF NOT EXISTS referral_rewards (
   referrer_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   referred_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   plan VARCHAR(50) NOT NULL CHECK (plan IN ('starter', 'pro', 'business_plus')),
-  tokens_awarded INT NOT NULL CHECK (tokens_awarded > 0),
+  tokens_awarded NUMERIC(10, 2) NOT NULL CHECK (tokens_awarded > 0),
+  tokens_remaining NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (tokens_remaining >= 0),
+  expires_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (referred_user_id)
 );

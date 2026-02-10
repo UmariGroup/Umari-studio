@@ -171,6 +171,7 @@ async function tryPersistVideoDataUrlToPublic(videoUrl: string): Promise<string 
 export async function POST(req: NextRequest) {
   let userId: string | null = null;
   let reservedTokens = 0;
+  let reserveMeta: { debited?: { subscription: number; referral: number }; referralDebits?: Array<{ rewardId: string; tokens: number }> } | null = null;
 
   try {
     const user = await getAuthenticatedUserAccount();
@@ -259,6 +260,7 @@ export async function POST(req: NextRequest) {
     if (user.role !== 'admin') {
       const reserveRes = await reserveTokens({ userId: user.id, tokens: reservedTokens });
       tokensRemaining = reserveRes.tokensRemaining;
+      reserveMeta = { debited: reserveRes.debited, referralDebits: reserveRes.referralDebits };
     }
 
     console.log(`[GenerateVideo] Plan=${plan}, Mode=${mode}, Model=${selectedModel}`);
@@ -411,7 +413,12 @@ export async function POST(req: NextRequest) {
 
     if (userId && reservedTokens) {
       try {
-        await refundTokens({ userId, tokens: reservedTokens });
+        await refundTokens({
+          userId,
+          tokens: reservedTokens,
+          debited: reserveMeta?.debited,
+          referralDebits: reserveMeta?.referralDebits,
+        });
       } catch {
         // ignore
       }

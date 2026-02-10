@@ -43,10 +43,30 @@ export async function ensureReferralSchema(client: PoolClient): Promise<void> {
       referrer_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       referred_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       plan VARCHAR(50) NOT NULL CHECK (plan IN ('starter', 'pro', 'business_plus')),
-      tokens_awarded INT NOT NULL CHECK (tokens_awarded > 0),
+      tokens_awarded NUMERIC(10, 2) NOT NULL CHECK (tokens_awarded > 0),
+      tokens_remaining NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (tokens_remaining >= 0),
+      expires_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       UNIQUE (referred_user_id)
     )`
+  );
+
+  // Backward-compatible upgrades
+  await client.query(
+    `ALTER TABLE referral_rewards ADD COLUMN IF NOT EXISTS tokens_remaining NUMERIC(10, 2) NOT NULL DEFAULT 0`
+  );
+  await client.query(
+    `ALTER TABLE referral_rewards ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP`
+  );
+
+  // Ensure numeric columns even if older table used INT.
+  await client.query(
+    `ALTER TABLE referral_rewards
+     ALTER COLUMN tokens_awarded TYPE NUMERIC(10, 2) USING tokens_awarded::numeric`
+  );
+  await client.query(
+    `ALTER TABLE referral_rewards
+     ALTER COLUMN tokens_remaining TYPE NUMERIC(10, 2) USING tokens_remaining::numeric`
   );
 
   await client.query(
@@ -147,8 +167,8 @@ export async function applyReferralRewardForPurchase(
   }
 
   const ins = await client.query(
-    `INSERT INTO referral_rewards (referrer_user_id, referred_user_id, plan, tokens_awarded)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO referral_rewards (referrer_user_id, referred_user_id, plan, tokens_awarded, tokens_remaining, expires_at)
+     VALUES ($1, $2, $3, $4, $4, NOW() + INTERVAL '30 days')
      ON CONFLICT (referred_user_id) DO NOTHING
      RETURNING id`,
     [referrerUserId, referredUserId, String(plan), tokens]
@@ -158,13 +178,90 @@ export async function applyReferralRewardForPurchase(
     return { awarded: false, tokens: 0, referrerUserId };
   }
 
-  await client.query(
-    `UPDATE users
-     SET tokens_remaining = COALESCE(tokens_remaining, 0) + $1,
-         updated_at = NOW()
-     WHERE id = $2`,
-    [tokens, referrerUserId]
+  return { awarded: true, tokens, referrerUserId };
+}
+
+export async function getActiveReferralTokenBalance(client: PoolClient, referrerUserId: string): Promise<number> {
+  const res = await client.query(
+    `SELECT COALESCE(SUM(tokens_remaining), 0)::numeric AS total
+     FROM referral_rewards
+     WHERE referrer_user_id = $1
+       AND tokens_remaining > 0
+       AND (expires_at IS NULL OR expires_at > NOW())`,
+    [referrerUserId]
+  );
+  return Number(res.rows?.[0]?.total || 0);
+}
+
+export async function consumeReferralTokens(
+  client: PoolClient,
+  referrerUserId: string,
+  tokensToConsume: number
+): Promise<{ consumed: number; debits: Array<{ rewardId: string; tokens: number }>; remaining: number }> {
+  const rawNeed = Number(tokensToConsume);
+  const need = Number.isFinite(rawNeed) ? Math.max(0, Number(rawNeed.toFixed(2))) : 0;
+  if (!need) {
+    const remaining = await getActiveReferralTokenBalance(client, referrerUserId);
+    return { consumed: 0, debits: [], remaining };
+  }
+
+  const rowsRes = await client.query(
+    `SELECT id, tokens_remaining
+     FROM referral_rewards
+     WHERE referrer_user_id = $1
+       AND tokens_remaining > 0
+       AND (expires_at IS NULL OR expires_at > NOW())
+     ORDER BY COALESCE(expires_at, NOW() + INTERVAL '100 years') ASC, created_at ASC
+     FOR UPDATE`,
+    [referrerUserId]
   );
 
-  return { awarded: true, tokens, referrerUserId };
+  let remainingNeed = need;
+  const debits: Array<{ rewardId: string; tokens: number }> = [];
+
+  for (const row of rowsRes.rows || []) {
+    if (remainingNeed <= 0) break;
+    const id = String(row.id);
+    const available = Math.max(0, Number(row.tokens_remaining || 0));
+    if (!available) continue;
+    const take = Math.min(available, remainingNeed);
+    const takeRounded = Number(take.toFixed(2));
+    if (!takeRounded) continue;
+
+    await client.query(
+      `UPDATE referral_rewards
+       SET tokens_remaining = tokens_remaining - $1
+       WHERE id = $2`,
+      [takeRounded, id]
+    );
+
+    debits.push({ rewardId: id, tokens: takeRounded });
+    remainingNeed = Number((remainingNeed - takeRounded).toFixed(2));
+  }
+
+  const consumed = Number((need - remainingNeed).toFixed(2));
+  const remaining = await getActiveReferralTokenBalance(client, referrerUserId);
+  return { consumed, debits, remaining };
+}
+
+export async function refundReferralTokens(
+  client: PoolClient,
+  debits: Array<{ rewardId: string; tokens: number }>
+): Promise<void> {
+  if (!Array.isArray(debits) || debits.length === 0) return;
+
+  for (const d of debits) {
+    const rewardId = String(d.rewardId || '');
+    const rawTokens = Number(d.tokens);
+    const tokens = Number.isFinite(rawTokens) ? Math.max(0, Number(rawTokens.toFixed(2))) : 0;
+    if (!rewardId || !tokens) continue;
+
+    // Cap at tokens_awarded (no over-refund)
+    await client.query(
+      `UPDATE referral_rewards
+       SET tokens_remaining = LEAST(tokens_awarded, tokens_remaining + $1)
+       WHERE id = $2`,
+      [tokens, rewardId]
+    );
+  }
 }

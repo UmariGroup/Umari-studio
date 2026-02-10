@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 
       const rewardsRes = await query(
         `SELECT COUNT(*)::int AS rewards_count,
-                COALESCE(SUM(tokens_awarded), 0)::int AS tokens_earned
+                COALESCE(SUM(tokens_awarded), 0)::numeric AS tokens_earned
          FROM referral_rewards
          WHERE referrer_user_id = $1`,
         [session.id]
