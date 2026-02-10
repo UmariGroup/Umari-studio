@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import './globals.css';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ToastProvider from '../components/ToastProvider';
+import { LanguageProvider } from '../lib/LanguageContext';
 
 function getBaseUrl(): string {
   const envUrl =
@@ -43,6 +45,10 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const headerList = headers();
+  const headerLang = headerList.get('x-language');
+  const lang = headerLang === 'ru' || headerLang === 'uz' ? headerLang : 'uz';
+
   const baseUrl = getBaseUrl();
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -60,7 +66,7 @@ export default function RootLayout({
         url: baseUrl,
         name: 'Umari AI',
         publisher: { '@id': `${baseUrl}/#organization` },
-        inLanguage: 'uz',
+        inLanguage: lang,
         potentialAction: {
           '@type': 'SearchAction',
           target: `${baseUrl}/search?q={search_term_string}`,
@@ -71,22 +77,24 @@ export default function RootLayout({
   };
 
   return (
-    <html lang="uz">
+    <html lang={lang}>
       <body>
-        <ToastProvider>
-          <script
-            type="application/ld+json"
-            // eslint-disable-next-line react/no-danger
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-          />
-          <div className="min-h-screen flex flex-col">
-            <Header />
-            <main className="flex-1">
-              {children}
-            </main>
-            <Footer />
-          </div>
-        </ToastProvider>
+        <LanguageProvider>
+          <ToastProvider>
+            <script
+              type="application/ld+json"
+              // eslint-disable-next-line react/no-danger
+              dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+            />
+            <div className="min-h-screen flex flex-col">
+              <Header />
+              <main className="flex-1">
+                {children}
+              </main>
+              <Footer />
+            </div>
+          </ToastProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

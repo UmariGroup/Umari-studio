@@ -6,6 +6,7 @@ import { useToast } from './ToastProvider';
 import { getTelegramSubscribeUrl } from '@/lib/telegram';
 import { parseApiErrorResponse, toUzbekErrorMessage } from '@/lib/uzbek-errors';
 import { FiZap, FiArrowLeft } from 'react-icons/fi';
+import { useLanguage } from '@/lib/LanguageContext';
 
 // ============ TYPES ============
 type ImageMode = 'basic' | 'pro';
@@ -82,11 +83,21 @@ const PLAN_CONFIGS: Record<SubscriptionPlan, PlanConfig> = {
 const IMAGE_MODEL_LABELS: Record<string, string> = {
   'gemini-2.5-flash-image': 'Umari Flash',
   'gemini-3-pro-image-preview': 'Umari Pro',
-  'nano-banana-pro-preview': 'Umari AI',
+  'nano-banana-pro-preview': 'Umari Studio',
 };
 
 const MarketplaceStudio: React.FC = () => {
   const toast = useToast();
+  const { t, language } = useLanguage();
+
+  const withLang = useCallback(
+    (href: string) => {
+      if (!href.startsWith('/')) return href;
+      const stripped = href.replace(/^\/(uz|ru)(?=\/|$)/, '');
+      return `/${language}${stripped || ''}`;
+    },
+    [language]
+  );
 
   // User state
   const [user, setUser] = useState<UserData | null>(null);
@@ -124,17 +135,19 @@ const MarketplaceStudio: React.FC = () => {
     if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return '...';
 
     if (seconds < 60) {
-      return `~${Math.max(5, Math.round(seconds))} soniya`;
+      return `~${Math.max(5, Math.round(seconds))} ${t('marketplaceNew.time.seconds', 'soniya')}`;
     }
 
     const minutes = Math.max(1, Math.round(seconds / 60));
     if (minutes < 60) {
-      return `~${minutes} daqiqa`;
+      return `~${minutes} ${t('marketplaceNew.time.minutes', 'daqiqa')}`;
     }
 
     const hours = Math.floor(minutes / 60);
     const remainMinutes = minutes % 60;
-    return remainMinutes > 0 ? `~${hours} soat ${remainMinutes} daqiqa` : `~${hours} soat`;
+    return remainMinutes > 0
+      ? `~${hours} ${t('marketplaceNew.time.hours', 'soat')} ${remainMinutes} ${t('marketplaceNew.time.minutes', 'daqiqa')}`
+      : `~${hours} ${t('marketplaceNew.time.hours', 'soat')}`;
   };
 
   const normalizeTo1080x1440 = useCallback(async (src: string): Promise<string> => {
@@ -142,7 +155,7 @@ const MarketplaceStudio: React.FC = () => {
       if (input.startsWith('data:image/')) return input;
 
       const res = await fetch(input);
-      if (!res.ok) throw new Error('Rasmni yuklab bo‘lmadi');
+      if (!res.ok) throw new Error(t('marketplaceNew.errors.imageDownloadFailed', 'Rasmni yuklab bo‘lmadi'));
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
       try {
@@ -155,11 +168,11 @@ const MarketplaceStudio: React.FC = () => {
               canvas.width = TARGET_W;
               canvas.height = TARGET_H;
               const ctx = canvas.getContext('2d');
-              if (!ctx) throw new Error('Canvas context topilmadi');
+              if (!ctx) throw new Error(t('marketplaceNew.errors.canvasContextMissing', 'Canvas context topilmadi'));
 
               const iw = img.naturalWidth || img.width;
               const ih = img.naturalHeight || img.height;
-              if (!iw || !ih) throw new Error('Rasm o‘lchami noma’lum');
+              if (!iw || !ih) throw new Error(t('marketplaceNew.errors.imageSizeUnknown', 'Rasm o‘lchami noma’lum'));
 
               // "cover" scale + center crop
               const scale = Math.max(TARGET_W / iw, TARGET_H / ih);
@@ -175,7 +188,7 @@ const MarketplaceStudio: React.FC = () => {
               reject(e);
             }
           };
-          img.onerror = () => reject(new Error('Rasmni o‘qib bo‘lmadi'));
+          img.onerror = () => reject(new Error(t('marketplaceNew.errors.imageReadFailed', 'Rasmni o‘qib bo‘lmadi')));
           img.src = blobUrl;
         });
       } finally {
@@ -194,7 +207,7 @@ const MarketplaceStudio: React.FC = () => {
             canvas.width = TARGET_W;
             canvas.height = TARGET_H;
             const ctx = canvas.getContext('2d');
-            if (!ctx) throw new Error('Canvas context topilmadi');
+            if (!ctx) throw new Error(t('marketplaceNew.errors.canvasContextMissing', 'Canvas context topilmadi'));
 
             const iw = img.naturalWidth || img.width;
             const ih = img.naturalHeight || img.height;
@@ -211,7 +224,7 @@ const MarketplaceStudio: React.FC = () => {
             reject(e);
           }
         };
-        img.onerror = () => reject(new Error('Rasmni o‘qib bo‘lmadi'));
+        img.onerror = () => reject(new Error(t('marketplaceNew.errors.imageReadFailed', 'Rasmni o‘qib bo‘lmadi')));
         img.src = src;
       });
     }
@@ -264,7 +277,7 @@ const MarketplaceStudio: React.FC = () => {
       try {
         const res = await fetch('/api/auth/me');
         if (!res.ok) {
-          window.location.href = '/login';
+          window.location.href = withLang('/login');
           return;
         }
         const data = await res.json();
@@ -442,21 +455,21 @@ const MarketplaceStudio: React.FC = () => {
       if (cooldownSeconds > 0) {
         const mm = String(Math.floor(cooldownSeconds / 60)).padStart(2, '0');
         const ss = String(cooldownSeconds % 60).padStart(2, '0');
-        toast.info(`Keyingi generatsiya: ${mm}:${ss}`);
+        toast.info(t('marketplaceNew.toasts.nextGeneration', `Keyingi generatsiya: ${mm}:${ss}`).replace('{time}', `${mm}:${ss}`));
       } else {
-        toast.error('Tokenlaringiz yetarli emas yoki obuna kerak!');
+        toast.error(t('marketplaceNew.toasts.notEnoughTokensOrNeedSubscription', 'Tokenlaringiz yetarli emas yoki obuna kerak!'));
       }
       return;
     }
 
     const validProductImages = productImages.filter((img): img is string => img !== null);
     if (validProductImages.length === 0) {
-      toast.error('Kamida bitta mahsulot rasmi yuklang!');
+      toast.error(t('marketplaceNew.toasts.uploadAtLeastOneProductImage', 'Kamida bitta mahsulot rasmi yuklang!'));
       return;
     }
 
     if (!prompt.trim()) {
-      toast.error('So\'rov matnini kiriting!');
+      toast.error(t('marketplaceNew.toasts.enterPrompt', "So'rov matnini kiriting!"));
       return;
     }
 
@@ -535,18 +548,18 @@ const MarketplaceStudio: React.FC = () => {
         }
 
         if (data?.status === 'partial') {
-          toast.info("Rasmlarning bir qismi yaratildi (qolganlari xatolik).");
+          toast.info(t('marketplaceNew.toasts.partialSuccess', "Rasmlarning bir qismi yaratildi (qolganlari xatolik)."));
         } else if (immediateImages.length > 0) {
-          toast.success('Rasm muvaffaqiyatli yaratildi!');
+          toast.success(t('marketplaceNew.toasts.imageCreated', 'Rasm muvaffaqiyatli yaratildi!'));
         } else {
-          toast.error(immediateItems.find((it) => it.error)?.error || "Rasm yaratishda xatolik.");
+          toast.error(immediateItems.find((it) => it.error)?.error || t('marketplaceNew.toasts.imageCreateFailed', 'Rasm yaratishda xatolik.'));
         }
         return;
       }
 
       const newBatchId = typeof data?.batch_id === 'string' ? data.batch_id : '';
       if (!newBatchId) {
-        toast.error('Server batch id qaytarmadi.');
+        toast.error(t('marketplaceNew.toasts.missingBatchId', 'Server batch id qaytarmadi.'));
         setGenerating(false);
         return;
       }
@@ -561,9 +574,9 @@ const MarketplaceStudio: React.FC = () => {
         setUser((prev) => (prev ? { ...prev, tokens_remaining: data.tokens_remaining } : prev));
       }
 
-      toast.info("So'rov navbatga qo'shildi. Navbat va progress ko'rsatiladi.");
+      toast.info(t('marketplaceNew.toasts.queued', "So'rov navbatga qo'shildi. Navbat va progress ko'rsatiladi."));
     } catch (error) {
-      toast.error((error as Error).message || 'Xatolik yuz berdi.');
+      toast.error((error as Error).message || t('common.error', 'Xatolik'));
       setGenerating(false);
     } finally {
       // generating is stopped by the poller when the batch finishes
@@ -598,7 +611,7 @@ const MarketplaceStudio: React.FC = () => {
       <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-3xl p-8 text-white shadow-2xl shadow-blue-200/30">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="flex items-center gap-5">
-            <Link href="/dashboard" className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl hover:bg-white/30 transition text-white">
+            <Link href={withLang('/dashboard')} className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl hover:bg-white/30 transition text-white">
               <FiArrowLeft className="w-6 h-6" />
             </Link>
             <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
@@ -607,8 +620,8 @@ const MarketplaceStudio: React.FC = () => {
               </svg>
             </div>
             <div>
-              <h1 className="text-3xl font-black tracking-tight">Market studiya</h1>
-              <p className="text-white/80 text-sm mt-1">AI orqali professional mahsulot rasmlari yarating</p>
+              <h1 className="text-3xl font-black tracking-tight">{t('marketplaceNew.title', 'Market studiya')}</h1>
+              <p className="text-white/80 text-sm mt-1">{t('marketplaceNew.subtitle', 'AI orqali professional mahsulot rasmlari yarating')}</p>
             </div>
           </div>
 
@@ -623,13 +636,13 @@ const MarketplaceStudio: React.FC = () => {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-xs text-white/70">Tokenlar</p>
+                  <p className="text-xs text-white/70">{t('marketplaceNew.tokens', 'Tokenlar')}</p>
                   <p className="text-xl font-bold">{isAdmin ? '∞' : tokensRemaining}</p>
                 </div>
               </div>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl px-6 py-4 border border-white/20">
-              <p className="text-xs text-white/70">Tarif</p>
+              <p className="text-xs text-white/70">{t('marketplaceNew.plan', 'Tarif')}</p>
               <p className="text-xl font-bold capitalize">{plan === 'business_plus' ? 'Business+' : plan}</p>
             </div>
           </div>
@@ -646,15 +659,15 @@ const MarketplaceStudio: React.FC = () => {
               </svg>
             </div>
             <div>
-              <h3 className="font-bold text-amber-800">Premium obuna kerak!</h3>
-              <p className="text-amber-700 text-sm">Market Studio dan foydalanish uchun Starter yoki undan yuqori obunaga o'ting.</p>
+              <h3 className="font-bold text-amber-800">{t('marketplaceNew.premiumRequiredTitle', 'Premium obuna kerak!')}</h3>
+              <p className="text-amber-700 text-sm">{t('marketplaceNew.premiumRequiredBody', "Market Studio dan foydalanish uchun Starter yoki undan yuqori obunaga o'ting.")}</p>
             </div>
             <button
               type="button"
               onClick={() => openSubscribe('starter')}
               className="ml-auto px-6 py-3 bg-amber-500 text-white rounded-xl font-semibold hover:bg-amber-600 transition-colors"
             >
-              Obuna olish
+              {t('marketplaceNew.getSubscription', 'Obuna olish')}
             </button>
           </div>
         </div>
@@ -680,7 +693,9 @@ const MarketplaceStudio: React.FC = () => {
               </svg>
               <span>Pro</span>
               <span className={`px-2 py-0.5 rounded-full text-xs ${imageMode === 'pro' ? 'bg-white/20' : 'bg-blue-100 text-blue-700'}`}>
-                {config.proModels.length === 0 ? 'Premium' : `${config.proTokenCost} token`}
+                {config.proModels.length === 0
+                  ? t('marketplaceNew.premiumBadge', 'Premium')
+                  : `${config.proTokenCost} ${t('marketplaceNew.tokenUnit', 'token')}`}
               </span>
             </div>
           </button>
@@ -699,9 +714,9 @@ const MarketplaceStudio: React.FC = () => {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
-              <span>Oddiy</span>
+              <span>{t('marketplaceNew.basicMode', 'Oddiy')}</span>
               <span className={`px-2 py-0.5 rounded-full text-xs ${imageMode === 'basic' ? 'bg-white/20' : 'bg-emerald-100 text-emerald-700'}`}>
-                {config.basicTokenCost} token
+                {config.basicTokenCost} {t('marketplaceNew.tokenUnit', 'token')}
               </span>
             </div>
           </button>
@@ -711,7 +726,7 @@ const MarketplaceStudio: React.FC = () => {
       {/* Pro Model Selection */}
       {imageMode === 'pro' && config.proModels.length > 1 && (
         <div className="bg-blue-50 rounded-2xl p-6 border border-blue-200">
-          <h3 className="font-semibold text-blue-800 mb-4">Pro modelni tanlang</h3>
+          <h3 className="font-semibold text-blue-800 mb-4">{t('marketplaceNew.selectProModel', 'Pro modelni tanlang')}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {config.proModels.map((model) => (
               <button
@@ -736,7 +751,7 @@ const MarketplaceStudio: React.FC = () => {
           {/* Product Images */}
           <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-gray-800">Mahsulot rasmlari</h3>
+              <h3 className="font-bold text-gray-800">{t('marketplaceNew.productImages', 'Mahsulot rasmlari')}</h3>
               <span className="text-sm text-gray-500">{productImages.filter(Boolean).length}/{config.maxProductImages}</span>
             </div>
             <div className="grid grid-cols-3 gap-3">
@@ -784,7 +799,7 @@ const MarketplaceStudio: React.FC = () => {
           {config.maxStyleImages > 0 && (
             <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-gray-800">Uslub rasmlari (ixtiyoriy)</h3>
+                <h3 className="font-bold text-gray-800">{t('marketplaceNew.styleImagesOptional', 'Uslub rasmlari (ixtiyoriy)')}</h3>
                 <span className="text-sm text-gray-500">{styleImages.filter(Boolean).length}/{config.maxStyleImages}</span>
               </div>
               <div className="grid grid-cols-3 gap-3">
@@ -831,20 +846,20 @@ const MarketplaceStudio: React.FC = () => {
 
           {/* Prompt */}
           <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-            <h3 className="font-bold text-gray-800 mb-4">So'rov matni</h3>
+            <h3 className="font-bold text-gray-800 mb-4">{t('marketplaceNew.promptTitle', "So'rov matni")}</h3>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Masalan: Mahsulotni oq fonda professional tarzda ko'rsating..."
+              placeholder={t('marketplaceNew.promptPlaceholder', "Masalan: Mahsulotni oq fonda professional tarzda ko'rsating...")}
               className="w-full h-32 p-4 border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           {/* Aspect Ratio */}
           <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-            <h3 className="font-bold text-gray-800 mb-2">Nisbat</h3>
+            <h3 className="font-bold text-gray-800 mb-2">{t('marketplaceNew.aspectRatio', 'Nisbat')}</h3>
             <p className="text-sm text-gray-600">
-              Marketplace uchun format doimiy: <strong>3:4 (1080×1440)</strong>
+              {t('marketplaceNew.aspectRatioFixed', 'Marketplace uchun format doimiy:')} <strong>3:4 (1080×1440)</strong>
             </p>
           </div>
 
@@ -861,7 +876,9 @@ const MarketplaceStudio: React.FC = () => {
               <div className="flex items-center justify-center gap-3">
                 <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
                 <span>
-                  {batchStatus === 'queued' ? "Navbatda..." : 'Yaratilmoqda...'}
+                  {batchStatus === 'queued'
+                    ? t('marketplaceNew.status.queuedLong', 'Navbatda...')
+                    : t('marketplaceNew.status.generatingLong', 'Yaratilmoqda...')}
                   {batchStatus && batchStatus !== 'queued' ? ` (${progressPct}%)` : ''}
                 </span>
               </div>
@@ -869,14 +886,14 @@ const MarketplaceStudio: React.FC = () => {
               <div className="flex items-center justify-center gap-3">
                 <FiZap className="w-6 h-6" aria-hidden />
                 <span>
-                  Keyingi: {String(Math.floor(cooldownSeconds / 60)).padStart(2, '0')}:
+                  {t('marketplaceNew.nextShort', 'Keyingi:')} {String(Math.floor(cooldownSeconds / 60)).padStart(2, '0')}:
                   {String(cooldownSeconds % 60).padStart(2, '0')}
                 </span>
               </div>
             ) : (
               <div className="flex items-center justify-center gap-3">
                 <FiZap className="w-6 h-6" aria-hidden />
-                <span>Yaratish ({currentTokenCost} token)</span>
+                <span>{t('marketplaceNew.generateWithCost', `Yaratish (${currentTokenCost} token)`).replace('{cost}', String(currentTokenCost))}</span>
               </div>
             )}
           </button>
@@ -885,37 +902,37 @@ const MarketplaceStudio: React.FC = () => {
             <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4 text-sm text-gray-700">
               {cooldownSeconds > 0 && !generating && (
                 <p>
-                  Tarif limiti: keyingi generatsiya{' '}
+                  {t('marketplaceNew.cooldown.planLimitPrefix', 'Tarif limiti: keyingi generatsiya')}{' '}
                   <strong>
                     {String(Math.floor(cooldownSeconds / 60)).padStart(2, '0')}:
                     {String(cooldownSeconds % 60).padStart(2, '0')}
                   </strong>{' '}
-                  dan keyin.
+                  {t('marketplaceNew.cooldown.after', 'dan keyin.')}
                 </p>
               )}
 
               {generating && batchStatus === 'queued' && (
                 <div className="space-y-1">
-                  <p className="font-semibold">Siz navbatdasiz</p>
-                  <p>Navbat: {queuePosition ?? '...'}</p>
+                  <p className="font-semibold">{t('marketplaceNew.queue.youAreInQueue', 'Siz navbatdasiz')}</p>
+                  <p>{t('marketplaceNew.queue.position', 'Navbat')}: {queuePosition ?? '...'}</p>
                   <p>
-                    Taxminiy vaqt:{' '}
+                    {t('marketplaceNew.queue.eta', 'Taxminiy vaqt')}: {' '}
                     {formatEta(etaSeconds)}
                   </p>
-                  {typeof parallelLimit === 'number' && <p>Parallel limit: {parallelLimit}</p>}
+                  {typeof parallelLimit === 'number' && <p>{t('marketplaceNew.queue.parallelLimit', 'Parallel limit')}: {parallelLimit}</p>}
                 </div>
               )}
 
               {generating && batchStatus && batchStatus !== 'queued' && (
                 <div className="space-y-1">
-                  <p className="font-semibold">Yaratilmoqda</p>
-                  <p>Progress: {progressPct}%</p>
+                  <p className="font-semibold">{t('marketplaceNew.generating', 'Yaratilmoqda')}</p>
+                  <p>{t('marketplaceNew.progress', 'Progress')}: {progressPct}%</p>
                   {typeof etaSeconds === 'number' && (
                     <p>
-                      Taxminiy vaqt: {formatEta(etaSeconds)}
+                      {t('marketplaceNew.queue.eta', 'Taxminiy vaqt')}: {formatEta(etaSeconds)}
                     </p>
                   )}
-                  {typeof parallelLimit === 'number' && <p>Parallel limit: {parallelLimit}</p>}
+                  {typeof parallelLimit === 'number' && <p>{t('marketplaceNew.queue.parallelLimit', 'Parallel limit')}: {parallelLimit}</p>}
                 </div>
               )}
             </div>
@@ -924,7 +941,7 @@ const MarketplaceStudio: React.FC = () => {
 
         {/* Output Section */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-          <h3 className="font-bold text-gray-800 mb-4">Yaratilgan rasmlar</h3>
+          <h3 className="font-bold text-gray-800 mb-4">{t('marketplaceNew.generatedImages', 'Yaratilgan rasmlar')}</h3>
 
           {batchItems.length > 0 && (
             <div className="mb-4">
@@ -942,13 +959,13 @@ const MarketplaceStudio: React.FC = () => {
                       <span className="truncate">{it.label || `Rasm ${it.index + 1}`}</span>
                       <span className="shrink-0">
                         {it.status === 'queued'
-                          ? 'navbatda'
+                          ? t('marketplaceNew.itemStatus.queued', 'navbatda')
                           : it.status === 'processing'
-                            ? 'ishlanmoqda'
+                            ? t('marketplaceNew.itemStatus.processing', 'ishlanmoqda')
                             : it.status === 'succeeded'
-                              ? 'tayyor'
+                              ? t('marketplaceNew.itemStatus.succeeded', 'tayyor')
                               : it.status === 'failed'
-                                ? 'xato'
+                                ? t('marketplaceNew.itemStatus.failed', 'xato')
                                 : it.status}
                       </span>
                     </div>
@@ -967,7 +984,7 @@ const MarketplaceStudio: React.FC = () => {
                       onClick={() => downloadImage(img, idx)}
                       className="px-4 py-2 bg-white text-gray-800 rounded-lg font-semibold hover:bg-gray-100"
                     >
-                      Yuklab olish
+                      {t('common.download', 'Yuklab olish')}
                     </button>
                   </div>
                 </div>
@@ -978,7 +995,7 @@ const MarketplaceStudio: React.FC = () => {
               <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              <p>Rasmlar bu yerda ko'rinadi</p>
+              <p>{t('marketplaceNew.empty', "Rasmlar bu yerda ko'rinadi")}</p>
             </div>
           )}
         </div>
@@ -990,28 +1007,28 @@ const MarketplaceStudio: React.FC = () => {
           <svg className="w-5 h-5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
           </svg>
-          Token narxlari ({plan === 'business_plus' ? 'Business+' : plan} tarif)
+          {t('marketplaceNew.tokenPricingTitle', 'Token narxlari')} ({plan === 'business_plus' ? 'Business+' : plan} {t('marketplaceNew.planSuffix', 'tarif')})
         </h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white p-4 rounded-xl border border-emerald-200">
-            <p className="text-xs text-gray-500 mb-1">Oddiy rasm</p>
+            <p className="text-xs text-gray-500 mb-1">{t('marketplaceNew.pricing.basicImage', 'Oddiy rasm')}</p>
             <p className="text-2xl font-black text-emerald-600">{config.basicTokenCost}</p>
-            <p className="text-xs text-gray-400">token / so'rov</p>
+            <p className="text-xs text-gray-400">{t('marketplaceNew.pricing.perRequest', "token / so'rov")}</p>
           </div>
           <div className="bg-white p-4 rounded-xl border border-blue-200">
-            <p className="text-xs text-gray-500 mb-1">Pro rasm</p>
+            <p className="text-xs text-gray-500 mb-1">{t('marketplaceNew.pricing.proImage', 'Pro rasm')}</p>
             <p className="text-2xl font-black text-blue-600">{config.proTokenCost}</p>
-            <p className="text-xs text-gray-400">token / so'rov</p>
+            <p className="text-xs text-gray-400">{t('marketplaceNew.pricing.perRequest', "token / so'rov")}</p>
           </div>
           <div className="bg-white p-4 rounded-xl border border-purple-200">
-            <p className="text-xs text-gray-500 mb-1">Chiqadigan rasmlar</p>
+            <p className="text-xs text-gray-500 mb-1">{t('marketplaceNew.pricing.outputs', 'Chiqadigan rasmlar')}</p>
             <p className="text-2xl font-black text-purple-600">{config.outputCount}</p>
-            <p className="text-xs text-gray-400">ta / generatsiya</p>
+            <p className="text-xs text-gray-400">{t('marketplaceNew.pricing.perGeneration', 'ta / generatsiya')}</p>
           </div>
           <div className="bg-white p-4 rounded-xl border border-amber-200">
-            <p className="text-xs text-gray-500 mb-1">Qolgan token</p>
+            <p className="text-xs text-gray-500 mb-1">{t('marketplaceNew.pricing.tokensRemaining', 'Qolgan token')}</p>
             <p className="text-2xl font-black text-amber-600">{isAdmin ? '∞' : tokensRemaining}</p>
-            <p className="text-xs text-gray-400">token</p>
+            <p className="text-xs text-gray-400">{t('marketplaceNew.tokenUnit', 'token')}</p>
           </div>
         </div>
       </div>

@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
+type Language = 'uz' | 'ru';
+
+function parseLocalePrefix(pathname: string): { lang: Language; strippedPathname: string } | null {
+  const match = pathname.match(/^\/(uz|ru)(\/|$)/);
+  if (!match) return null;
+  const lang = match[1] as Language;
+  const stripped = pathname.replace(/^\/(uz|ru)(?=\/|$)/, '') || '/';
+  return { lang, strippedPathname: stripped };
+}
+
 async function verifyEdgeJwt(token: string) {
   try {
     const secret = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
@@ -13,7 +23,15 @@ async function verifyEdgeJwt(token: string) {
 }
 
 export async function middleware(request: NextRequest) {
-  const pathname = request.nextUrl.pathname;
+  const originalPathname = request.nextUrl.pathname;
+  const locale = parseLocalePrefix(originalPathname);
+  const pathname = locale?.strippedPathname ?? originalPathname;
+  const localePrefix = locale ? `/${locale.lang}` : '';
+
+  // Avoid locale prefixes for API routes
+  if (locale && pathname.startsWith('/api')) {
+    return NextResponse.redirect(new URL(pathname, request.url));
+  }
 
   // Block Next.js Server Action calls early.
   // We currently don't use Server Actions in this app; these requests are most often
@@ -28,6 +46,24 @@ export async function middleware(request: NextRequest) {
         'Cache-Control': 'no-store',
       },
     });
+  }
+
+  // Default locale routing: if there is no /uz or /ru prefix, redirect.
+  // Keep API routes un-prefixed.
+  if (!locale && !originalPathname.startsWith('/api')) {
+    const cookieLang = request.cookies.get('language')?.value;
+    const preferred = cookieLang === 'ru' ? 'ru' : 'uz';
+
+    const url = request.nextUrl.clone();
+    url.pathname = originalPathname === '/' ? `/${preferred}` : `/${preferred}${originalPathname}`;
+
+    const response = NextResponse.redirect(url);
+    response.cookies.set('language', preferred, {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'lax',
+    });
+    return response;
   }
 
   const authToken = request.cookies.get('auth_token')?.value;
@@ -48,16 +84,30 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith('/admin')) {
     // Require authentication
     if (!authToken || !userPayload) {
-      return NextResponse.redirect(new URL('/login', request.url));
+      return NextResponse.redirect(new URL(`${localePrefix}/login`, request.url));
     }
 
     // Require admin role
     if (userPayload.role !== 'admin') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+      return NextResponse.redirect(new URL(`${localePrefix}/dashboard`, request.url));
     }
 
     // Admins don't need subscription check - they have full access
-    return NextResponse.next();
+    if (!locale) {
+      return NextResponse.next();
+    }
+
+    const headers = new Headers(request.headers);
+    headers.set('x-language', locale.lang);
+    const response = NextResponse.rewrite(new URL(pathname, request.url), {
+      request: { headers },
+    });
+    response.cookies.set('language', locale.lang, {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'lax',
+    });
+    return response;
   }
 
   // ============================================
@@ -66,7 +116,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith('/dashboard')) {
     // Require authentication
     if (!authToken || !userPayload) {
-      return NextResponse.redirect(new URL('/login', request.url));
+      return NextResponse.redirect(new URL(`${localePrefix}/login`, request.url));
     }
   }
 
@@ -75,7 +125,7 @@ export async function middleware(request: NextRequest) {
   // ============================================
   if (pathname === '/pricing') {
     if (authToken && userPayload && userPayload.subscription_status === 'active') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+      return NextResponse.redirect(new URL(`${localePrefix}/dashboard`, request.url));
     }
   }
 
@@ -85,9 +135,9 @@ export async function middleware(request: NextRequest) {
   if (pathname === '/login' || pathname === '/register') {
     if (authToken && userPayload) {
       if (userPayload.role === 'admin') {
-        return NextResponse.redirect(new URL('/admin', request.url));
+        return NextResponse.redirect(new URL(`${localePrefix}/admin`, request.url));
       }
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+      return NextResponse.redirect(new URL(`${localePrefix}/dashboard`, request.url));
     }
   }
 
@@ -103,6 +153,21 @@ export async function middleware(request: NextRequest) {
     response.headers.set('X-XSS-Protection', '1; mode=block');
     response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     
+    return response;
+  }
+
+  if (locale) {
+    const headers = new Headers(request.headers);
+    headers.set('x-language', locale.lang);
+
+    const response = NextResponse.rewrite(new URL(pathname, request.url), {
+      request: { headers },
+    });
+    response.cookies.set('language', locale.lang, {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'lax',
+    });
     return response;
   }
 

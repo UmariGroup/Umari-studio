@@ -3,11 +3,29 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Footer as LandingFooter } from '@/components/landing/Footer';
+import { useLanguage } from '@/lib/LanguageContext';
+
+function stripLocalePrefix(pathname: string): string {
+  const stripped = pathname.replace(/^\/(uz|ru)(?=\/|$)/, '');
+  return stripped || '/';
+}
 
 export default function Footer() {
   const pathname = usePathname();
+  const { t, language } = useLanguage();
+  const prefix = language === 'ru' ? '/ru' : '/uz';
+  const strippedPathname = stripLocalePrefix(pathname);
 
-  if (pathname === '/') {
+  const isMarketing =
+    strippedPathname === '/' ||
+    strippedPathname === '/features' ||
+    strippedPathname === '/examples' ||
+    strippedPathname === '/pricing' ||
+    strippedPathname === '/faq' ||
+    strippedPathname === '/login' ||
+    strippedPathname === '/register';
+
+  if (isMarketing) {
     return <LandingFooter />;
   }
 
@@ -23,30 +41,29 @@ export default function Footer() {
               <span className="text-2xl font-bold">Umari AI</span>
             </div>
             <p className="mb-4 max-w-md text-gray-300">
-              AI asosidagi ijodiy studiya. Professional marketplace rasmlari, video ssenariylar,
-              copywriting va analitika - hammasi bir joyda.
+              {t('footerApp.description')}
             </p>
           </div>
 
           <div>
-            <h3 className="mb-4 text-lg font-semibold">Tezkor havolalar</h3>
+            <h3 className="mb-4 text-lg font-semibold">{t('footerApp.quickLinks')}</h3>
             <ul className="space-y-2">
-              <li><Link href="/marketplace" className="text-gray-300 transition hover:text-white">Market studiya</Link></li>
-              <li><Link href="/video-studio" className="text-gray-300 transition hover:text-white">Video studiya</Link></li>
-              <li><Link href="/copywriter" className="text-gray-300 transition hover:text-white">Copywriter studiya</Link></li>
-              <li><Link href="/analytics" className="text-gray-300 transition hover:text-white">Analitika studiya</Link></li>
-              <li><Link href="/chat" className="text-gray-300 transition hover:text-white">AI suhbat</Link></li>
+              <li><Link href={`${prefix}/marketplace`} className="text-gray-300 transition hover:text-white">{t('nav.marketplace')}</Link></li>
+              <li><Link href={`${prefix}/video-studio`} className="text-gray-300 transition hover:text-white">{t('nav.videoStudio')}</Link></li>
+              <li><Link href={`${prefix}/copywriter`} className="text-gray-300 transition hover:text-white">{t('nav.copywriter')}</Link></li>
+              <li><Link href={`${prefix}/analytics`} className="text-gray-300 transition hover:text-white">{t('footerApp.analytics')}</Link></li>
+              <li><Link href={`${prefix}/chat`} className="text-gray-300 transition hover:text-white">{t('nav.chat')}</Link></li>
             </ul>
           </div>
 
           <div>
-            <h3 className="mb-4 text-lg font-semibold">Yordam</h3>
+            <h3 className="mb-4 text-lg font-semibold">{t('footerApp.help')}</h3>
             <ul className="space-y-2">
-              <li><Link href="/pricing" className="text-gray-300 transition hover:text-white">Narxlar</Link></li>
-              <li><a href="#" className="text-gray-300 transition hover:text-white">Qo'llanma</a></li>
-              <li><a href="#" className="text-gray-300 transition hover:text-white">Savol-javob</a></li>
-              <li><a href="#" className="text-gray-300 transition hover:text-white">Bog'lanish</a></li>
-              <li><a href="#" className="text-gray-300 transition hover:text-white">Yordam markazi</a></li>
+              <li><Link href={`${prefix}/pricing`} className="text-gray-300 transition hover:text-white">{t('nav.pricing')}</Link></li>
+              <li><a href="#" className="text-gray-300 transition hover:text-white">{t('footerApp.guide')}</a></li>
+              <li><Link href={`${prefix}/faq`} className="text-gray-300 transition hover:text-white">{t('nav.faq')}</Link></li>
+              <li><a href="#" className="text-gray-300 transition hover:text-white">{t('footerApp.contact')}</a></li>
+              <li><a href="#" className="text-gray-300 transition hover:text-white">{t('footerApp.helpCenter')}</a></li>
             </ul>
           </div>
         </div>
@@ -54,12 +71,12 @@ export default function Footer() {
         <div className="mt-8 border-t border-gray-800 pt-8">
           <div className="flex flex-col items-center justify-between md:flex-row">
             <div className="text-sm text-gray-400">
-              &copy; 2026 Umari AI. Barcha huquqlar himoyalangan.
+              &copy; {new Date().getFullYear()} Umari AI. {t('footer.allRights')}
             </div>
             <div className="mt-4 flex space-x-6 md:mt-0">
-              <a href="#" className="text-sm text-gray-400 transition hover:text-white">Maxfiylik siyosati</a>
-              <a href="#" className="text-sm text-gray-400 transition hover:text-white">Foydalanish shartlari</a>
-              <a href="#" className="text-sm text-gray-400 transition hover:text-white">Cookie-fayllar</a>
+              <Link href={`${prefix}/privacy`} className="text-sm text-gray-400 transition hover:text-white">{t('footer.privacy')}</Link>
+              <Link href={`${prefix}/terms`} className="text-sm text-gray-400 transition hover:text-white">{t('footer.terms')}</Link>
+              <a href="#" className="text-sm text-gray-400 transition hover:text-white">{t('footerApp.cookies')}</a>
             </div>
           </div>
         </div>

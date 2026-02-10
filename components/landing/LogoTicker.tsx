@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Container } from '@/components/ui/Container';
+import { useLanguage } from '@/lib/LanguageContext';
 
 const logos = [
     { name: 'Miluna', logo: 'https://placehold.co/150x40/png?text=Miluna' },
@@ -15,13 +16,14 @@ const logos = [
 ];
 
 export function LogoTicker() {
+    const { t } = useLanguage();
     const durationSeconds = 8;
 
     return (
         <section className="py-8 md:py-12 bg-white border-b border-slate-100 overflow-hidden">
             <Container>
                 <div className="flex items-center gap-8">
-                    <span className="text-sm font-medium text-slate-500 whitespace-nowrap">Yetakchi brendlar tanlovi:</span>
+                    <span className="text-sm font-medium text-slate-500 whitespace-nowrap">{t('home.brands_title')}:</span>
                     <div className="flex-1 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black,transparent)]">
                         <div
                             className="ticker-track flex w-max items-center gap-10 pr-10 md:gap-14 md:pr-14 will-change-transform"

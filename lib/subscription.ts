@@ -20,6 +20,8 @@ export interface DbUserAccount {
   email: string;
   first_name: string | null;
   last_name: string | null;
+  phone?: string | null;
+  telegram_username?: string | null;
   role: 'user' | 'admin';
   subscription_status: SubscriptionStatus;
   subscription_plan: SubscriptionPlan;
@@ -90,13 +92,35 @@ export async function getAuthenticatedUserAccount(): Promise<DbUserAccount> {
     [session.id]
   );
 
-  const result = await query(
-    `SELECT id, email, first_name, last_name, role,
-            subscription_status, subscription_plan, subscription_expires_at, tokens_remaining
-     FROM users
-     WHERE id = $1`,
-    [session.id]
-  );
+  let result;
+  try {
+    result = await query(
+      `SELECT id, email, first_name, last_name, phone, telegram_username, role,
+              subscription_status, subscription_plan, subscription_expires_at, tokens_remaining
+       FROM users
+       WHERE id = $1`,
+      [session.id]
+    );
+  } catch (err: any) {
+    // Backward compatibility: older DBs might not have phone/telegram_username yet.
+    const code = err?.code ? String(err.code) : '';
+    const message = err?.message ? String(err.message) : '';
+    const isUndefinedColumn = code === '42703' || message.toLowerCase().includes('does not exist');
+    const mentionsContactColumns =
+      message.toLowerCase().includes('phone') || message.toLowerCase().includes('telegram_username');
+
+    if (isUndefinedColumn && mentionsContactColumns) {
+      result = await query(
+        `SELECT id, email, first_name, last_name, role,
+                subscription_status, subscription_plan, subscription_expires_at, tokens_remaining
+         FROM users
+         WHERE id = $1`,
+        [session.id]
+      );
+    } else {
+      throw err;
+    }
+  }
 
   if (result.rows.length === 0) {
     throw new BillingError({
@@ -113,6 +137,8 @@ export async function getAuthenticatedUserAccount(): Promise<DbUserAccount> {
     email: String(row.email),
     first_name: row.first_name ?? null,
     last_name: row.last_name ?? null,
+    phone: 'phone' in row ? (row.phone ?? null) : null,
+    telegram_username: 'telegram_username' in row ? (row.telegram_username ?? null) : null,
     role: row.role === 'admin' ? 'admin' : 'user',
     subscription_status: (row.subscription_status as SubscriptionStatus) || 'free',
     subscription_plan: normalizeSubscriptionPlan(row.subscription_plan),

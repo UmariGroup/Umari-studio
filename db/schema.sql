@@ -12,6 +12,8 @@ CREATE TABLE users (
   subscription_status VARCHAR(50) DEFAULT 'free' CHECK (subscription_status IN ('free', 'active', 'expired')),
   subscription_plan VARCHAR(50) DEFAULT 'free' CHECK (subscription_plan IN ('free', 'starter', 'pro', 'business_plus')),
   subscription_expires_at TIMESTAMP,
+  phone TEXT,
+  telegram_username TEXT,
   tokens_remaining NUMERIC(10, 2) DEFAULT 0,
   google_id VARCHAR(255) UNIQUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

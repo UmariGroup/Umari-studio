@@ -4,49 +4,52 @@ import { motion } from 'framer-motion';
 import { Container } from '@/components/ui/Container';
 import { Badge } from '@/components/ui/Badge';
 import { LayoutGrid, Zap, Video, Type } from 'lucide-react';
-
-const features = [
-  {
-    title: 'Market studiya',
-    description: "Mahsulot rasmlarini professional fon va yorug'lik bilan tayyorlaydi.",
-    icon: LayoutGrid,
-    className: 'md:col-span-2',
-    color: 'bg-blue-50 text-blue-700',
-  },
-  {
-    title: 'Video studiya',
-    description: "So'rov matni asosida reklama videolarini tez yaratadi.",
-    icon: Video,
-    className: 'md:col-span-1',
-    color: 'bg-violet-50 text-violet-700',
-  },
-  {
-    title: 'Aqlli Copywriter',
-    description: 'UZ + RU marketplace matnlarini strukturali tarzda yozadi.',
-    icon: Type,
-    className: 'md:col-span-1',
-    color: 'bg-indigo-50 text-indigo-700',
-  },
-  {
-    title: 'Tezkor ish jarayoni',
-    description: "Bir oynada so'rov, reference va natijalarni boshqarasiz.",
-    icon: Zap,
-    className: 'md:col-span-2',
-    color: 'bg-amber-50 text-amber-700',
-  },
-];
+import { useLanguage } from '@/lib/LanguageContext';
 
 export function Features() {
+  const { t } = useLanguage();
+
+  const features = [
+    {
+      title: t('home.features_marketplace'),
+      description: t('home.features_marketplace_desc'),
+      icon: LayoutGrid,
+      className: 'md:col-span-2',
+      color: 'bg-blue-50 text-blue-700',
+    },
+    {
+      title: t('home.features_video'),
+      description: t('home.features_video_desc'),
+      icon: Video,
+      className: 'md:col-span-1',
+      color: 'bg-violet-50 text-violet-700',
+    },
+    {
+      title: t('home.features_copywriter'),
+      description: t('home.features_copywriter_desc'),
+      icon: Type,
+      className: 'md:col-span-1',
+      color: 'bg-indigo-50 text-indigo-700',
+    },
+    {
+      title: t('home.features_workflow'),
+      description: t('home.features_workflow_desc'),
+      icon: Zap,
+      className: 'md:col-span-2',
+      color: 'bg-amber-50 text-amber-700',
+    },
+  ];
+
   return (
     <section id="features" className="bg-slate-50 py-20">
       <Container>
         <div className="mb-16 flex flex-col items-center text-center">
-          <Badge variant="indigo" className="mb-4">Imkoniyatlar</Badge>
+          <Badge variant="indigo" className="mb-4">{t('nav.features')}</Badge>
           <h2 className="text-3xl font-bold tracking-tight text-slate-900 md:text-5xl">
-            Bitta platformada to'liq studio
+            {t('home.features_title')}
           </h2>
           <p className="mt-4 max-w-2xl text-lg text-slate-600">
-            Kontentingizni alohida xizmatlarga bo'lmasdan, yagona ish jarayoni orqali boshqaring.
+            {t('home.features_subtitle')}
           </p>
         </div>
 

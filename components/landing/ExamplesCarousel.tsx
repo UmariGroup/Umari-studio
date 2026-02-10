@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import Image from 'next/image';
 import { Container } from '@/components/ui/Container';
 import { Badge } from '@/components/ui/Badge';
+import { useLanguage } from '@/lib/LanguageContext';
 
 const exampleImages = [
   '/examples/marketplace.png',
@@ -32,18 +33,18 @@ const secondRow = [...exampleImages.slice(4), ...exampleImages.slice(0, 4), ...e
 
 function ExampleCard({
   src,
-  index,
   priority = false,
+  alt,
 }: {
   src: string;
-  index: number;
   priority?: boolean;
+  alt: string;
 }) {
   return (
     <div className="examples-card group relative aspect-[3/4] w-[132px] shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:w-[168px] md:w-[200px]">
       <Image
         src={src}
-        alt={`Umari namuna ${index + 1}`}
+        alt={alt}
         fill
         priority={priority}
         loading={priority ? 'eager' : 'lazy'}
@@ -56,6 +57,8 @@ function ExampleCard({
 }
 
 export function ExamplesCarousel() {
+  const { t } = useLanguage();
+
   return (
     <section id="examples" className="relative overflow-hidden border-y border-slate-200 bg-gradient-to-b from-white via-blue-50/40 to-white py-20 lg:py-24">
       <Container>
@@ -66,9 +69,9 @@ export function ExamplesCarousel() {
           viewport={{ once: true }}
           className="mb-10 text-center"
         >
-          <Badge variant="violet" className="mb-4">Namunalar</Badge>
-          <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-5xl">Ishlardan jonli namunalar</h2>
-          
+          <Badge variant="violet" className="mb-4">{t('home.examples_title')}</Badge>
+          <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-5xl">{t('home.examples_heading')}</h2>
+          <p className="mx-auto mt-4 max-w-2xl text-slate-600">{t('home.examples_subtitle')}</p>
         </motion.div>
       </Container>
 
@@ -78,13 +81,18 @@ export function ExamplesCarousel() {
 
         <div className="examples-marquee">
           {firstRow.map((src, index) => (
-            <ExampleCard key={`row1-${index}-${src}`} src={src} index={index} priority={index < 4} />
+            <ExampleCard
+              key={`row1-${index}-${src}`}
+              src={src}
+              priority={index < 4}
+              alt={t('home.example_alt')}
+            />
           ))}
         </div>
 
         <div className="examples-marquee examples-marquee-reverse">
           {secondRow.map((src, index) => (
-            <ExampleCard key={`row2-${index}-${src}`} src={src} index={index} />
+            <ExampleCard key={`row2-${index}-${src}`} src={src} alt={t('home.example_alt')} />
           ))}
         </div>
       </div>

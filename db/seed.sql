@@ -1,5 +1,9 @@
 -- Seed data for development
 
+-- Backward compatible migration bits (safe to run multiple times)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_username TEXT;
+
 -- Insert default subscription plans
 INSERT INTO subscription_plans (name, duration_months, price, tokens_included, features, description)
 VALUES 

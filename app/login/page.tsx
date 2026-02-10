@@ -5,9 +5,11 @@ import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import GoogleLoginButton from '../../components/GoogleLoginButton';
+import { useLanguage } from '@/lib/LanguageContext';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -35,10 +37,10 @@ export default function LoginPage() {
           router.push('/dashboard');
         }
       } else {
-        setError(data.message || 'Kirish amalga oshmadi');
+        setError(data.message || t('auth.loginError'));
       }
     } catch {
-      setError('Xatolik yuz berdi. Qayta urinib ko\'ring.');
+      setError(t('auth.failedToLogin'));
     } finally {
       setLoading(false);
     }
@@ -55,8 +57,8 @@ export default function LoginPage() {
               </div>
               <span className="text-2xl font-bold text-gray-900">Umari AI</span>
             </div>
-            <h1 className="mb-2 text-2xl font-bold text-gray-900">Xush kelibsiz!</h1>
-            <p className="text-gray-600">AI studiyangizga kiring</p>
+            <h1 className="mb-2 text-2xl font-bold text-gray-900">{t('auth.loginTitle')}</h1>
+            <p className="text-gray-600">{t('auth.loginSubtitle')}</p>
           </div>
 
           {error ? (
@@ -71,34 +73,34 @@ export default function LoginPage() {
 
           <div className="relative mb-6">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-600" />
+              
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="bg-transparent px-2 text-gray-400">yoki email bilan</span>
+              <span className="bg-transparent px-2 text-gray-400">{t('auth.emailPassword')}</span>
             </div>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Email</label>
+              <label className="mb-2 block text-sm font-medium text-gray-700">{t('auth.email')}</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
-                placeholder="email@manzil.com"
+                placeholder="email@example.com"
                 required
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Parol</label>
+              <label className="mb-2 block text-sm font-medium text-gray-700">{t('auth.password')}</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
-                placeholder="Parolingizni kiriting"
+                placeholder={t('auth.password')}
                 required
               />
             </div>
@@ -108,15 +110,15 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full rounded-lg bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
             >
-              {loading ? 'Kirilmoqda...' : 'Kirish'}
+              {loading ? t('auth.loggingIn') : t('auth.signIn')}
             </button>
           </form>
 
           <div className="mt-6 text-center text-gray-400">
             <p>
-              Akkauntingiz yo'qmi?{' '}
+              {t('auth.dontHaveAccount')}{' '}
               <Link href="/register" className="text-blue-600 hover:text-blue-700">
-                Ro'yxatdan o'tish
+                {t('auth.signUp')}
               </Link>
             </p>
           </div>

@@ -3,36 +3,39 @@
 import { motion } from 'framer-motion';
 import { Container } from '@/components/ui/Container';
 import { Badge } from '@/components/ui/Badge';
-
-const testimonials = [
-  {
-    name: 'Jasur Karimov',
-    role: 'E-commerce menejer',
-    content: "Umari AI bilan mahsulot joylash jarayoni bir necha barobar tezlashdi. Oldin kun olgan ishlar endi daqiqalarda bityapti.",
-    image: 'https://placehold.co/100x100/png?text=JK',
-  },
-  {
-    name: 'Malika Ismoilova',
-    role: 'Brend rahbari',
-    content: "AI yaratgan rasmlar sifati studiya suratlaridan deyarli farq qilmaydi. Bir xil vizual uslubni saqlash juda osonlashdi.",
-    image: 'https://placehold.co/100x100/png?text=MI',
-  },
-  {
-    name: "Otabek Yo'ldoshev",
-    role: 'Agentlik asoschisi',
-    content: "Bir nechta mijoz brendini parallel yuritishda bu platforma katta vaqt tejalishini berdi. Workflow ancha tartibli bo'ldi.",
-    image: 'https://placehold.co/100x100/png?text=OY',
-  },
-];
+import { useLanguage } from '@/lib/LanguageContext';
 
 export function Testimonials() {
+  const { t } = useLanguage();
+
+  const testimonials = [
+    {
+      name: t('home.testimonials.items.0.name'),
+      role: t('home.testimonials.items.0.role'),
+      content: t('home.testimonials.items.0.content'),
+      image: 'https://placehold.co/100x100/png?text=JK',
+    },
+    {
+      name: t('home.testimonials.items.1.name'),
+      role: t('home.testimonials.items.1.role'),
+      content: t('home.testimonials.items.1.content'),
+      image: 'https://placehold.co/100x100/png?text=MI',
+    },
+    {
+      name: t('home.testimonials.items.2.name'),
+      role: t('home.testimonials.items.2.role'),
+      content: t('home.testimonials.items.2.content'),
+      image: 'https://placehold.co/100x100/png?text=OY',
+    },
+  ];
+
   return (
     <section className="overflow-hidden bg-white py-20 lg:py-32">
       <Container>
         <div className="mx-auto mb-16 max-w-2xl text-center">
-          <Badge variant="violet" className="mb-4">Mijozlar fikri</Badge>
+          <Badge variant="violet" className="mb-4">{t('home.testimonials_badge')}</Badge>
           <h2 className="text-3xl font-bold tracking-tight text-slate-900 lg:text-5xl">
-            Foydalanuvchilar ishonchi
+            {t('home.testimonials_title')}
           </h2>
         </div>
 

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { FiArrowLeft, FiDownload } from 'react-icons/fi';
 import { useToast } from './ToastProvider';
 import { getTelegramSubscribeUrl } from '@/lib/telegram';
+import { useLanguage } from '@/lib/LanguageContext';
 import {
   SUBSCRIPTION_PLANS,
   type SubscriptionPlan,
@@ -13,32 +14,46 @@ import {
 // ============ CONSTANTS ============
 const MARKETPLACES = ['Uzum Market', 'ANAMARKET', 'Yandex', 'Ozon', 'WB'];
 
-const IMAGE_SLOT_LABELS = ['Old (Front)', 'Orqa (Back)', "Qo'shimcha"];
+const FIELD_ORDER = [
+  'CAT',
+  'NAME',
+  'COUNTRY',
+  'BRAND',
+  'MODEL',
+  'WARRANTY',
+  'SHORT_DESC',
+  'FULL_DESC',
+  'PHOTOS_INFO',
+  'VIDEO_REC',
+  'SPECS',
+  'PROPS',
+  'INSTR',
+  'SIZE',
+  'COMP',
+  'CARE',
+  'SKU',
+  'IKPU',
+] as const;
 
-const FIELD_LABELS: Record<string, string> = {
-  CAT: '1. Kategoriya / Категория',
-  NAME: '2. Mahsulot nomi / Название',
-  COUNTRY: '3. Ishlab chiqarilgan davlat / Страна',
-  BRAND: '4. Brend / Brend',
-  MODEL: '5. Model / Модель',
-  WARRANTY: '6. Kafolat / Гарантия',
-  SHORT_DESC: '7. Qisqa tavsif / Краткое описание',
-  FULL_DESC: "8. To'liq tavsif / Полное описание",
-  PHOTOS_INFO: "9. Rasmlar bo'yicha tavsiya / Фотографии",
-  VIDEO_REC: '10. Video tavsiyalar / Видео',
-  SPECS: '11. Xususiyatlar / Характеристики',
-  PROPS: '12. Mahsulot afzalliklari / Свойства',
-  INSTR: "13. Yo'riqnoma / Инструкция",
-  SIZE: "14. O'lchamlar / Размерная сетка",
-  COMP: '15. Tarkibi / Состав',
-  CARE: '16. Parvarishlash / Уход',
-  SKU: '17. SKU KOD',
-  IKPU: '18. IKPU (ИКПУ)',
-};
-
-const TECHNICAL_DESC: Record<string, string> = {
-  SKU: 'Mahsulotni inventarizatsiya qilish va omborda aniqlash uchun ishlatiladigan noyob identifikator.',
-  IKPU: "O'zbekiston Respublikasi mahsulot va xizmatlarning yagona elektron tasniflagichi (Soliq tizimi uchun zarur).",
+const FIELD_LABEL_KEYS: Record<(typeof FIELD_ORDER)[number], string> = {
+  CAT: 'copywriter.category1',
+  NAME: 'copywriter.category2',
+  COUNTRY: 'copywriter.category3',
+  BRAND: 'copywriter.category4',
+  MODEL: 'copywriter.category5',
+  WARRANTY: 'copywriter.category6',
+  SHORT_DESC: 'copywriter.category7',
+  FULL_DESC: 'copywriter.category8',
+  PHOTOS_INFO: 'copywriter.category9',
+  VIDEO_REC: 'copywriter.category10',
+  SPECS: 'copywriter.category11',
+  PROPS: 'copywriter.category12',
+  INSTR: 'copywriter.category13',
+  SIZE: 'copywriter.category14',
+  COMP: 'copywriter.category15',
+  CARE: 'copywriter.category16',
+  SKU: 'copywriter.category17',
+  IKPU: 'copywriter.category18',
 };
 
 // ============ TOKEN COSTS ============
@@ -59,6 +74,13 @@ interface UserData {
 // ============ COMPONENT ============
 const CopywriterStudio: React.FC = () => {
   const toast = useToast();
+  const { t, language } = useLanguage();
+
+  const withLang = (href: string) => {
+    if (!href.startsWith('/')) return href;
+    const stripped = href.replace(/^\/(uz|ru)(?=\/|$)/, '');
+    return `/${language}${stripped || ''}`;
+  };
 
   // User state
   const [user, setUser] = useState<UserData | null>(null);
@@ -73,6 +95,12 @@ const CopywriterStudio: React.FC = () => {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(10);
   const accumulatedText = useRef('');
+
+  const imageSlotLabels = [
+    t('copywriter.frontImage', 'Old'),
+    t('copywriter.backImage', 'Orqa'),
+    t('copywriter.additionalImage', "Qo'shimcha"),
+  ];
 
   // Derived values
   const plan = user?.subscription_plan || 'free';
@@ -159,7 +187,7 @@ const CopywriterStudio: React.FC = () => {
 
   const parseIncremental = (text: string) => {
     const data: Record<string, string> = {};
-    const keys = Object.keys(FIELD_LABELS);
+    const keys = FIELD_ORDER as unknown as string[];
     keys.forEach((key, index) => {
       const nextKey = keys[index + 1];
       const regex = new RegExp(`---${key}---([\\s\\S]*?)(?=---${nextKey}---|$)`);
@@ -173,13 +201,13 @@ const CopywriterStudio: React.FC = () => {
 
   const handleGenerate = async () => {
     if (!canGenerate) {
-      toast.error('Tokenlaringiz yetarli emas yoki obuna kerak!');
+      toast.error(t('copywriterNew.toasts.notEnoughTokensOrNeedSubscription', 'Tokenlaringiz yetarli emas yoki obuna kerak!'));
       return;
     }
 
     const activeImages = effectiveImages.filter(Boolean) as string[];
     if (activeImages.length === 0) {
-      toast.error('Iltimos, rasm yuklang.');
+      toast.error(t('copywriterNew.toasts.uploadImage', 'Iltimos, rasm yuklang.'));
       return;
     }
 
@@ -225,9 +253,9 @@ const CopywriterStudio: React.FC = () => {
         });
       }
 
-      toast.success("Ma'lumotlar muvaffaqiyatli yaratildi!");
+      toast.success(t('copywriterNew.toasts.generated', "Ma'lumotlar muvaffaqiyatli yaratildi!"));
     } catch (error) {
-      toast.error((error as Error).message || 'Xatolik yuz berdi.');
+      toast.error((error as Error).message || t('common.error', 'Xatolik'));
     } finally {
       setGenerating(false);
     }
@@ -267,7 +295,7 @@ const CopywriterStudio: React.FC = () => {
       <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-3xl p-8 text-white shadow-2xl shadow-blue-200/30">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="flex items-center gap-5">
-            <Link href="/dashboard" className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl hover:bg-white/30 transition text-white">
+            <Link href={withLang('/dashboard')} className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl hover:bg-white/30 transition text-white">
               <FiArrowLeft className="w-6 h-6" />
             </Link>
             <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
@@ -276,8 +304,8 @@ const CopywriterStudio: React.FC = () => {
               </svg>
             </div>
             <div>
-              <h1 className="text-3xl font-black tracking-tight">Copywriter studiya</h1>
-              <p className="text-white/80 text-sm mt-1">AI yordamida marketplace uchun kontentlar yarating</p>
+              <h1 className="text-3xl font-black tracking-tight">{t('copywriter.title', 'Copywriter studiya')}</h1>
+              <p className="text-white/80 text-sm mt-1">{t('copywriterNew.subtitle', 'AI yordamida marketplace uchun kontentlar yarating')}</p>
             </div>
           </div>
 
@@ -298,7 +326,7 @@ const CopywriterStudio: React.FC = () => {
               </div>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl px-6 py-4 border border-white/20">
-              <p className="text-xs text-white/70">Tarif</p>
+              <p className="text-xs text-white/70">{t('copywriterNew.plan', 'Tarif')}</p>
               <p className="text-xl font-bold capitalize">{plan === 'business_plus' ? 'Business+' : plan}</p>
             </div>
           </div>
@@ -315,15 +343,15 @@ const CopywriterStudio: React.FC = () => {
               </svg>
             </div>
             <div>
-              <h3 className="font-bold text-amber-800">Premium obuna kerak!</h3>
-              <p className="text-amber-700 text-sm">Copywriter studiyadan foydalanish uchun Starter yoki undan yuqori obunaga o'ting.</p>
+              <h3 className="font-bold text-amber-800">{t('copywriterNew.premiumRequiredTitle', 'Premium obuna kerak!')}</h3>
+              <p className="text-amber-700 text-sm">{t('copywriterNew.premiumRequiredBody', "Copywriter studiyadan foydalanish uchun Starter yoki undan yuqori obunaga o'ting.")}</p>
             </div>
             <button
               type="button"
               onClick={() => window.open(getTelegramSubscribeUrl('starter'), '_blank')}
               className="ml-auto px-6 py-3 bg-amber-500 text-white rounded-xl font-semibold hover:bg-amber-600 transition-colors"
             >
-              Obuna olish
+              {t('copywriterNew.getSubscription', 'Obuna olish')}
             </button>
           </div>
         </div>
@@ -333,7 +361,7 @@ const CopywriterStudio: React.FC = () => {
       <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h3 className="font-bold text-gray-800 mb-2">Marketplace tanlang</h3>
+            <h3 className="font-bold text-gray-800 mb-2">{t('copywriter.selectMarketplace', 'Marketplace tanlang')}</h3>
             <div className="flex flex-wrap gap-2">
               {MARKETPLACES.map((mp) => (
                 <button
@@ -351,8 +379,8 @@ const CopywriterStudio: React.FC = () => {
           </div>
           <div className="flex items-center gap-3 bg-orange-50 px-5 py-3 rounded-xl border border-orange-200">
             <FiDownload className="w-5 h-5 text-orange-600" aria-hidden />
-            <span className="text-sm font-semibold text-orange-700">Excelga yuklash</span>
-            <p className="text-xs text-black/70">Tez kunda</p>
+            <span className="text-sm font-semibold text-orange-700">{t('copywriterNew.exportExcel', 'Excelga yuklash')}</span>
+            <p className="text-xs text-black/70">{t('common.comingSoon', 'Tez kunda')}</p>
           </div>
         </div>
       </div>
@@ -364,14 +392,14 @@ const CopywriterStudio: React.FC = () => {
           {/* Images */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-gray-800">Rasmlar</h3>
+              <h3 className="font-bold text-gray-800">{t('copywriter.photos', 'Rasmlar')}</h3>
               <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm font-semibold">
                 {uploadedCount}/{maxImages}
               </span>
             </div>
             <div className="grid grid-cols-3 gap-3">
               {effectiveImages.map((img, idx) => {
-                const label = IMAGE_SLOT_LABELS[idx] || `Rasm ${idx + 1}`;
+                const label = imageSlotLabels[idx] || `${t('copywriterNew.image', 'Rasm')} ${idx + 1}`;
                 return (
                   <div key={idx} className="space-y-2">
                     <p className="text-xs font-semibold text-gray-500 px-1">{label}</p>
@@ -410,11 +438,11 @@ const CopywriterStudio: React.FC = () => {
 
           {/* Additional Info */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-            <h3 className="font-bold text-gray-800 mb-4">Qo'shimcha ma'lumot</h3>
+            <h3 className="font-bold text-gray-800 mb-4">{t('copywriterNew.additionalInfo', "Qo'shimcha ma'lumot")}</h3>
             <textarea
               value={categoryRef}
               onChange={(e) => setCategoryRef(e.target.value)}
-              placeholder="Mahsulot haqida ma'lumot, kategoriya yoki maxsus ko'rsatmalar..."
+              placeholder={t('copywriterNew.additionalInfoPlaceholder', "Mahsulot haqida ma'lumot, kategoriya yoki maxsus ko'rsatmalar...")}
               className="w-full p-4 bg-gray-50 rounded-xl text-sm border border-gray-200 h-32 resize-none outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
             />
           </div>
@@ -429,13 +457,13 @@ const CopywriterStudio: React.FC = () => {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Token sarfi</p>
-                  <p className="text-lg font-bold text-orange-600">{tokenCost} token</p>
+                  <p className="text-xs text-gray-500">{t('copywriterNew.tokenCost', 'Token sarfi')}</p>
+                  <p className="text-lg font-bold text-orange-600">{tokenCost} {t('copywriterNew.tokenUnit', 'token')}</p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-xs text-gray-500">18 blok kontent</p>
-                <p className="text-xs text-gray-400">UZ + RU tillarida</p>
+                <p className="text-xs text-gray-500">{t('copywriterNew.blocks', '18 blok kontent')}</p>
+                <p className="text-xs text-gray-400">{t('copywriterNew.languages', 'UZ + RU tillarida')}</p>
               </div>
             </div>
           </div>
@@ -452,14 +480,14 @@ const CopywriterStudio: React.FC = () => {
             {generating ? (
               <div className="flex items-center justify-center gap-3">
                 <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
-                <span>Generatsiya... ({countdown}s)</span>
+                  <span>{t('copywriterNew.generatingWithCountdown', `Generatsiya... (${countdown}s)`).replace('{seconds}', String(countdown))}</span>
               </div>
             ) : (
               <div className="flex items-center justify-center gap-3">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                <span>Ma'lumotlarni yaratish</span>
+                  <span>{t('copywriterNew.generate', "Ma'lumotlarni yaratish")}</span>
               </div>
             )}
           </button>
@@ -469,7 +497,7 @@ const CopywriterStudio: React.FC = () => {
         <div className="lg:col-span-8">
           {Object.keys(results).length > 0 ? (
             <div className="space-y-4">
-              {Object.keys(FIELD_LABELS)
+              {FIELD_ORDER
                 .filter((k) => k !== 'SKU' && k !== 'IKPU')
                 .map(
                   (key) =>
@@ -479,7 +507,7 @@ const CopywriterStudio: React.FC = () => {
                         className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md"
                       >
                         <div className="flex justify-between items-center mb-4">
-                          <h4 className="text-sm font-bold text-gray-700">{FIELD_LABELS[key]}</h4>
+                          <h4 className="text-sm font-bold text-gray-700">{t(FIELD_LABEL_KEYS[key], key)}</h4>
                           <div className="flex gap-2">
                             <button
                               onClick={() => copyToClipboard(results[key], key, 'UZ')}
@@ -488,7 +516,7 @@ const CopywriterStudio: React.FC = () => {
                                 : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
                                 }`}
                             >
-                              {copiedKey === `${key}-UZ` ? '✓ Nusxalandi' : 'UZ nusxa'}
+                              {copiedKey === `${key}-UZ` ? t('common.copied', 'Nusxalandi!') : t('copywriterNew.copyUz', 'UZ nusxa')}
                             </button>
                             <button
                               onClick={() => copyToClipboard(results[key], key, 'RU')}
@@ -497,17 +525,17 @@ const CopywriterStudio: React.FC = () => {
                                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                 }`}
                             >
-                              {copiedKey === `${key}-RU` ? '✓ Скопировано' : 'RU копия'}
+                              {copiedKey === `${key}-RU` ? t('common.copied', 'Скопировано!') : t('copywriterNew.copyRu', 'RU копия')}
                             </button>
                           </div>
                         </div>
                         <div className="space-y-3">
                           <div className="p-4 bg-orange-50 rounded-xl border border-orange-100">
-                            <p className="text-xs font-semibold text-orange-600 mb-1">🇺🇿 O'zbekcha</p>
+                            <p className="text-xs font-semibold text-orange-600 mb-1">🇺🇿 {t('copywriterNew.uzbek', "O'zbekcha")}</p>
                             <p className="text-sm text-gray-700 leading-relaxed">{cleanLangText(results[key], 'UZ')}</p>
                           </div>
                           <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                            <p className="text-xs font-semibold text-gray-500 mb-1">🇷🇺 Русский</p>
+                            <p className="text-xs font-semibold text-gray-500 mb-1">🇷🇺 {t('copywriterNew.russian', 'Русский')}</p>
                             <p className="text-sm text-gray-600 leading-relaxed italic">{cleanLangText(results[key], 'RU')}</p>
                           </div>
                         </div>
@@ -518,7 +546,7 @@ const CopywriterStudio: React.FC = () => {
               {/* Technical Fields */}
               {(results['SKU'] || results['IKPU']) && (
                 <div className="mt-8 pt-8 border-t-2 border-dashed border-gray-200">
-                  <h3 className="text-lg font-bold text-gray-800 mb-4">Texnik ma'lumotlar</h3>
+                  <h3 className="text-lg font-bold text-gray-800 mb-4">{t('copywriterNew.technicalInfo', "Texnik ma'lumotlar")}</h3>
                   <div className="grid md:grid-cols-2 gap-4">
                     {['SKU', 'IKPU'].map(
                       (key) =>
@@ -529,8 +557,12 @@ const CopywriterStudio: React.FC = () => {
                           >
                             <div className="flex justify-between items-start mb-4">
                               <div>
-                                <span className="text-xs font-bold text-gray-400 uppercase">{FIELD_LABELS[key]}</span>
-                                <p className="text-xs text-gray-500 mt-1 max-w-[200px]">{TECHNICAL_DESC[key]}</p>
+                                <span className="text-xs font-bold text-gray-400 uppercase">{t(FIELD_LABEL_KEYS[key as 'SKU' | 'IKPU'], key)}</span>
+                                <p className="text-xs text-gray-500 mt-1 max-w-[200px]">
+                                  {key === 'SKU'
+                                    ? t('copywriter.uniqueIdentifier', '')
+                                    : t('copywriter.singleClassifier', '')}
+                                </p>
                               </div>
                               <button
                                 onClick={() => copyToClipboard(results[key], key)}
@@ -539,7 +571,7 @@ const CopywriterStudio: React.FC = () => {
                                   : 'bg-white/10 text-white hover:bg-white/20'
                                   }`}
                               >
-                                {copiedKey === key ? '✓' : 'Nusxa'}
+                                {copiedKey === key ? '✓' : t('common.copy', 'Nusxa')}
                               </button>
                             </div>
                             <p className="text-2xl font-mono font-bold text-orange-400 break-all">
@@ -559,10 +591,8 @@ const CopywriterStudio: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-gray-700 mb-2">Kontent yaratishni boshlang</h3>
-              <p className="text-gray-500 max-w-sm">
-                Rasm yuklang va "Ma'lumotlarni yaratish" tugmasini bosing. AI 18 ta blokda UZ va RU tillarida kontent yaratadi.
-              </p>
+              <h3 className="text-xl font-bold text-gray-700 mb-2">{t('copywriterNew.emptyTitle', 'Kontent yaratishni boshlang')}</h3>
+              <p className="text-gray-500 max-w-sm">{t('copywriterNew.emptyBody', 'Rasm yuklang va "Ma\'lumotlarni yaratish" tugmasini bosing. AI 18 ta blokda UZ va RU tillarida kontent yaratadi.')}</p>
             </div>
           )}
         </div>
@@ -574,28 +604,28 @@ const CopywriterStudio: React.FC = () => {
           <svg className="w-5 h-5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
           </svg>
-          Copywriter token narxlari
+          {t('copywriterNew.pricingTitle', 'Copywriter token narxlari')}
         </h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white p-4 rounded-xl border border-gray-200">
             <p className="text-xs text-gray-500 mb-1">Starter</p>
             <p className="text-2xl font-black text-emerald-600">3</p>
-            <p className="text-xs text-gray-400">token / generatsiya</p>
+            <p className="text-xs text-gray-400">{t('copywriterNew.tokenPerGeneration', 'token / generatsiya')}</p>
           </div>
           <div className="bg-white p-4 rounded-xl border border-blue-200">
             <p className="text-xs text-gray-500 mb-1">Pro</p>
             <p className="text-2xl font-black text-blue-600">2</p>
-            <p className="text-xs text-gray-400">token / generatsiya</p>
+            <p className="text-xs text-gray-400">{t('copywriterNew.tokenPerGeneration', 'token / generatsiya')}</p>
           </div>
           <div className="bg-white p-4 rounded-xl border border-purple-200">
             <p className="text-xs text-gray-500 mb-1">Business+</p>
             <p className="text-2xl font-black text-purple-600">1</p>
-            <p className="text-xs text-gray-400">token / generatsiya</p>
+            <p className="text-xs text-gray-400">{t('copywriterNew.tokenPerGeneration', 'token / generatsiya')}</p>
           </div>
           <div className="bg-white p-4 rounded-xl border border-amber-200">
-            <p className="text-xs text-gray-500 mb-1">Sizning balansingiz</p>
+            <p className="text-xs text-gray-500 mb-1">{t('copywriterNew.yourBalance', 'Sizning balansingiz')}</p>
             <p className="text-2xl font-black text-amber-600">{isAdmin ? '∞' : tokensRemaining}</p>
-            <p className="text-xs text-gray-400">token</p>
+            <p className="text-xs text-gray-400">{t('copywriterNew.tokenUnit', 'token')}</p>
           </div>
         </div>
       </div>

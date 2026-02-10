@@ -7,8 +7,12 @@ import { Badge } from '@/components/ui/Badge';
 import Link from 'next/link';
 import { ArrowRight, Sparkles } from 'lucide-react';
 import Image from 'next/image';
+import { useLanguage } from '@/lib/LanguageContext';
 
 export function Hero() {
+  const { t, language } = useLanguage();
+  const prefix = language === 'ru' ? '/ru' : '/uz';
+
   return (
     <section className="relative overflow-hidden pb-20 pt-32 lg:pb-32 lg:pt-48">
       <div className="pointer-events-none absolute inset-0">
@@ -21,7 +25,7 @@ export function Hero() {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <Badge variant="blue" className="mb-6 bg-blue-50/80 backdrop-blur-sm">
               <Sparkles className="mr-2 h-3 w-3" />
-              Marketplace uchun AI studiya
+              {t('home.badge')}
             </Badge>
           </motion.div>
 
@@ -29,9 +33,9 @@ export function Hero() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="max-w-4xl text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl lg:text-7xl"
+            className="max-w-4xl text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl lg:text-4xl"
           >
-            AI orqali <span className="bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">sotuvga tayyor</span> kontent yarating
+            {t('home.hero_title')}
           </motion.h1>
 
           <motion.p
@@ -40,7 +44,7 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="mt-6 max-w-2xl text-lg leading-relaxed text-slate-600 sm:text-xl"
           >
-            Umari AI marketplace rasmlar, video va matn yaratishni bitta platformada jamlaydi. Tezroq ishlab, sifatni bir xil darajada ushlab turing.
+            {t('home.hero_subtitle')}
           </motion.p>
 
           <motion.div
@@ -49,15 +53,15 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.3 }}
             className="mt-10 flex w-full flex-col gap-4 sm:w-auto sm:flex-row"
           >
-            <Link href="/register" className="w-full sm:w-auto">
+            <Link href={`${prefix}/register`} className="w-full sm:w-auto">
               <Button size="lg" className="group w-full sm:w-auto">
-                Boshlash
+                {t('home.hero_cta')}
                 <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
               </Button>
             </Link>
-            <Link href="#examples" className="w-full sm:w-auto">
+            <Link href={`${prefix}/#examples`} className="w-full sm:w-auto">
               <Button variant="outline" size="lg" className="w-full sm:w-auto">
-                Natijalarni ko'rish
+                {t('home.hero_secondary')}
               </Button>
             </Link>
           </motion.div>

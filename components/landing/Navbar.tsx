@@ -6,11 +6,15 @@ import { motion, useScroll, useMotionValueEvent } from 'framer-motion';
 import { Container } from '@/components/ui/Container';
 import { Button } from '@/components/ui/Button';
 import { Menu, X } from 'lucide-react';
+import { useLanguage } from '@/lib/LanguageContext';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 export function Navbar() {
     const [isScrolled, setIsScrolled] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const { scrollY } = useScroll();
+    const { t, language } = useLanguage();
+    const prefix = language === 'ru' ? '/ru' : '/uz';
 
     useMotionValueEvent(scrollY, "change", (latest) => {
         setIsScrolled(latest > 50);
@@ -26,32 +30,33 @@ export function Navbar() {
                         ? 'bg-white/80 backdrop-blur-md border border-slate-200 shadow-sm'
                         : 'bg-transparent'
                     }`}>
-                    <Link href="/" className="text-xl font-bold tracking-tight text-slate-900">
+                    <Link href={prefix} className="text-xl font-bold tracking-tight text-slate-900">
                         Umari<span className="text-blue-600"> ai</span>
                     </Link>
 
                     {/* Desktop Nav */}
                     <nav className="hidden md:flex items-center gap-8">
-                        <Link href="/#features" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
-                            Imkoniyatlar
+                        <Link href={`${prefix}/#features`} className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
+                            {t('nav.features')}
                         </Link>
-                        <Link href="/#examples" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
-                            Namunalar
+                        <Link href={`${prefix}/#examples`} className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
+                            {t('nav.examples')}
                         </Link>
-                        <Link href="/#pricing" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
-                            Narxlar
+                        <Link href={`${prefix}/#pricing`} className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
+                            {t('nav.pricing')}
                         </Link>
-                        <Link href="/#faq" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
-                            Savol-javob
+                        <Link href={`${prefix}/#faq`} className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
+                            {t('nav.faq')}
                         </Link>
                     </nav>
 
                     <div className="hidden md:flex items-center gap-3">
-                        <Link href="/login">
-                            <Button variant="ghost" size="sm">Kirish</Button>
+                        <LanguageSwitcher />
+                        <Link href={`${prefix}/login`}>
+                            <Button variant="ghost" size="sm">{t('nav.login')}</Button>
                         </Link>
-                        <Link href="/register">
-                            <Button size="sm">Boshlash</Button>
+                        <Link href={`${prefix}/register`}>
+                            <Button size="sm">{t('nav.start')}</Button>
                         </Link>
                     </div>
 
@@ -74,16 +79,19 @@ export function Navbar() {
                     exit={{ opacity: 0, y: -20 }}
                     className="absolute top-full left-4 right-4 mt-2 p-4 bg-white rounded-2xl border border-slate-200 shadow-xl md:hidden flex flex-col gap-4"
                 >
-                    <Link href="/#features" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Imkoniyatlar</Link>
-                    <Link href="/#examples" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Namunalar</Link>
-                    <Link href="/#pricing" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Narxlar</Link>
-                    <Link href="/#faq" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Savol-javob</Link>
+                    <Link href={`${prefix}/#features`} className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>{t('nav.features')}</Link>
+                    <Link href={`${prefix}/#examples`} className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>{t('nav.examples')}</Link>
+                    <Link href={`${prefix}/#pricing`} className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>{t('nav.pricing')}</Link>
+                    <Link href={`${prefix}/#faq`} className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>{t('nav.faq')}</Link>
                     <div className="h-px bg-slate-100" />
-                    <Link href="/login" onClick={() => setIsMobileMenuOpen(false)}>
-                        <Button variant="ghost" className="w-full justify-start">Kirish</Button>
+                    <div className="px-2">
+                        <LanguageSwitcher />
+                    </div>
+                    <Link href={`${prefix}/login`} onClick={() => setIsMobileMenuOpen(false)}>
+                        <Button variant="ghost" className="w-full justify-start">{t('nav.login')}</Button>
                     </Link>
-                    <Link href="/register" onClick={() => setIsMobileMenuOpen(false)}>
-                        <Button className="w-full">Boshlash</Button>
+                    <Link href={`${prefix}/register`} onClick={() => setIsMobileMenuOpen(false)}>
+                        <Button className="w-full">{t('nav.start')}</Button>
                     </Link>
                 </motion.div>
             )}

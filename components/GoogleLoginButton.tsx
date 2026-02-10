@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from './ToastProvider';
 import { loadGoogleIdentityScript } from '../lib/googleIdentity';
+import { useLanguage } from '@/lib/LanguageContext';
 
 declare global {
   interface Window {
@@ -14,9 +15,16 @@ declare global {
 export default function GoogleLoginButton({ onSuccess }: { onSuccess?: () => void }) {
   const router = useRouter();
   const toast = useToast();
+  const { t, language } = useLanguage();
   const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const renderedRef = useRef(false);
+  const renderedLocaleRef = useRef<string | null>(null);
+
+  const withLang = (href: string) => {
+    if (!href.startsWith('/')) return href;
+    const stripped = href.replace(/^\/(uz|ru)(?=\/|$)/, '');
+    return `/${language}${stripped || ''}`;
+  };
 
   const handleCredentialResponse = async (response: any) => {
     setLoading(true);
@@ -35,16 +43,16 @@ export default function GoogleLoginButton({ onSuccess }: { onSuccess?: () => voi
         }
         // Redirect based on role
         if (data.user.role === 'admin') {
-          router.push('/admin');
+          router.push(withLang('/admin'));
         } else {
-          router.push('/dashboard');
+          router.push(withLang('/dashboard'));
         }
       } else {
-        throw new Error(data.error || 'Google orqali kirish amalga oshmadi');
+        throw new Error(data.error || t('auth.googleLoginFailed', 'Google orqali kirish amalga oshmadi'));
       }
     } catch (error) {
       console.error('Google login error:', error);
-      toast.error("Google orqali kirishda xatolik. Qayta urinib ko'ring.");
+      toast.error(t('auth.googleLoginError', "Google orqali kirishda xatolik. Qayta urinib ko'ring."));
     } finally {
       setLoading(false);
     }
@@ -56,17 +64,18 @@ export default function GoogleLoginButton({ onSuccess }: { onSuccess?: () => voi
     if (!el) return;
 
     if (!clientId) {
-      toast.error('Google OAuth sozlanmagan: NEXT_PUBLIC_GOOGLE_CLIENT_ID yo\'q.');
+      toast.error(t('auth.googleOauthMissingClientId', "Google OAuth sozlanmagan: NEXT_PUBLIC_GOOGLE_CLIENT_ID yo'q."));
       return;
     }
 
-    if (renderedRef.current) return;
+    const buttonLocale = language === 'ru' ? 'ru' : 'uz';
+    if (renderedLocaleRef.current === buttonLocale) return;
 
     let cancelled = false;
     loadGoogleIdentityScript()
       .then(() => {
         if (cancelled) return;
-        if (!window.google?.accounts?.id) throw new Error('Google Identity Services mavjud emas');
+        if (!window.google?.accounts?.id) throw new Error(t('auth.googleIdentityUnavailable', 'Google Identity Services mavjud emas'));
 
         window.google.accounts.id.initialize({
           client_id: clientId,
@@ -80,10 +89,10 @@ export default function GoogleLoginButton({ onSuccess }: { onSuccess?: () => voi
           size: 'large',
           width: '100%',
           text: 'signin_with',
-          locale: 'uz',
+          locale: buttonLocale,
         });
 
-        renderedRef.current = true;
+        renderedLocaleRef.current = buttonLocale;
       })
       .catch((err) => {
         console.error('Failed to init Google login:', err);
@@ -92,14 +101,14 @@ export default function GoogleLoginButton({ onSuccess }: { onSuccess?: () => voi
     return () => {
       cancelled = true;
     };
-  }, [toast]);
+  }, [toast, language, t]);
 
   return (
     <div className="w-full">
       <div ref={containerRef} className="w-full" />
       {loading && (
         <div className="text-center text-sm text-gray-600 mt-2">
-          Google orqali kirish...
+          {t('auth.googleLoggingIn', 'Google orqali kirish...')}
         </div>
       )}
     </div>

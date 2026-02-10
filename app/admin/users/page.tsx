@@ -22,6 +22,8 @@ interface User {
   email: string;
   first_name: string;
   last_name?: string;
+  phone?: string | null;
+  telegram_username?: string | null;
   role: string;
   subscription_status: string;
   subscription_plan: string;
@@ -275,7 +277,8 @@ export default function AdminUsersPage() {
                           <h3 className="font-semibold text-white truncate">
                             {[user.first_name, user.last_name].filter(Boolean).join(' ') || 'Noma\'lum'}
                           </h3>
-                          <p className="text-white/50 text-sm truncate">{user.email}</p>
+                          <p className="text-white/50 text-sm truncate">{user.phone}</p>
+                          <p className="text-white/50 text-sm truncate">{user.telegram_username}</p>
                         </div>
                         {user.role === 'admin' && (
                           <span className="px-2 py-1 bg-purple-500/20 text-purple-300 rounded-lg text-xs font-bold">
