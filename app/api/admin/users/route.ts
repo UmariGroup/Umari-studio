@@ -52,9 +52,7 @@ export async function GET(req: NextRequest) {
 
     // Get paginated results
     const result = await query(
-      `SELECT id, email, first_name, last_name, role, subscription_status, subscription_plan, 
-              subscription_expires_at, tokens_remaining, created_at, last_login_at
-       FROM users 
+      `SELECT * FROM users 
        ${whereClause}
        ORDER BY created_at DESC
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
