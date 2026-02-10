@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { FiArrowLeft } from 'react-icons/fi';
+import { FiArrowLeft, FiDownload } from 'react-icons/fi';
 import { useToast } from './ToastProvider';
 import { getTelegramSubscribeUrl } from '@/lib/telegram';
 import {
@@ -256,7 +256,7 @@ const CopywriterStudio: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-12 w-12 border-4 border-orange-500 border-t-transparent rounded-full"></div>
+        <div className="animate-spin h-12 w-12 border-4 border-orange-500 border-t-transparent rounded-full" />
       </div>
     );
   }
@@ -350,8 +350,9 @@ const CopywriterStudio: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-3 bg-orange-50 px-5 py-3 rounded-xl border border-orange-200">
-            <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
-            <span className="text-sm font-semibold text-orange-700">Streaming AI faol</span>
+            <FiDownload className="w-5 h-5 text-orange-600" aria-hidden />
+            <span className="text-sm font-semibold text-orange-700">Excelga yuklash</span>
+            <p className="text-xs text-black/70">Tez kunda</p>
           </div>
         </div>
       </div>

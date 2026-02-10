@@ -15,7 +15,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: 'Salom! Men Umari Studio AI yordamchisiman. Marketplace, video, matn yaratish va marketing bo\'yicha savollaringizga javob beraman.',
+      content: 'Salom! Men Umari AI yordamchisiman. Marketplace, video, matn yaratish va marketing bo\'yicha savollaringizga javob beraman.',
       timestamp: new Date(),
     },
   ]);

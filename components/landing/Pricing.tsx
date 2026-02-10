@@ -101,7 +101,7 @@ export function Pricing() {
           <Badge variant="blue" className="mb-4">Narxlar</Badge>
           <h2 className="text-3xl font-bold tracking-tight text-slate-900 lg:text-5xl">Oylik tariflar</h2>
           <p className="mx-auto mt-4 max-w-2xl text-slate-600">
-            Faqat oylik to'lov mavjud. Tarifni tanlang va tugma orqali Telegram'da @Ostudio22 ga so'rov yuboring.
+            Faqat oylik to'lov mavjud. Tarifni tanlang va tugma orqali Telegram'da @UmariAI_admin ga so'rov yuboring.
           </p>
         </div>
 

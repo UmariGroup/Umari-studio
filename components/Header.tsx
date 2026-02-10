@@ -21,7 +21,7 @@ function Logo() {
       <span className="h-9 w-9 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white font-black text-lg grid place-items-center">
         U
       </span>
-      <span className="text-lg sm:text-xl font-black tracking-tight text-slate-900">Umari AI studiya</span>
+      <span className="text-lg sm:text-xl font-black tracking-tight text-slate-900">Umari AI</span>
     </Link>
   );
 }
@@ -62,6 +62,11 @@ export default function Header() {
   const plan = (user?.subscription_plan || 'free').toString();
   const tokens = Number(user?.tokens_remaining || 0);
 
+  // Admin routes have their own header.
+  if (pathname?.startsWith('/admin')) {
+    return null;
+  }
+
   if (isLanding) {
     return <Navbar />;
   }
@@ -78,6 +83,9 @@ export default function Header() {
             </Link>
             <Link href="/marketplace" className="px-3 py-2 rounded-lg text-slate-700 hover:text-slate-900 hover:bg-slate-100">
               Market studiya
+            </Link>
+            <Link href="/infografika" className="px-3 py-2 rounded-lg text-slate-700 hover:text-slate-900 hover:bg-slate-100">
+              Infografika
             </Link>
             <Link href="/video-studio" className="px-3 py-2 rounded-lg text-slate-700 hover:text-slate-900 hover:bg-slate-100">
               Video studiya
@@ -126,6 +134,7 @@ export default function Header() {
             <div className="px-4 py-3 flex flex-col gap-2 text-sm">
               <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Boshqaruv</Link>
               <Link href="/marketplace" onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Market studiya</Link>
+              <Link href="/infografika" onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Infografika</Link>
               <Link href="/video-studio" onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Video studiya</Link>
               <Link href="/copywriter" onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Copywriter studiya</Link>
               {user?.role === 'admin' && (
@@ -149,8 +158,17 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <Logo />
         <div className="flex items-center gap-3">
-          <Link href="/pricing" className="hidden sm:inline-flex px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">
+          <Link href="/#features" className="hidden md:inline-flex px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">
+            Imkoniyatlar
+          </Link>
+          <Link href="/#examples" className="hidden md:inline-flex px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">
+            Namunalar
+          </Link>
+          <Link href="/#pricing" className="hidden sm:inline-flex px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">
             Narxlar
+          </Link>
+          <Link href="/#faq" className="hidden md:inline-flex px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">
+            Savol-javob
           </Link>
           <Link href="/login" className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800">
             Kirish

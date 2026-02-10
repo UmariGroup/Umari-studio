@@ -63,7 +63,7 @@ export const IMAGE_MODELS: ImageModelConfig[] = [
   },
   {
     id: 'nano-banana-pro-preview',
-    name: 'Umari Studio',
+    name: 'Umari AI',
     service: 'gemini',
     mode: 'pro',
     description: 'Premium alternativ model',
@@ -100,7 +100,7 @@ export const VIDEO_MODELS: VideoModelConfig[] = [
   },
   {
     id: 'veo3_upsampler_video_generation',
-    name: 'Umari Studio Video',
+    name: 'Umari AI Video',
     mode: 'premium',
     duration: 8,
     description: 'Eng yuqori sifat - professional reklama uchun',

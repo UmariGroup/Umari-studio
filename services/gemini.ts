@@ -469,7 +469,7 @@ export async function analyzeMarketingMetrics(
 
 export async function chat(message: string, history: ChatMessage[] = []): Promise<string> {
   const systemInstruction =
-    'You are Umari Studio assistant. Reply in Uzbek by default. Be concise, practical, and helpful for ecommerce and content creation.';
+    'You are Umari AI assistant. Reply in Uzbek by default. Be concise, practical, and helpful for ecommerce and content creation.';
 
   const contents: any[] = [];
   for (const h of history) {

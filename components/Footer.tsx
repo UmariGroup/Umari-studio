@@ -20,7 +20,7 @@ export default function Footer() {
               <div className="mr-3 flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-r from-purple-500 to-pink-500">
                 <span className="text-lg font-bold text-white">U</span>
               </div>
-              <span className="text-2xl font-bold">Umari Studio</span>
+              <span className="text-2xl font-bold">Umari AI</span>
             </div>
             <p className="mb-4 max-w-md text-gray-300">
               AI asosidagi ijodiy studiya. Professional marketplace rasmlari, video ssenariylar,
@@ -54,7 +54,7 @@ export default function Footer() {
         <div className="mt-8 border-t border-gray-800 pt-8">
           <div className="flex flex-col items-center justify-between md:flex-row">
             <div className="text-sm text-gray-400">
-              &copy; 2026 Umari Studio. Barcha huquqlar himoyalangan.
+              &copy; 2026 Umari AI. Barcha huquqlar himoyalangan.
             </div>
             <div className="mt-4 flex space-x-6 md:mt-0">
               <a href="#" className="text-sm text-gray-400 transition hover:text-white">Maxfiylik siyosati</a>

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useToast } from './ToastProvider';
 import { getTelegramSubscribeUrl } from '@/lib/telegram';
 import { parseApiErrorResponse, toUzbekErrorMessage } from '@/lib/uzbek-errors';
@@ -82,7 +82,7 @@ const PLAN_CONFIGS: Record<SubscriptionPlan, PlanConfig> = {
 const IMAGE_MODEL_LABELS: Record<string, string> = {
   'gemini-2.5-flash-image': 'Umari Flash',
   'gemini-3-pro-image-preview': 'Umari Pro',
-  'nano-banana-pro-preview': 'Umari Studio',
+  'nano-banana-pro-preview': 'Umari AI',
 };
 
 const MarketplaceStudio: React.FC = () => {
@@ -94,6 +94,7 @@ const MarketplaceStudio: React.FC = () => {
 
   // Image mode tab
   const [imageMode, setImageMode] = useState<ImageMode>('pro');
+  const hasManuallySelectedMode = useRef(false);
   const [selectedProModel, setSelectedProModel] = useState<string>('gemini-3-pro-image-preview');
 
   // Images
@@ -227,12 +228,22 @@ const MarketplaceStudio: React.FC = () => {
   const currentTokenCost = imageMode === 'basic' ? config.basicTokenCost : config.proTokenCost;
   const canGenerate = tokensRemaining >= currentTokenCost && plan !== 'free' && cooldownSeconds <= 0;
 
-  // Default to Pro when available; otherwise fall back to Oddiy.
+  // Default mode: Pro when available; otherwise Oddiy.
+  // Note: initial config is `free` until `/api/auth/me` resolves.
   useEffect(() => {
-    if (config.proModels.length === 0 && imageMode === 'pro') {
+    if (loading) return;
+
+    // Always prevent invalid Pro selection.
+    if (imageMode === 'pro' && config.proModels.length === 0) {
       setImageMode('basic');
+      return;
     }
-  }, [config.proModels.length, imageMode]);
+
+    // Only auto-select if user hasn't clicked the tabs.
+    if (hasManuallySelectedMode.current) return;
+
+    setImageMode(config.proModels.length > 0 ? 'pro' : 'basic');
+  }, [loading, config.proModels.length, imageMode]);
 
   // Keep selected pro model valid for the current plan.
   useEffect(() => {
@@ -653,7 +664,10 @@ const MarketplaceStudio: React.FC = () => {
       <div className="bg-white rounded-2xl border border-gray-200 p-2 shadow-sm">
         <div className="flex gap-2">
           <button
-            onClick={() => setImageMode('pro')}
+            onClick={() => {
+              hasManuallySelectedMode.current = true;
+              setImageMode('pro');
+            }}
             disabled={config.proModels.length === 0}
             className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all ${imageMode === 'pro'
               ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg'
@@ -672,7 +686,10 @@ const MarketplaceStudio: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setImageMode('basic')}
+            onClick={() => {
+              hasManuallySelectedMode.current = true;
+              setImageMode('basic');
+            }}
             className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all ${imageMode === 'basic'
               ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg'
               : 'bg-gray-50 text-gray-600 hover:bg-gray-100'

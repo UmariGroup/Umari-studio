@@ -7,8 +7,8 @@ services:
     environment:
       # Keep bootstrap user fixed to avoid role-mismatch with persisted volumes.
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: ${DB_NAME:-umari_studio}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     ports:
       - "127.0.0.1:5432:5432"  # 🔐 Bind only to localhost
     volumes:
@@ -42,8 +42,8 @@ services:
       DB_PORT: 5432
       # Keep app user stable for existing volumes where custom role may not exist.
       DB_USER: postgres
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-      DB_NAME: ${DB_NAME:-umari_studio}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-key}
       # Gemini API key is loaded via env_file (.env.local)
       NODE_ENV: development
@@ -73,8 +73,8 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: postgres
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-      DB_NAME: ${DB_NAME:-umari_studio}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-key}
       NODE_ENV: development
     depends_on:

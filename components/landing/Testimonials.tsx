@@ -8,7 +8,7 @@ const testimonials = [
   {
     name: 'Jasur Karimov',
     role: 'E-commerce menejer',
-    content: "Umari Studio bilan mahsulot joylash jarayoni bir necha barobar tezlashdi. Oldin kun olgan ishlar endi daqiqalarda bityapti.",
+    content: "Umari AI bilan mahsulot joylash jarayoni bir necha barobar tezlashdi. Oldin kun olgan ishlar endi daqiqalarda bityapti.",
     image: 'https://placehold.co/100x100/png?text=JK',
   },
   {

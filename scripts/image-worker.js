@@ -662,7 +662,10 @@ async function runPlanSlot(pool, plan, slot) {
   const name = `${WORKER_ID}:${plan}:${slot}`;
 
   try {
-    await client.query(`SET application_name TO $1`, [name]);
+    // Postgres does not accept bind parameters in SET statements.
+    // Use a safely-escaped string literal instead.
+    const safeName = String(name).replace(/'/g, "''");
+    await client.query(`SET application_name TO '${safeName}'`);
   } catch {
     // ignore
   }

@@ -27,21 +27,21 @@ export function Navbar() {
                         : 'bg-transparent'
                     }`}>
                     <Link href="/" className="text-xl font-bold tracking-tight text-slate-900">
-                        Umari<span className="text-blue-600">.ai</span>
+                        Umari<span className="text-blue-600"> ai</span>
                     </Link>
 
                     {/* Desktop Nav */}
                     <nav className="hidden md:flex items-center gap-8">
-                        <Link href="#features" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
+                        <Link href="/#features" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
                             Imkoniyatlar
                         </Link>
-                        <Link href="#examples" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
+                        <Link href="/#examples" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
                             Namunalar
                         </Link>
-                        <Link href="#pricing" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
+                        <Link href="/#pricing" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
                             Narxlar
                         </Link>
-                        <Link href="#faq" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
+                        <Link href="/#faq" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
                             Savol-javob
                         </Link>
                     </nav>
@@ -74,9 +74,10 @@ export function Navbar() {
                     exit={{ opacity: 0, y: -20 }}
                     className="absolute top-full left-4 right-4 mt-2 p-4 bg-white rounded-2xl border border-slate-200 shadow-xl md:hidden flex flex-col gap-4"
                 >
-                    <Link href="#features" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Imkoniyatlar</Link>
-                    <Link href="#examples" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Namunalar</Link>
-                    <Link href="#pricing" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Narxlar</Link>
+                    <Link href="/#features" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Imkoniyatlar</Link>
+                    <Link href="/#examples" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Namunalar</Link>
+                    <Link href="/#pricing" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Narxlar</Link>
+                    <Link href="/#faq" className="text-base font-medium text-slate-600" onClick={() => setIsMobileMenuOpen(false)}>Savol-javob</Link>
                     <div className="h-px bg-slate-100" />
                     <Link href="/login" onClick={() => setIsMobileMenuOpen(false)}>
                         <Button variant="ghost" className="w-full justify-start">Kirish</Button>

@@ -68,7 +68,7 @@ export default function RegisterPage() {
               <div className="mr-3 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600">
                 <span className="text-2xl font-bold text-white">U</span>
               </div>
-              <span className="text-2xl font-bold text-gray-900">Umari Studio</span>
+              <span className="text-2xl font-bold text-gray-900">Umari AI</span>
             </div>
             <h1 className="mb-2 text-2xl font-bold text-gray-900">Ro'yxatdan o'tish</h1>
             <p className="text-gray-600">AI studiya imkoniyatlarini ishga tushiring</p>

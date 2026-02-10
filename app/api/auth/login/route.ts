@@ -93,11 +93,41 @@ export async function POST(req: NextRequest) {
     });
 
     return response;
-  } catch (error) {
+  } catch (error: any) {
+    // pg errors: https://www.postgresql.org/docs/current/errcodes-appendix.html
+    const code = error?.code ? String(error.code) : '';
+    const message = error?.message ? String(error.message) : '';
+
+    // 28P01: invalid_password (very common when docker volume was created with an older password)
+    if (code === '28P01' || message.includes('28P01') || message.toLowerCase().includes('password authentication failed')) {
+      return NextResponse.json(
+        {
+          error:
+            "DB ulanish xatosi: parol noto‘g‘ri (28P01). .env dagi DB_PASSWORD bilan Postgres konteyneridagi POSTGRES_PASSWORD bir xil bo‘lishi kerak. Agar parolni keyin o‘zgartirgan bo‘lsangiz, eski volume ichida eski parol qolib ketgan bo‘lishi mumkin.",
+          code: 'DB_AUTH_FAILED',
+        },
+        { status: 503 }
+      );
+    }
+
+    // Connection problems
+    if (
+      code === 'ECONNREFUSED' ||
+      code === 'ENOTFOUND' ||
+      message.toLowerCase().includes('connect econrefused') ||
+      message.toLowerCase().includes('getaddrinfo enotfound')
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'DB ulanish xatosi: Postgres topilmadi yoki ishga tushmagan. DB_HOST/DB_PORT va docker compose holatini tekshiring.',
+          code: 'DB_UNREACHABLE',
+        },
+        { status: 503 }
+      );
+    }
+
     console.error('Login error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

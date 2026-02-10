@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Container } from '@/components/ui/Container';
-import { Github, Twitter, Instagram } from 'lucide-react';
+import { Github, Twitter, Instagram, Youtube } from 'lucide-react';
+import { FaTelegram } from 'react-icons/fa';
 
 export function Footer() {
   return (
@@ -19,10 +20,10 @@ export function Footer() {
           <div>
             <h4 className="mb-4 font-semibold text-white">Mahsulot</h4>
             <ul className="space-y-2 text-sm">
-              <li><Link href="#features" className="transition-colors hover:text-white">Imkoniyatlar</Link></li>
-              <li><Link href="#examples" className="transition-colors hover:text-white">Namunalar</Link></li>
-              <li><Link href="#pricing" className="transition-colors hover:text-white">Narxlar</Link></li>
-              <li><Link href="#faq" className="transition-colors hover:text-white">Savol-javob</Link></li>
+              <li><Link href="/#features" className="transition-colors hover:text-white">Imkoniyatlar</Link></li>
+              <li><Link href="/#examples" className="transition-colors hover:text-white">Namunalar</Link></li>
+              <li><Link href="/#pricing" className="transition-colors hover:text-white">Narxlar</Link></li>
+              <li><Link href="/#faq" className="transition-colors hover:text-white">Savol-javob</Link></li>
             </ul>
           </div>
 
@@ -39,15 +40,15 @@ export function Footer() {
           <div>
             <h4 className="mb-4 font-semibold text-white">Ijtimoiy tarmoqlar</h4>
             <div className="flex gap-4">
-              <Link href="#" className="transition-colors hover:text-white"><Twitter className="h-5 w-5" /></Link>
-              <Link href="#" className="transition-colors hover:text-white"><Github className="h-5 w-5" /></Link>
+              <Link href="https://t.me/UmariAI" className="transition-colors hover:text-white"><FaTelegram className="h-5 w-5" /></Link>
+              <Link href="#" className="transition-colors hover:text-white"><Youtube className="h-5 w-5" /></Link>
               <Link href="#" className="transition-colors hover:text-white"><Instagram className="h-5 w-5" /></Link>
             </div>
           </div>
         </div>
 
         <div className="flex flex-col items-center justify-between gap-4 border-t border-slate-800 pt-8 text-xs text-slate-500 md:flex-row">
-          <p>&copy; {new Date().getFullYear()} Umari Studio AI. Barcha huquqlar himoyalangan.</p>
+          <p>&copy; {new Date().getFullYear()} Umari AI. Barcha huquqlar himoyalangan.</p>
           <div className="flex gap-6">
             <Link href="/privacy" className="transition-colors hover:text-white">Maxfiylik siyosati</Link>
             <Link href="/terms" className="transition-colors hover:text-white">Foydalanish shartlari</Link>

@@ -1,4 +1,4 @@
-# Umari Studio - AI Marketplace Platform
+# Umari AI - AI Marketplace Platform
 
 ## 🚀 Features
 
@@ -26,7 +26,7 @@
 
 ```bash
 git clone <repo>
-cd umari-studio
+cd <project-folder>
 cp .env.example .env.local
 npm install
 ```
@@ -39,7 +39,7 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_USER=postgres
 DB_PASSWORD=your_secure_password
-DB_NAME=umari_studio
+DB_NAME=umari_ai
 
 # JWT
 JWT_SECRET=your_super_secret_jwt_key
@@ -124,7 +124,7 @@ Javobda nechta user/subscription `expired` bo'lganini qaytaradi.
 
 ## 📄 License
 
-Proprietary - Umari Studio
+Proprietary - Umari AI
 
 ## Run Locally
 

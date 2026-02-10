@@ -49,7 +49,7 @@ interface VideoModeConfig {
 const VIDEO_MODEL_LABELS: Record<string, string> = {
   'veo-3.0-fast-generate-001': 'Umari Flash Video',
   'veo-3.0-generate-001': 'Umari Pro Video',
-  veo3_upsampler_video_generation: 'Umari Studio Video',
+  veo3_upsampler_video_generation: 'Umari AI Video',
 };
 
 // ============ PLAN VIDEO CONFIGURATIONS ============

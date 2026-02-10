@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import Link from 'next/link';
 import { ArrowRight, Sparkles } from 'lucide-react';
+import Image from 'next/image';
 
 export function Hero() {
   return (
@@ -39,7 +40,7 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="mt-6 max-w-2xl text-lg leading-relaxed text-slate-600 sm:text-xl"
           >
-            Umari Studio marketplace rasmlar, video va matn yaratishni bitta platformada jamlaydi. Tezroq ishlab, sifatni bir xil darajada ushlab turing.
+            Umari AI marketplace rasmlar, video va matn yaratishni bitta platformada jamlaydi. Tezroq ishlab, sifatni bir xil darajada ushlab turing.
           </motion.p>
 
           <motion.div
@@ -67,15 +68,9 @@ export function Hero() {
             transition={{ duration: 0.7, delay: 0.4 }}
             className="mt-16 w-full max-w-5xl rounded-3xl border border-slate-200 bg-white/50 p-2 shadow-2xl shadow-blue-500/10 backdrop-blur-xl"
           >
-            <div className="relative aspect-[16/9] overflow-hidden rounded-2xl bg-slate-100">
-              <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50">
-                <p className="font-medium text-slate-400">Platforma interfeysi</p>
-              </div>
-              <div className="absolute left-4 right-4 top-4 h-8 rounded-lg bg-white/60" />
-              <div className="absolute bottom-4 left-4 top-16 w-48 rounded-lg bg-white/60" />
-              <div className="absolute bottom-4 left-56 right-4 top-16 rounded-lg bg-white/60" />
-            </div>
+            <Image src="/hero.png" alt="Umari AI Marketplace" width={1200} height={800} className="w-full rounded-3xl object-cover" />
           </motion.div>
+
         </div>
       </Container>
     </section>

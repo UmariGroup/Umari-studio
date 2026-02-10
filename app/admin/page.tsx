@@ -104,31 +104,6 @@ export default function AdminDashboard() {
         <div className="absolute right-0 top-20 h-80 w-80 rounded-full bg-violet-300/25 blur-3xl" />
       </div>
 
-      <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/85 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-blue-600 to-violet-600 text-white">
-              <FiShield className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-900">Umari Admin</p>
-              <p className="text-xs text-slate-500">Boshqaruv markazi</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Link href="/dashboard" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
-              Boshqaruv
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
-            >
-              <FiLogOut className="h-4 w-4" /> Chiqish
-            </button>
-          </div>
-        </div>
-      </header>
 
       <main className="relative mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">

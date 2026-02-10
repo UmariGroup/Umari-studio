@@ -17,11 +17,11 @@ const faqs = [
   },
   {
     question: "Tarifni qanday faollashtiraman?",
-    answer: "Landing pricing bo'limidagi Yangilash tugmasini bossangiz, Telegram'da @Ostudio22 bilan chat ochiladi va tanlangan tarif bo'yicha xabar avtomatik yuboriladi.",
+    answer: "Landing pricing bo'limidagi Yangilash tugmasini bossangiz, Telegram'da @UmariAI_admin bilan chat ochiladi va tanlangan tarif bo'yicha xabar avtomatik yuboriladi.",
   },
   {
     question: "Qaysi marketplace uchun mos?",
-    answer: "Umari Studio Uzum, Wildberries va boshqa onlayn savdo kanallari uchun mos. Rasm, video va copy natijalari listing ish jarayoniga mos formatda ishlab chiqiladi.",
+    answer: "Umari AI Uzum, Wildberries va boshqa onlayn savdo kanallari uchun mos. Rasm, video va copy natijalari listing ish jarayoniga mos formatda ishlab chiqiladi.",
   },
   {
     question: "Oylik tariflar qanday?",

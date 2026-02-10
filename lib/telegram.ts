@@ -1,6 +1,6 @@
 import { SubscriptionPlan, SUBSCRIPTION_PLANS, normalizeSubscriptionPlan } from './subscription-plans';
 
-const DEFAULT_TELEGRAM_USERNAME = 'Ostudio22';
+const DEFAULT_TELEGRAM_USERNAME = '@UmariAI_admin';
 
 export function getTelegramUsername(): string {
   const configured = process.env.NEXT_PUBLIC_TELEGRAM_SUPPORT_USERNAME;
@@ -10,7 +10,7 @@ export function getTelegramUsername(): string {
 
 export function getSubscribeMessage(plan: SubscriptionPlan): string {
   const label = SUBSCRIPTION_PLANS[plan]?.labelUz || SUBSCRIPTION_PLANS[plan]?.label || plan;
-  return `Assalomu alaykum men Umari ai da ${label} tarifini sotib olmoqchi edim`;
+  return `Assalomu alaykum men Umari AI da ${label} tarifini sotib olmoqchi edim`;
 }
 
 export function getTelegramSubscribeUrl(planInput: unknown): string {
