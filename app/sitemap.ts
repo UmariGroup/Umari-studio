@@ -12,7 +12,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
     return [
         {
-            url: `${baseUrl}/`,
+            url: `${baseUrl}/uz`,
+            lastModified: now,
+            changeFrequency: "daily",
+            priority: 1,
+        },
+        {
+            url: `${baseUrl}/ru`,
             lastModified: now,
             changeFrequency: "daily",
             priority: 1,
