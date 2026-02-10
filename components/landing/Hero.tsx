@@ -72,7 +72,7 @@ export function Hero() {
             transition={{ duration: 0.7, delay: 0.4 }}
             className="mt-16 w-full max-w-5xl rounded-3xl border border-slate-200 bg-white/50 p-2 shadow-2xl shadow-blue-500/10 backdrop-blur-xl"
           >
-            <Image src="/hero.png" alt="Umari AI Marketplace" width={1200} height={800} className="w-full rounded-3xl object-cover" />
+            <Image src="/hero.png" alt="Umari AI Marketplace" priority={true} width={1200} height={800} className="w-full rounded-3xl object-cover" />
           </motion.div>
 
         </div>

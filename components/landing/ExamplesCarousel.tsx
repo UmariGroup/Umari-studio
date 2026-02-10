@@ -33,7 +33,7 @@ const secondRow = [...exampleImages.slice(4), ...exampleImages.slice(0, 4), ...e
 
 function ExampleCard({
   src,
-  priority = false,
+  priority = true,
   alt,
 }: {
   src: string;
