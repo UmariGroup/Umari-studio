@@ -28,6 +28,13 @@ export async function middleware(request: NextRequest) {
   const pathname = locale?.strippedPathname ?? originalPathname;
   const localePrefix = locale ? `/${locale.lang}` : '';
 
+  // Allow public/static asset files to pass through without locale redirects.
+  // Otherwise requests like /examples/foo.png would be redirected to /uz/examples/foo.png and 404.
+  const isPublicAsset = /\.(?:png|jpg|jpeg|gif|webp|avif|svg|ico|css|js|map|txt|xml|json|woff2?|ttf|eot)$/i.test(originalPathname);
+  if (isPublicAsset) {
+    return NextResponse.next();
+  }
+
   // Avoid locale prefixes for API routes
   if (locale && pathname.startsWith('/api')) {
     return NextResponse.redirect(new URL(pathname, request.url));
