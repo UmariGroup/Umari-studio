@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { planLabelUz } from '@/lib/uzbek-errors';
 import { Navbar } from '@/components/landing/Navbar';
 import { ContactInfoModal } from '@/components/ContactInfoModal';
+import Image from 'next/image';
 
 type Language = 'uz' | 'ru';
 
@@ -34,10 +35,7 @@ interface User {
 function Logo({ href }: { href: string }) {
   return (
     <Link href={href} className="inline-flex items-center gap-3">
-      <span className="h-9 w-9 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white font-black text-lg grid place-items-center">
-        U
-      </span>
-      <span className="text-lg sm:text-xl font-black tracking-tight text-slate-900">Umari AI</span>
+     <Image src="/favicon.ico" alt="Umari AI Logo" width={32} height={32} className="inline-block" />
     </Link>
   );
 }
