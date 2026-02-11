@@ -423,6 +423,43 @@ const MarketplaceStudio: React.FC = () => {
     []
   );
 
+  const handleUploadMany = useCallback(
+  async (
+    startIndex: number,
+    files: File[],
+    type: 'product' | 'style',
+    setImages: React.Dispatch<React.SetStateAction<(string | null)[]>>,
+    maxCount: number
+  ) => {
+    const toBase64 = (file: File) =>
+      new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('FileReader error'));
+        reader.readAsDataURL(file);
+      });
+
+    const base64List = await Promise.all(files.map(toBase64));
+
+    setImages((prev) => {
+      const next = [...prev];
+
+      // kerak bo‘lsa arrayni maxCount gacha kengaytirib olamiz
+      while (next.length < maxCount) next.push(null);
+
+      // startIndex dan boshlab joylashtiramiz
+      base64List.forEach((b64, i) => {
+        const pos = startIndex + i;
+        if (pos < maxCount) next[pos] = b64;
+      });
+
+      return next.slice(0, maxCount);
+    });
+  },
+  []
+);
+
+
   // Add image slot
   const addImageSlot = useCallback(
     (type: 'product' | 'style') => {
@@ -772,12 +809,22 @@ const MarketplaceStudio: React.FC = () => {
                       <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                       </svg>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => e.target.files?.[0] && handleUpload(idx, e.target.files[0], 'product', setProductImages)}
-                      />
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const files = e.target.files;
+                        if (!files || files.length === 0) return;
+
+                        handleUploadMany(idx, Array.from(files), 'product', setProductImages, config.maxProductImages);
+
+                        // bir xil faylni qayta tanlasa ham change ishlashi uchun
+                        e.currentTarget.value = '';
+                      }}
+                    />
+
                     </label>
                   )}
                 </div>
