@@ -5,6 +5,7 @@ import { Container } from '@/components/ui/Container';
 import { Instagram, Youtube } from 'lucide-react';
 import { FaTelegram } from 'react-icons/fa';
 import { useLanguage } from '@/lib/LanguageContext';
+import Image from 'next/image';
 
 export default function Footer() {
   const { t, language } = useLanguage();
