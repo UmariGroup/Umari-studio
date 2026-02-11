@@ -6,7 +6,7 @@ import { Instagram, Youtube } from 'lucide-react';
 import { FaTelegram } from 'react-icons/fa';
 import { useLanguage } from '@/lib/LanguageContext';
 
-export function Footer() {
+export default function Footer() {
   const { t, language } = useLanguage();
   const prefix = language === 'ru' ? '/ru' : '/uz';
 
@@ -16,7 +16,7 @@ export function Footer() {
         <div className="mb-12 grid grid-cols-1 gap-12 md:grid-cols-4">
           <div className="col-span-1 md:col-span-1">
             <Link href={prefix} className="text-2xl font-bold tracking-tight text-white">
-              Umari<span className="text-blue-500"> ai</span>
+             <Image src="/favicon.ico" alt="Umari AI Logo" width={40} height={40} className="inline-block mr-2" />
             </Link>
             <p className="mt-4 text-sm leading-relaxed text-slate-400">
               {t('footer.description')}

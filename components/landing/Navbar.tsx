@@ -31,7 +31,7 @@ export function Navbar() {
                         : 'bg-transparent'
                     }`}>
                     <Link href={prefix} className="text-xl font-bold tracking-tight text-slate-900">
-                        Umari<span className="text-blue-600"> ai</span>
+                        <Image src="/favicon.ico" alt="Umari AI Logo" width={36} height={36} className="inline-block mr-2" />
                     </Link>
 
                     {/* Desktop Nav */}

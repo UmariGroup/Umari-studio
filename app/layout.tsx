@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import './globals.css';
-import Header from '../components/Header';
-import Footer from '../components/Footer';
+import Header from '@/components/Header';
+import Footer from '@/components/landing/Footer';
 import ToastProvider from '../components/ToastProvider';
 import { LanguageProvider } from '../lib/LanguageContext';
 
