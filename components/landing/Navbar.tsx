@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Menu, X } from 'lucide-react';
 import { useLanguage } from '@/lib/LanguageContext';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import Image from 'next/image';
 
 export function Navbar() {
     const [isScrolled, setIsScrolled] = useState(false);
