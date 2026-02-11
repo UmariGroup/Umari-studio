@@ -28,6 +28,8 @@ interface User {
   subscription_status: string;
   subscription_plan: string;
   tokens_remaining: number;
+  tokens_referral_remaining?: number;
+  tokens_total?: number;
   subscription_expires_at?: string | null;
   created_at: string;
 }
@@ -147,6 +149,7 @@ export default function AdminUsersPage() {
       }
 
       setUsers(users.map((u) => (u.id === userId ? { ...u, ...data.user } : u)));
+      await fetchUsers();
       toast.success(`${plan.toUpperCase()} tarif faollashtirildi (1 oy)`);
     } catch (error) {
       toast.error((error as Error).message || 'Xatolik yuz berdi.');
@@ -170,6 +173,7 @@ export default function AdminUsersPage() {
       }
 
       setUsers(users.map((u) => (u.id === userId ? { ...u, ...data.user } : u)));
+      await fetchUsers();
       toast.success('Obuna tugatildi, tokenlar 0 qilindi');
     } catch (error) {
       toast.error((error as Error).message || 'Xatolik yuz berdi.');
@@ -274,9 +278,12 @@ export default function AdminUsersPage() {
                           {(user.first_name?.[0] || user.email[0]).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <h3 className="font-semibold text-white truncate">
-                            {[user.first_name, user.last_name].filter(Boolean).join(' ') || 'Noma\'lum'}
-                          </h3>
+                          <Link href={`/admin/users/${user.id}`} className="block" title="Foydalanuvchi tafsilotlari">
+                            <h3 className="font-semibold text-white truncate hover:underline">
+                              {[user.first_name, user.last_name].filter(Boolean).join(' ') || 'Noma\'lum'}
+                            </h3>
+                            <p className="text-white/50 text-sm truncate">{user.email}</p>
+                          </Link>
                           <p className="text-white/50 text-sm truncate">{user.phone}</p>
                           <p className="text-white/50 text-sm truncate">{user.telegram_username}</p>
                         </div>
@@ -313,7 +320,13 @@ export default function AdminUsersPage() {
                       </div>
                       <div className="text-center">
                         <p className="text-white/40 text-xs mb-1">Tokenlar</p>
-                        <span className="text-white font-bold">{Number(user.tokens_remaining || 0).toFixed(1)}</span>
+                        <span className="text-white font-bold">
+                          {Number((user.tokens_total ?? user.tokens_remaining) || 0).toFixed(2)}
+                        </span>
+                        <p className="text-white/40 text-[11px] mt-1">
+                          Tarif: {Number(user.tokens_remaining || 0).toFixed(2)} • Referral:{' '}
+                          {Number(user.tokens_referral_remaining || 0).toFixed(2)}
+                        </p>
                       </div>
                       <div className="text-center">
                         <p className="text-white/40 text-xs mb-1">Muddat</p>
@@ -412,7 +425,7 @@ export default function AdminUsersPage() {
               </p>
               <p className="flex gap-2">
                 <FiAlertTriangle className="w-5 h-5 text-yellow-300 mt-0.5 flex-shrink-0" aria-hidden />
-                <span>Muddat tugagan, lekin token qolgan bo'lsa - tokenlar yo'qoladi</span>
+                <span>Tarif tokenlari muddat tugasa 0 bo'ladi; referral tokenlar esa 30 kun amal qiladi va alohida ishlatiladi</span>
               </p>
               <p className="flex gap-2">
                 <FiAlertTriangle className="w-5 h-5 text-yellow-300 mt-0.5 flex-shrink-0" aria-hidden />

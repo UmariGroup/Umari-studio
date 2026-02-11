@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { getClient, query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { ensureReferralSchema } from '@/lib/referral';
 
 /**
  * Get all users (ADMIN ONLY)
@@ -24,21 +25,40 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
 
+    // Ensure referral schema exists (so token_total query doesn't fail on older DBs)
+    const client = await getClient();
+    try {
+      await client.query('BEGIN');
+      await ensureReferralSchema(client);
+      await client.query('COMMIT');
+    } catch {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // ignore
+      }
+      // If schema setup fails, continue without blocking user listing.
+    } finally {
+      client.release();
+    }
+
     let whereConditions = [];
     let params: any[] = [];
 
     if (search) {
-      whereConditions.push(`(email ILIKE $${params.length + 1} OR first_name ILIKE $${params.length + 1})`);
+      whereConditions.push(
+        `(u.email ILIKE $${params.length + 1} OR u.first_name ILIKE $${params.length + 1})`
+      );
       params.push(`%${search}%`);
     }
 
     if (role && ['user', 'admin'].includes(role)) {
-      whereConditions.push(`role = $${params.length + 1}`);
+      whereConditions.push(`u.role = $${params.length + 1}`);
       params.push(role);
     }
 
     if (subscription && ['free', 'active', 'expired'].includes(subscription)) {
-      whereConditions.push(`subscription_status = $${params.length + 1}`);
+      whereConditions.push(`u.subscription_status = $${params.length + 1}`);
       params.push(subscription);
     }
 
@@ -46,18 +66,45 @@ export async function GET(req: NextRequest) {
 
     // Get total count
     const countResult = await query(
-      `SELECT COUNT(*) FROM users ${whereClause}`,
+      `SELECT COUNT(*) FROM users u ${whereClause}`,
       params
     );
 
     // Get paginated results
-    const result = await query(
-      `SELECT * FROM users 
-       ${whereClause}
-       ORDER BY created_at DESC
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, limit, offset]
-    );
+    let result;
+    try {
+      result = await query(
+        `SELECT
+           u.*, 
+           COALESCE(ref.tokens_referral_remaining, 0)::numeric AS tokens_referral_remaining,
+           (COALESCE(u.tokens_remaining, 0) + COALESCE(ref.tokens_referral_remaining, 0))::numeric AS tokens_total
+         FROM users u
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(SUM(rr.tokens_remaining), 0) AS tokens_referral_remaining
+           FROM referral_rewards rr
+           WHERE rr.referrer_user_id = u.id
+             AND rr.tokens_remaining > 0
+             AND (rr.expires_at IS NULL OR rr.expires_at > NOW())
+         ) ref ON true
+         ${whereClause}
+         ORDER BY u.created_at DESC
+         LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        [...params, limit, offset]
+      );
+    } catch {
+      // If referral table doesn't exist / schema issues, show subscription-only tokens.
+      result = await query(
+        `SELECT
+           u.*,
+           0::numeric AS tokens_referral_remaining,
+           COALESCE(u.tokens_remaining, 0)::numeric AS tokens_total
+         FROM users u
+         ${whereClause}
+         ORDER BY u.created_at DESC
+         LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        [...params, limit, offset]
+      );
+    }
 
     return NextResponse.json({
       success: true,
