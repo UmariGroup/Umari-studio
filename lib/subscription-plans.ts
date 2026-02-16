@@ -280,7 +280,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
       monthlyLimits: { basic: 10, pro: 7, premium: 5 },
     },
     copywriter: {
-      allowedModels: ['gemini-2.5-flash', 'gemini-2.5-pro'],
+      allowedModels: ['gemini-2.5-flash', 'gemini-3-pro-preview'],
       maxBlocks: 18,
       features: ['Product copy', 'Marketing/Ads', 'Long description', 'SEO Pro'],
     },
