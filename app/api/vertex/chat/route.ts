@@ -27,11 +27,11 @@ export async function POST(request: NextRequest) {
 
     if (isRateLimited) {
       return new Response(
-        "So'rovlar juda ko'p (Vertex limit). 10-30 soniya kutib qayta urinib ko'ring.",
+        "So'rovlar juda ko'p (Vertex quota). Avto region fallback ishlatiladi, lekin hozircha band. 20-60 soniya kutib qayta urinib ko'ring.",
         {
           status: 429,
           headers: {
-            'Retry-After': '15',
+            'Retry-After': '25',
           },
         }
       );

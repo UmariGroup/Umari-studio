@@ -30,6 +30,17 @@ function mergeImagesUpToLimit(groups: string[][], limit: number): string[] {
   return out;
 }
 
+function isUpstreamRateLimitError(message: string): boolean {
+  const text = String(message || '').toLowerCase();
+  return (
+    text.includes('(429') ||
+    text.includes('quota') ||
+    text.includes('resource_exhausted') ||
+    text.includes('too many requests') ||
+    text.includes('rate limit')
+  );
+}
+
 export async function POST(request: NextRequest) {
   let userId: string | null = null;
   let reservedTokens = 0;
@@ -377,7 +388,7 @@ export async function POST(request: NextRequest) {
     const selectedModel =
       policy.allowedModels.length > 0 ? (model || policy.allowedModels[0] || '').trim() : model.trim();
 
-    const maxPerRequest = Math.max(1, Number(process.env.IMAGE_SYNC_MAX_CONCURRENT_PER_REQUEST || 2));
+    const maxPerRequest = Math.max(1, Number(process.env.IMAGE_SYNC_MAX_CONCURRENT_PER_REQUEST || 1));
     const maxConcurrent = Math.min(Math.max(1, parallelLimit), maxPerRequest, variations.length);
 
     type ImageOutput = {
@@ -414,7 +425,10 @@ export async function POST(request: NextRequest) {
             productImagesForVariation,
             safeStyleImages,
             aspectRatio,
-            { model: selectedModel || undefined }
+            {
+              model: selectedModel || undefined,
+              fallbackModels: policy.allowedModels.filter((value) => value !== selectedModel),
+            }
           );
 
           outputs[index] = {
@@ -543,6 +557,43 @@ export async function POST(request: NextRequest) {
       // ignore logging errors
     }
 
+    const allFailedByQuota =
+      !anySucceeded &&
+      failed.length > 0 &&
+      failed.every((item) => isUpstreamRateLimitError(item.error || ''));
+
+    if (allFailedByQuota) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Rasm generatsiyasi vaqtincha limitga urildi (429/quota). Avto fallback ishlatildi, lekin hammasi band. 20-60 soniyada qayta urinib ko'ring.",
+          code: 'UPSTREAM_RATE_LIMIT',
+          batch_id: batchId,
+          items: ordered.map((item) => ({
+            id: item.id,
+            index: item.index,
+            status: item.status,
+            label: item.label,
+            imageUrl: item.imageUrl,
+            error: item.error,
+          })),
+          parallel_limit: parallelLimit,
+          retry_after_seconds: 25,
+          tokens_reserved: reservedTokens,
+          tokens_charged: user.role === 'admin' ? 0 : tokensCharged,
+          tokens_refunded: user.role === 'admin' ? 0 : tokensRefunded,
+          tokens_remaining: user.role === 'admin' ? 999999 : Number(reservedTokensRemaining.toFixed(2)),
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': '25',
+          },
+        }
+      );
+    }
+
     const status = failed.length === 0 ? 'succeeded' : anySucceeded ? 'partial' : 'failed';
     return NextResponse.json({
       success: true,
@@ -600,6 +651,22 @@ export async function POST(request: NextRequest) {
     }
 
     const lower = message.toLowerCase();
+    if (isUpstreamRateLimitError(lower)) {
+      return NextResponse.json(
+        {
+          error:
+            "Rasm generatsiyasi limitga urildi (429/quota). Iltimos 20-60 soniya kutib qayta urinib ko'ring.",
+          code: 'UPSTREAM_RATE_LIMIT',
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': '25',
+          },
+        }
+      );
+    }
+
     const isPolicyBlocked =
       lower.includes('safety') ||
       lower.includes('sexually explicit') ||

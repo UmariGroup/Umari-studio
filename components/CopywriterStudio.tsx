@@ -261,17 +261,55 @@ const CopywriterStudio: React.FC = () => {
     }
   };
 
-  const cleanLangText = (text: string, lang: 'UZ' | 'RU') => {
+  const extractLangText = (text: string, lang: 'UZ' | 'RU') => {
     if (!text) return '';
-    const uzPart = text.split(/RU:/i)[0].replace(/UZ:/i, '').trim();
-    const ruPart = (text.split(/RU:/i)[1] || '').trim();
-    return (lang === 'UZ' ? uzPart : ruPart).replace(/[*#_~]/g, '');
+    if (lang === 'UZ') {
+      const match = text.match(/UZ:\s*([\s\S]*?)(?=\n\s*RU:|$)/i);
+      return (match?.[1] || '').trim();
+    }
+    const match = text.match(/RU:\s*([\s\S]*?)$/i);
+    return (match?.[1] || '').trim();
+  };
+
+  const cleanLangText = (text: string, lang: 'UZ' | 'RU', key?: string) => {
+    const langText = extractLangText(text, lang);
+    if (!langText) return '';
+    if (key === 'FULL_DESC') return langText;
+    return langText.replace(/[*#_~]/g, '').trim();
+  };
+
+  const renderTextWithBold = (text: string) => {
+    const lines = text.split('\n');
+    return lines.map((line, lineIndex) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        return <div key={`blank-${lineIndex}`} className="h-2" />;
+      }
+
+      const segments = trimmed.split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
+      return (
+        <p key={`line-${lineIndex}`} className="text-sm leading-relaxed">
+          {segments.map((segment, segmentIndex) => {
+            const boldMatch = segment.match(/^\*\*([\s\S]+)\*\*$/);
+            if (boldMatch) {
+              return (
+                <strong key={`seg-${lineIndex}-${segmentIndex}`} className="font-semibold">
+                  {boldMatch[1]}
+                </strong>
+              );
+            }
+
+            return <React.Fragment key={`seg-${lineIndex}-${segmentIndex}`}>{segment}</React.Fragment>;
+          })}
+        </p>
+      );
+    });
   };
 
   const copyToClipboard = (text: string, key: string, lang?: 'UZ' | 'RU') => {
     let final = text;
     if (lang) {
-      final = cleanLangText(text, lang);
+      final = cleanLangText(text, lang, key);
     } else {
       final = text.replace(/UZ:|RU:/gi, '').trim().split('\n')[0];
     }
@@ -532,11 +570,19 @@ const CopywriterStudio: React.FC = () => {
                         <div className="space-y-3">
                           <div className="p-4 bg-orange-50 rounded-xl border border-orange-100">
                             <p className="text-xs font-semibold text-orange-600 mb-1">🇺🇿 {t('copywriterNew.uzbek', "O'zbekcha")}</p>
-                            <p className="text-sm text-gray-700 leading-relaxed">{cleanLangText(results[key], 'UZ')}</p>
+                            {key === 'FULL_DESC' ? (
+                              <div className="text-gray-700">{renderTextWithBold(cleanLangText(results[key], 'UZ', key))}</div>
+                            ) : (
+                              <p className="text-sm text-gray-700 leading-relaxed">{cleanLangText(results[key], 'UZ', key)}</p>
+                            )}
                           </div>
                           <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
                             <p className="text-xs font-semibold text-gray-500 mb-1">🇷🇺 {t('copywriterNew.russian', 'Русский')}</p>
-                            <p className="text-sm text-gray-600 leading-relaxed italic">{cleanLangText(results[key], 'RU')}</p>
+                            {key === 'FULL_DESC' ? (
+                              <div className="text-gray-600 italic">{renderTextWithBold(cleanLangText(results[key], 'RU', key))}</div>
+                            ) : (
+                              <p className="text-sm text-gray-600 leading-relaxed italic">{cleanLangText(results[key], 'RU', key)}</p>
+                            )}
                           </div>
                         </div>
                       </div>

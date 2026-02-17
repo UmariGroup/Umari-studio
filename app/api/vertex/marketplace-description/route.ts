@@ -120,6 +120,23 @@ export async function POST(request: NextRequest) {
     }
 
     const message = error instanceof Error ? error.message : String(error);
+    const isRateLimited =
+      message.includes('Vertex AI error (429') ||
+      message.includes('RESOURCE_EXHAUSTED') ||
+      message.toLowerCase().includes('quota') ||
+      message.toLowerCase().includes('too many requests');
+    if (isRateLimited) {
+      return new Response(
+        "Vertex quota band. Avto region fallback ishladi, lekin hamma region band bo'ldi. 20-60 soniya kutib qayta urinib ko'ring.",
+        {
+          status: 429,
+          headers: {
+            'Retry-After': '25',
+          },
+        }
+      );
+    }
+
     const lower = message.toLowerCase();
     if (lower.includes('publisher model') || lower.includes('not found') || lower.includes('does not have access')) {
       return new Response("Tanlangan model bu loyiha uchun mavjud emas. Fallback modelga o'tildi, iltimos qayta urinib ko'ring.", { status: 400 });

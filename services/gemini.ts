@@ -16,9 +16,13 @@ const GEMINI_API_KEY =
 
 const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash';
 const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
+const GEMINI_IMAGE_FALLBACK_MODELS = String(process.env.GEMINI_IMAGE_FALLBACK_MODELS || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 const GEMINI_RETRY_ATTEMPTS = Math.max(1, Number(process.env.GEMINI_RETRY_ATTEMPTS || 3));
-const GEMINI_MAX_CONCURRENT = Math.max(1, Number(process.env.GEMINI_MAX_CONCURRENT || 4));
+const GEMINI_MAX_CONCURRENT = Math.max(1, Number(process.env.GEMINI_MAX_CONCURRENT || 2));
 
 class Semaphore {
   private available: number;
@@ -71,6 +75,33 @@ function parseRetryAfterMs(value: unknown): number | null {
   const seconds = Number(s);
   if (Number.isFinite(seconds) && seconds > 0) return Math.min(60_000, Math.floor(seconds * 1000));
   return null;
+}
+
+function extractHttpStatus(error: unknown): number | null {
+  if (axios.isAxiosError(error)) {
+    return error.response?.status ?? null;
+  }
+  if (!(error instanceof Error)) return null;
+
+  const match = error.message.match(/\((\d{3})(?:\s|[)])?/);
+  if (!match) return null;
+  const status = Number(match[1]);
+  return Number.isFinite(status) ? status : null;
+}
+
+function shouldTryNextImageModel(error: unknown): boolean {
+  const status = extractHttpStatus(error);
+  if (status && [404, 408, 429, 500, 502, 503, 504].includes(status)) return true;
+
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('quota') ||
+    message.includes('resource_exhausted') ||
+    message.includes('too many requests') ||
+    message.includes('model did not return an image') ||
+    message.includes('no image returned')
+  );
 }
 
 function requireApiKey(): void {
@@ -291,14 +322,25 @@ export async function generateMarketplaceImage(
   productImages: string[] = [],
   styleImages: string[] = [],
   aspectRatio: string = '1:1',
-  options?: { model?: string }
+  options?: { model?: string; fallbackModels?: string[] }
 ): Promise<string> {
   const promptSafety = checkImagePromptSafety(prompt);
   if (!promptSafety.allowed) {
     throw new Error('PROMPT_POLICY_BLOCKED: 18+ yoki pornografik kontent taqiqlangan');
   }
 
-  const model = (options?.model || GEMINI_IMAGE_MODEL).trim();
+  const primaryModel = (options?.model || GEMINI_IMAGE_MODEL).trim();
+  const planFallbacks = Array.isArray(options?.fallbackModels)
+    ? options!.fallbackModels!.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+  const modelCandidates = Array.from(
+    new Set([primaryModel, ...planFallbacks, ...GEMINI_IMAGE_FALLBACK_MODELS].filter(Boolean))
+  );
+
+  if (modelCandidates.length === 0) {
+    throw new Error('Gemini image model is empty. Set GEMINI_IMAGE_MODEL in .env');
+  }
+
   const parts: any[] = [];
 
   // 1. Instructions
@@ -343,23 +385,38 @@ export async function generateMarketplaceImage(
     },
   };
 
-  const response = await geminiGenerateContent(model, body);
-  const blockReason = response?.promptFeedback?.blockReason;
-  if (blockReason) {
-    throw new Error(`PROMPT_POLICY_BLOCKED: Blocked by Gemini safety (${blockReason})`);
-  }
+  let lastError: unknown = null;
 
-  const dataUrl = extractFirstImageDataUrl(response);
+  for (let index = 0; index < modelCandidates.length; index++) {
+    const model = modelCandidates[index];
+    try {
+      const response = await geminiGenerateContent(model, body);
+      const blockReason = response?.promptFeedback?.blockReason;
+      if (blockReason) {
+        throw new Error(`PROMPT_POLICY_BLOCKED: Blocked by Gemini safety (${blockReason})`);
+      }
 
-  if (!dataUrl) {
-    const finishReason = response?.candidates?.[0]?.finishReason;
-    if (finishReason === 'NO_IMAGE') {
-      throw new Error('Model did not return an image (NO_IMAGE). Try a different image model.');
+      const dataUrl = extractFirstImageDataUrl(response);
+      if (dataUrl) {
+        return dataUrl;
+      }
+
+      const finishReason = response?.candidates?.[0]?.finishReason;
+      if (finishReason === 'NO_IMAGE') {
+        lastError = new Error(`Model did not return an image (NO_IMAGE): ${model}`);
+      } else {
+        lastError = new Error(`No image returned from Gemini API: ${model}`);
+      }
+    } catch (error: unknown) {
+      lastError = error;
+      if (index < modelCandidates.length - 1 && shouldTryNextImageModel(error)) {
+        continue;
+      }
+      throw error;
     }
-    throw new Error('No image returned from Gemini API.');
   }
 
-  return dataUrl;
+  throw lastError instanceof Error ? lastError : new Error('No image returned from Gemini API.');
 }
 
 export async function* generateMarketplaceDescriptionStream(

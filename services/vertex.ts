@@ -24,6 +24,31 @@ const VERTEX_LOCATION =
   process.env.VITE_VERTEX_LOCATION ||
   'us-central1';
 
+function parseLocationList(value: string): string[] {
+  const list = String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const unique = Array.from(new Set(list));
+  return unique.length > 0 ? unique : ['us-central1'];
+}
+
+const VERTEX_TEXT_LOCATIONS = parseLocationList(
+  process.env.VERTEX_TEXT_LOCATIONS || process.env.VERTEX_LOCATIONS || VERTEX_LOCATION
+);
+const VERTEX_IMAGE_LOCATIONS = parseLocationList(
+  process.env.VERTEX_IMAGE_LOCATIONS ||
+    process.env.VERTEX_LOCATIONS ||
+    process.env.VERTEX_IMAGE_LOCATION ||
+    VERTEX_LOCATION
+);
+const VERTEX_VIDEO_LOCATIONS = parseLocationList(
+  process.env.VERTEX_VIDEO_LOCATIONS ||
+    process.env.VERTEX_LOCATIONS ||
+    process.env.VERTEX_VIDEO_LOCATION ||
+    VERTEX_LOCATION
+);
+
 const DEFAULT_VERTEX_IMAGE_MODEL =
   process.env.VERTEX_IMAGE_MODEL || '' ;
 
@@ -41,6 +66,7 @@ const VERTEX_TEXT_FALLBACK_MODELS = (
   .filter(Boolean);
 
 const VERTEX_RETRY_ATTEMPTS = Math.max(1, Number(process.env.VERTEX_RETRY_ATTEMPTS || 3));
+const VERTEX_MAX_CONCURRENT = Math.max(1, Number(process.env.VERTEX_MAX_CONCURRENT || 3));
 
 const GOOGLE_APPLICATION_CREDENTIALS_JSON =
   process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON || '';
@@ -49,6 +75,45 @@ const GOOGLE_APPLICATION_CREDENTIALS_FILE =
   process.env.GOOGLE_APPLICATION_CREDENTIALS_FILE ||
   process.env.GOOGLE_APPLICATION_CREDENTIALS ||
   '';
+
+class Semaphore {
+  private available: number;
+  private queue: Array<() => void> = [];
+
+  constructor(count: number) {
+    this.available = count;
+  }
+
+  async acquire(): Promise<void> {
+    if (this.available > 0) {
+      this.available -= 1;
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      this.queue.push(resolve);
+    });
+  }
+
+  release(): void {
+    const next = this.queue.shift();
+    if (next) {
+      next();
+      return;
+    }
+    this.available += 1;
+  }
+
+  async use<T>(fn: () => Promise<T>): Promise<T> {
+    await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      this.release();
+    }
+  }
+}
+
+const vertexSemaphore = new Semaphore(VERTEX_MAX_CONCURRENT);
 
 function requireVertexConfig(): void {
   if (!VERTEX_PROJECT_ID) {
@@ -160,63 +225,90 @@ function isVertexModelNotFound(error: unknown): boolean {
   return message.includes('publisher model') || message.includes('not found') || message.includes('does not have access');
 }
 
+function isVertexRateLimited(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) return false;
+  return error.response?.status === 429;
+}
+
+function isVertexTemporarilyUnavailable(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) return false;
+  const status = error.response?.status;
+  return status === 408 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+function toVertexApiError(error: unknown, prefix = 'Vertex AI error'): Error {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+    const statusText = error.response?.statusText;
+    const details = truncateDetails(safeJsonStringify(error.response?.data));
+    const suffix = details ? `\nVertex response: ${details}` : '';
+    return new Error(
+      `${prefix}${status ? ` (${status}${statusText ? ` ${statusText}` : ''})` : ''}: ${error.message}${suffix}`
+    );
+  }
+
+  return error instanceof Error ? error : new Error(String(error));
+}
+
 async function vertexGenerateContentSingle(model: string, body: unknown): Promise<any> {
   const modelId = (model || '').trim();
   if (!modelId) {
     throw new Error('Vertex text model is empty. Set VERTEX_TEXT_MODEL or pass model explicitly.');
   }
 
-  const location = VERTEX_LOCATION.trim();
-  const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${encodeURIComponent(
-    VERTEX_PROJECT_ID
-  )}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(
-    modelId
-  )}:generateContent`;
+  return vertexSemaphore.use(async () => {
+    const token = await getVertexAccessToken();
+    let lastError: unknown;
 
-  const token = await getVertexAccessToken();
-  let lastError: unknown;
+    for (const location of VERTEX_TEXT_LOCATIONS) {
+      const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${encodeURIComponent(
+        VERTEX_PROJECT_ID
+      )}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(
+        modelId
+      )}:generateContent`;
 
-  for (let attempt = 1; attempt <= VERTEX_RETRY_ATTEMPTS; attempt++) {
-    try {
-      const res = await axios.post(url, body, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 120_000,
-      });
-      return res.data;
-    } catch (error: unknown) {
-      lastError = error;
-      if (!axios.isAxiosError(error)) throw error;
+      for (let attempt = 1; attempt <= VERTEX_RETRY_ATTEMPTS; attempt++) {
+        try {
+          const res = await axios.post(url, body, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 120_000,
+          });
+          return res.data;
+        } catch (error: unknown) {
+          lastError = error;
+          if (!axios.isAxiosError(error)) throw error;
 
-      const status = error.response?.status;
-      const retryable =
-        status === 408 ||
-        status === 429 ||
-        status === 500 ||
-        status === 502 ||
-        status === 503 ||
-        status === 504;
+          const status = error.response?.status;
+          const retryable =
+            status === 408 ||
+            status === 429 ||
+            status === 500 ||
+            status === 502 ||
+            status === 503 ||
+            status === 504;
 
-      if (retryable && attempt < VERTEX_RETRY_ATTEMPTS) {
-        const retryAfterMs = parseRetryAfterMs((error.response?.headers as any)?.['retry-after']);
-        const expBackoffMs = Math.min(15_000, 750 * Math.pow(2, attempt - 1));
-        const jitterMs = Math.floor(Math.random() * 250);
-        await sleep(Math.max(retryAfterMs || 0, expBackoffMs) + jitterMs);
-        continue;
+          if (retryable && attempt < VERTEX_RETRY_ATTEMPTS) {
+            const retryAfterMs = parseRetryAfterMs((error.response?.headers as any)?.['retry-after']);
+            const expBackoffMs = Math.min(20_000, 900 * Math.pow(2, attempt - 1));
+            const jitterMs = Math.floor(Math.random() * 350);
+            await sleep(Math.max(retryAfterMs || 0, expBackoffMs) + jitterMs);
+            continue;
+          }
+
+          if (isVertexModelNotFound(error) || isVertexRateLimited(error) || isVertexTemporarilyUnavailable(error)) {
+            break;
+          }
+
+          throw toVertexApiError(error);
+        }
       }
-
-      const statusText = error.response?.statusText;
-      const details = truncateDetails(safeJsonStringify(error.response?.data));
-      const suffix = details ? `\nVertex response: ${details}` : '';
-      throw new Error(
-        `Vertex AI error${status ? ` (${status}${statusText ? ` ${statusText}` : ''})` : ''}: ${error.message}${suffix}`
-      );
     }
-  }
 
-  throw lastError;
+    throw toVertexApiError(lastError, 'Vertex AI error (all regions failed)');
+  });
 }
 
 async function vertexGenerateContent(model: string, body: unknown): Promise<any> {
@@ -261,18 +353,8 @@ async function vertexPredictImagen(
   referenceImageDataUrl?: string | null
 ): Promise<string> {
   const modelId = (modelOverride || DEFAULT_VERTEX_IMAGE_MODEL).trim();
-  const location = VERTEX_LOCATION.trim();
-
-  const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${encodeURIComponent(
-    VERTEX_PROJECT_ID
-  )}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(
-    modelId
-  )}:predict`;
-
   const instance: any = { prompt };
 
-  // Best-effort: if a reference image is provided, attach it.
-  // If the chosen Imagen model doesn't support it, Vertex will return a 400.
   if (referenceImageDataUrl) {
     const parsed = parseDataUrl(referenceImageDataUrl);
     if (parsed) {
@@ -288,104 +370,109 @@ async function vertexPredictImagen(
     },
   };
 
-  const token = await getVertexAccessToken();
-  const requestConfig = {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    timeout: 120_000,
-  } as const;
-
-  const hasReferenceImage = Boolean(instance.image);
-
-  const postWithRetry = async (payload: any, maxAttempts: number): Promise<any> => {
+  return vertexSemaphore.use(async () => {
+    const token = await getVertexAccessToken();
+    const hasReferenceImage = Boolean(instance.image);
     let lastError: unknown;
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        return await axios.post(url, payload, requestConfig);
-      } catch (error: unknown) {
-        lastError = error;
+    for (const location of VERTEX_IMAGE_LOCATIONS) {
+      const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${encodeURIComponent(
+        VERTEX_PROJECT_ID
+      )}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(
+        modelId
+      )}:predict`;
 
-        if (!axios.isAxiosError(error)) throw error;
+      const requestConfig = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 120_000,
+      } as const;
 
-        const status = error.response?.status;
-        const retryable =
-          status === 429 ||
-          status === 500 ||
-          status === 502 ||
-          status === 503 ||
-          status === 504;
+      const postWithRetry = async (payload: any, maxAttempts: number): Promise<any> => {
+        let localError: unknown;
 
-        if (!retryable || attempt === maxAttempts) break;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            return await axios.post(url, payload, requestConfig);
+          } catch (error: unknown) {
+            localError = error;
+            if (!axios.isAxiosError(error)) throw error;
 
-        const backoffMs = Math.min(10_000, 750 * Math.pow(2, attempt - 1));
-        const jitterMs = Math.floor(Math.random() * 250);
-        await new Promise((resolve) => setTimeout(resolve, backoffMs + jitterMs));
-      }
-    }
+            const status = error.response?.status;
+            const retryable =
+              status === 429 ||
+              status === 500 ||
+              status === 502 ||
+              status === 503 ||
+              status === 504;
 
-    throw lastError;
-  };
+            if (!retryable || attempt === maxAttempts) break;
 
-  const throwVertexRequestError = (err: unknown): never => {
-    if (axios.isAxiosError(err)) {
-      const status = err.response?.status;
-      const statusText = err.response?.statusText;
-      const data = err.response?.data;
-
-      const details = truncateDetails(safeJsonStringify(data));
-      const suffix = details ? `\nVertex response: ${details}` : '';
-      throw new Error(
-        `Vertex AI error${status ? ` (${status}${statusText ? ` ${statusText}` : ''})` : ''}: ${err.message}${suffix}`
-      );
-    }
-
-    throw err;
-  };
-
-  let res: any;
-  try {
-    res = await postWithRetry(body, 3);
-  } catch (error: unknown) {
-    // Best effort: If we used a reference image and the model/endpoint chokes (400/500s),
-    // retry once as text-only.
-    if (hasReferenceImage && axios.isAxiosError(error)) {
-      const status = error.response?.status;
-      if (status === 400 || status === 500 || status === 502 || status === 503 || status === 504) {
-        const bodyWithoutImage: any = {
-          ...body,
-          instances: [{ prompt }],
-        };
-
-        try {
-          res = await postWithRetry(bodyWithoutImage, 2);
-        } catch (fallbackError: unknown) {
-          throwVertexRequestError(fallbackError);
+            const retryAfterMs = parseRetryAfterMs((error.response?.headers as any)?.['retry-after']);
+            const backoffMs = Math.min(12_000, 900 * Math.pow(2, attempt - 1));
+            const jitterMs = Math.floor(Math.random() * 250);
+            await sleep(Math.max(retryAfterMs || 0, backoffMs) + jitterMs);
+          }
         }
-      } else {
-        throwVertexRequestError(error);
+
+        throw localError;
+      };
+
+      let res: any;
+      let regionError: unknown;
+      try {
+        res = await postWithRetry(body, VERTEX_RETRY_ATTEMPTS);
+      } catch (error: unknown) {
+        regionError = error;
+        if (hasReferenceImage && axios.isAxiosError(error)) {
+          const status = error.response?.status;
+          if (status === 400 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504) {
+            const bodyWithoutImage: any = {
+              ...body,
+              instances: [{ prompt }],
+            };
+            try {
+              res = await postWithRetry(bodyWithoutImage, Math.max(2, VERTEX_RETRY_ATTEMPTS - 1));
+              regionError = null;
+            } catch (fallbackError: unknown) {
+              regionError = fallbackError;
+            }
+          }
+        }
       }
-    } else {
-      throwVertexRequestError(error);
+
+      if (regionError) {
+        lastError = regionError;
+        if (
+          isVertexRateLimited(regionError) ||
+          isVertexTemporarilyUnavailable(regionError) ||
+          isVertexModelNotFound(regionError)
+        ) {
+          continue;
+        }
+        throw toVertexApiError(regionError);
+      }
+
+      const prediction = res?.data?.predictions?.[0];
+      const bytes =
+        prediction?.bytesBase64Encoded ||
+        prediction?.bytes_base64_encoded ||
+        prediction?.image?.bytesBase64Encoded ||
+        prediction?.image?.bytes_base64_encoded;
+
+      const mimeType = prediction?.mimeType || prediction?.mime_type || 'image/png';
+
+      if (typeof bytes === 'string' && bytes) {
+        return `data:${mimeType};base64,${bytes}`;
+      }
+
+      lastError = new Error(`Vertex AI did not return image bytes for location ${location}`);
     }
-  }
 
-  const prediction = res.data?.predictions?.[0];
-  const bytes =
-    prediction?.bytesBase64Encoded ||
-    prediction?.bytes_base64_encoded ||
-    prediction?.image?.bytesBase64Encoded ||
-    prediction?.image?.bytes_base64_encoded;
-
-  const mimeType = prediction?.mimeType || prediction?.mime_type || 'image/png';
-
-  if (typeof bytes !== 'string' || !bytes) {
-    throw new Error('Vertex AI did not return image bytes');
-  }
-
-  return `data:${mimeType};base64,${bytes}`;
+    throw toVertexApiError(lastError, 'Vertex image error (all regions failed)');
+  });
 }
 
 function truncateDetails(details: string, maxLen = 2500): string {
@@ -406,11 +493,12 @@ async function pollPredictOperation(
   operationName: string,
   token: string,
   maxAttempts = 240,
-  apiVersion: VertexApiVersion = 'v1'
+  apiVersion: VertexApiVersion = 'v1',
+  location = VERTEX_LOCATION.trim()
 ): Promise<any> {
   // IMPORTANT: Veo (and other async publisher model predictions) are polled via `:fetchPredictOperation`.
   // Using GET on `/operations/...` will fail for UUID operation IDs.
-  const url = `https://${VERTEX_LOCATION.trim()}-aiplatform.googleapis.com/${apiVersion}/${endpointName}:fetchPredictOperation`;
+  const url = `https://${location}-aiplatform.googleapis.com/${apiVersion}/${endpointName}:fetchPredictOperation`;
 
   for (let i = 0; i < maxAttempts; i++) {
     try {
@@ -469,16 +557,6 @@ async function vertexPredictVeo(
 
   // Use a default Veo model if none provided
   const modelId = (modelOverride || 'veo-3.0-fast-generate-001').trim();
-  const location = VERTEX_LOCATION.trim();
-
-  // Veo video generation uses `:predictLongRunning`, then polling via `:fetchPredictOperation`.
-  const apiVersion: VertexApiVersion = 'v1';
-  const url = `https://${location}-aiplatform.googleapis.com/${apiVersion}/projects/${encodeURIComponent(
-    VERTEX_PROJECT_ID
-  )}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(
-    modelId
-  )}:predictLongRunning`;
-
   const instance: any = { prompt };
 
   if (video) {
@@ -516,80 +594,96 @@ async function vertexPredictVeo(
     },
   };
 
-  const token = await getVertexAccessToken();
+  return vertexSemaphore.use(async () => {
+    const token = await getVertexAccessToken();
+    const apiVersion: VertexApiVersion = 'v1';
+    let lastError: unknown;
 
-  let opRes: any;
-  try {
-    opRes = await axios.post(url, body, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-  } catch (error: unknown) {
-    if (axios.isAxiosError(error)) {
-      const status = error.response?.status;
-      const statusText = error.response?.statusText;
-      const details = truncateDetails(safeJsonStringify(error.response?.data), 500);
-      const suffix = details ? `\nVertex response: ${details}` : '';
-      throw new Error(
-        `Veo request failed${status ? ` (${status}${statusText ? ` ${statusText}` : ''})` : ''}: ${error.message}${suffix}`
-      );
+    for (const location of VERTEX_VIDEO_LOCATIONS) {
+      const url = `https://${location}-aiplatform.googleapis.com/${apiVersion}/projects/${encodeURIComponent(
+        VERTEX_PROJECT_ID
+      )}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(
+        modelId
+      )}:predictLongRunning`;
+
+      let opRes: any;
+      try {
+        opRes = await axios.post(url, body, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+      } catch (error: unknown) {
+        lastError = error;
+        if (isVertexRateLimited(error) || isVertexTemporarilyUnavailable(error) || isVertexModelNotFound(error)) {
+          continue;
+        }
+        throw toVertexApiError(error, 'Veo request failed');
+      }
+
+      const operationName = opRes?.data?.name;
+      if (!operationName) {
+        lastError = new Error(`Veo did not return operation name for location ${location}`);
+        continue;
+      }
+
+      const endpointName = `projects/${encodeURIComponent(VERTEX_PROJECT_ID)}/locations/${encodeURIComponent(
+        location
+      )}/publishers/google/models/${encodeURIComponent(modelId)}`;
+
+      let finalRes: any;
+      try {
+        finalRes = await pollPredictOperation(endpointName, operationName, token, 60, apiVersion, location);
+      } catch (error: unknown) {
+        lastError = error;
+        if (isVertexRateLimited(error) || isVertexTemporarilyUnavailable(error)) {
+          continue;
+        }
+        throw toVertexApiError(error, 'Veo polling failed');
+      }
+
+      const response = finalRes?.response;
+
+      const videos = response?.videos;
+      if (Array.isArray(videos) && videos.length > 0) {
+        const v0 = videos[0];
+        const mimeType = v0?.mimeType || 'video/mp4';
+        const bytes =
+          v0?.bytesBase64Encoded ||
+          v0?.bytes_base64_encoded ||
+          v0?.video?.bytesBase64Encoded ||
+          v0?.video?.bytes_base64_encoded;
+
+        if (typeof bytes === 'string' && bytes) {
+          return `data:${mimeType};base64,${bytes}`;
+        }
+
+        const gcsUri = v0?.gcsUri || v0?.gcs_uri || v0?.video?.gcsUri || v0?.video?.gcs_uri;
+        if (typeof gcsUri === 'string' && gcsUri) {
+          return gcsUri;
+        }
+      }
+
+      const predictions = response?.predictions || response?.success?.predictions;
+      if (Array.isArray(predictions) && predictions[0]) {
+        const p0 = predictions[0];
+        const bytes = p0?.bytesBase64Encoded || p0?.video?.bytesBase64Encoded;
+        if (typeof bytes === 'string' && bytes) {
+          return `data:video/mp4;base64,${bytes}`;
+        }
+
+        const uri = p0?.gcsUri || p0?.video?.gcsUri;
+        if (typeof uri === 'string' && uri) {
+          return uri;
+        }
+      }
+
+      lastError = new Error(`Veo operation completed without video for location ${location}`);
     }
-    throw error;
-  }
 
-  const operationName = opRes.data.name; // e.g. "projects/.../operations/..."
-  if (!operationName) {
-    throw new Error('Veo did not return an operation name');
-  }
-
-  const endpointName = `projects/${encodeURIComponent(VERTEX_PROJECT_ID)}/locations/${encodeURIComponent(
-    location
-  )}/publishers/google/models/${encodeURIComponent(modelId)}`;
-
-  // Poll for completion
-  const finalRes = await pollPredictOperation(endpointName, operationName, token, 60, apiVersion);
-
-  const response = finalRes?.response;
-
-  // Veo typically returns a GenerateVideoResponse with `videos[]`.
-  const videos = response?.videos;
-  if (Array.isArray(videos) && videos.length > 0) {
-    const v0 = videos[0];
-    const mimeType = v0?.mimeType || 'video/mp4';
-    const bytes =
-      v0?.bytesBase64Encoded ||
-      v0?.bytes_base64_encoded ||
-      v0?.video?.bytesBase64Encoded ||
-      v0?.video?.bytes_base64_encoded;
-
-    if (typeof bytes === 'string' && bytes) {
-      return `data:${mimeType};base64,${bytes}`;
-    }
-
-    const gcsUri = v0?.gcsUri || v0?.gcs_uri || v0?.video?.gcsUri || v0?.video?.gcs_uri;
-    if (typeof gcsUri === 'string' && gcsUri) {
-      return gcsUri;
-    }
-  }
-
-  // Fallback: some Vertex APIs return a PredictResponse-like structure.
-  const predictions = response?.predictions || response?.success?.predictions;
-  if (Array.isArray(predictions) && predictions[0]) {
-    const p0 = predictions[0];
-    const bytes = p0?.bytesBase64Encoded || p0?.video?.bytesBase64Encoded;
-    if (typeof bytes === 'string' && bytes) {
-      return `data:video/mp4;base64,${bytes}`;
-    }
-
-    const uri = p0?.gcsUri || p0?.video?.gcsUri;
-    if (typeof uri === 'string' && uri) {
-      return uri;
-    }
-  }
-
-  throw new Error('Veo operation completed but returned no videos');
+    throw toVertexApiError(lastError, 'Veo error (all regions failed)');
+  });
 }
 
 export async function generateMarketplaceVideo(
@@ -667,6 +761,278 @@ export async function enhancePrompt(prompt: string, options?: { model?: string }
   return generateText(model, systemInstruction, userText);
 }
 
+const COPYWRITER_MARKERS = [
+  'CAT',
+  'NAME',
+  'COUNTRY',
+  'BRAND',
+  'MODEL',
+  'WARRANTY',
+  'SHORT_DESC',
+  'FULL_DESC',
+  'PHOTOS_INFO',
+  'VIDEO_REC',
+  'SPECS',
+  'PROPS',
+  'INSTR',
+  'SIZE',
+  'COMP',
+  'CARE',
+  'SKU',
+  'IKPU',
+] as const;
+
+function normalizeOneLine(text: string): string {
+  return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+const COPYWRITER_LIMITS = {
+  NAME_MAX: 90,
+  SHORT_DESC_MAX: 390,
+  SPECS_LINE_MAX: 255,
+} as const;
+
+function clampTextLength(text: string, maxLen: number): string {
+  const normalized = normalizeOneLine(text);
+  if (normalized.length <= maxLen) return normalized;
+
+  const cut = normalized.slice(0, maxLen);
+  const lastSpace = cut.lastIndexOf(' ');
+  if (lastSpace > Math.floor(maxLen * 0.6)) {
+    return cut.slice(0, lastSpace).trim();
+  }
+  return cut.trim();
+}
+
+function extractLangPart(block: string, lang: 'UZ' | 'RU'): string {
+  const text = String(block || '');
+  if (lang === 'UZ') {
+    const match = text.match(/UZ:\s*([\s\S]*?)(?=\n\s*RU:|$)/i);
+    return (match?.[1] || '').trim();
+  }
+  const match = text.match(/RU:\s*([\s\S]*?)$/i);
+  return (match?.[1] || '').trim();
+}
+
+function rebuildLangBlock(uz: string, ru: string): string {
+  return `UZ: ${uz}\nRU: ${ru}`;
+}
+
+function clampLangBlock(block: string, maxLen: number): string {
+  let uz = extractLangPart(block, 'UZ');
+  let ru = extractLangPart(block, 'RU');
+
+  if (!uz && !ru) {
+    const base = clampTextLength(block, maxLen);
+    return rebuildLangBlock(base, base);
+  }
+
+  if (!uz) uz = ru;
+  if (!ru) ru = uz;
+
+  return rebuildLangBlock(clampTextLength(uz, maxLen), clampTextLength(ru, maxLen));
+}
+
+function normalizeMultiLine(text: string): string {
+  return String(text || '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function collectDescriptionIdeas(raw: string): string[] {
+  const normalized = normalizeMultiLine(raw);
+  if (!normalized) return [];
+
+  const lines = normalized
+    .split('\n')
+    .map((line) =>
+      line
+        .replace(/^\s*\d+[.)-]\s*/g, '')
+        .replace(/^\s*\*\*(?:variant)\s*[a-z0-9\s-]*\*\*\s*:?/i, '')
+        .trim()
+    )
+    .filter(Boolean);
+
+  if (lines.length >= 3) return lines;
+
+  const paragraphs = normalized
+    .split(/\n{2,}/)
+    .map((paragraph) => normalizeOneLine(paragraph))
+    .filter(Boolean);
+
+  if (paragraphs.length >= 3) return paragraphs;
+
+  const sentences = (normalized.match(/[^.!?]+[.!?]?/g) || [])
+    .map((sentence) => normalizeOneLine(sentence))
+    .filter(Boolean);
+
+  if (sentences.length >= 3) return sentences;
+  if (sentences.length > 0) return [sentences.join(' ')];
+  return [normalizeOneLine(normalized)];
+}
+
+function getExpectedImagePromptCount(plan: string): number {
+  const normalized = String(plan || '').trim().toLowerCase();
+  if (normalized === 'business_plus' || normalized === 'business+') return 4;
+  if (normalized === 'pro') return 3;
+  if (normalized === 'starter') return 2;
+  return 1;
+}
+
+function splitPromptItems(text: string): string[] {
+  const normalized = normalizeMultiLine(text);
+  if (!normalized) return [];
+
+  const lines = normalized
+    .split('\n')
+    .map((line) =>
+      line
+        .replace(/^\s*(?:[-*•]|\d+[.)-])\s*/g, '')
+        .trim()
+    )
+    .filter(Boolean);
+
+  if (lines.length >= 2) return lines;
+
+  const bySemicolon = normalized
+    .split(/[;|]+/)
+    .map((item) =>
+      item
+        .replace(/^\s*(?:[-*•]|\d+[.)-])\s*/g, '')
+        .trim()
+    )
+    .filter(Boolean);
+
+  if (bySemicolon.length >= 2) return bySemicolon;
+  return lines.length > 0 ? lines : [normalizeOneLine(normalized)];
+}
+
+function defaultImagePromptTemplate(index: number, lang: 'UZ' | 'RU'): string {
+  const presetsUz = [
+    "Hero: Mahsulotni 3:4 formatda, premium studio yorug'likda, markazda va toza fon bilan ko'rsating.",
+    "Close-up: Material teksturasi, choklar va sifat detallarini yaqin planda, aniq fokus bilan ko'rsating.",
+    "Detail: Mahsulotning asosiy ustun jihatini macro uslubda, premium reklama kayfiyatida tasvirlang.",
+    "Lifestyle: Mahsulotni real foydalanish kontekstida, dinamik kompozitsiya va tabiiy yorug'lik bilan ko'rsating.",
+  ];
+
+  const presetsRu = [
+    'Hero: Покажите товар в формате 3:4, с премиальным студийным светом, по центру и на чистом фоне.',
+    'Close-up: Покажите фактуру, швы и качество материала крупным планом с четким фокусом.',
+    'Detail: Передайте ключевое преимущество товара в макро-кадре в премиальном рекламном стиле.',
+    'Lifestyle: Покажите товар в реальном сценарии использования с динамичной композицией и естественным светом.',
+  ];
+
+  const list = lang === 'UZ' ? presetsUz : presetsRu;
+  return list[Math.min(index, list.length - 1)];
+}
+
+function normalizeImagePromptItems(raw: string, count: number, lang: 'UZ' | 'RU'): string {
+  const items = splitPromptItems(raw)
+    .map((item) => clampTextLength(item, 260))
+    .filter(Boolean);
+
+  const finalItems: string[] = [];
+  for (let index = 0; index < count; index++) {
+    finalItems.push(items[index] || defaultImagePromptTemplate(index, lang));
+  }
+
+  return finalItems.map((item, index) => `${index + 1}) ${item}`).join('\n');
+}
+
+function clampSpecLines(block: string, maxLenPerLine: number): string {
+  const lines = String(block || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) return clampTextLength(block, maxLenPerLine);
+
+  return lines
+    .map((line) => {
+      const match = line.match(/^((?:[-*•]|\d+[.)])\s+)?([\s\S]*)$/);
+      const prefix = match?.[1] || '';
+      const content = match?.[2] || line;
+      const maxContentLen = Math.max(10, maxLenPerLine - prefix.length);
+      return `${prefix}${clampTextLength(content, maxContentLen)}`;
+    })
+    .join('\n');
+}
+
+function buildDescriptionVariants(raw: string, lang: 'UZ' | 'RU'): string {
+  const text = String(raw || '').trim();
+  if (!text) return '';
+
+  const ideas = collectDescriptionIdeas(text);
+  const first = clampTextLength(ideas[0] || text, 1100);
+  const second = clampTextLength(ideas[1] || first, 1100);
+  const third = clampTextLength(ideas[2] || second, 1100);
+
+  if (lang === 'UZ') {
+    return [
+      `1) **Variant A (Asosiy sotuv matni):** ${first}`,
+      `2) **Variant B (SEO va afzallik):** ${second}`,
+      `3) **Variant C (CTA urg'u):** ${third}`,
+    ].join('\n');
+  }
+
+  return [
+    `1) **Variant A (Main sales text):** ${first}`,
+    `2) **Variant B (SEO + benefits):** ${second}`,
+    `3) **Variant C (Strong CTA):** ${third}`,
+  ].join('\n');
+}
+
+function normalizeCopywriterOutput(rawText: string, plan: string): string {
+  const text = String(rawText || '').trim();
+  if (!text) return '';
+
+  const sections: Record<string, string> = {};
+  for (let index = 0; index < COPYWRITER_MARKERS.length; index++) {
+    const key = COPYWRITER_MARKERS[index];
+    const nextKey = COPYWRITER_MARKERS[index + 1];
+    const pattern = new RegExp(`---${key}---([\\s\\S]*?)(?=---${nextKey}---|$)`);
+    const match = text.match(pattern);
+    if (match) {
+      sections[key] = (match[1] || '').trim();
+    }
+  }
+
+  if (Object.keys(sections).length === 0) {
+    return text;
+  }
+
+  if (sections.NAME) {
+    sections.NAME = clampLangBlock(sections.NAME, COPYWRITER_LIMITS.NAME_MAX);
+  }
+  if (sections.SHORT_DESC) {
+    sections.SHORT_DESC = clampLangBlock(sections.SHORT_DESC, COPYWRITER_LIMITS.SHORT_DESC_MAX);
+  }
+  if (sections.SPECS) {
+    const uz = clampSpecLines(extractLangPart(sections.SPECS, 'UZ'), COPYWRITER_LIMITS.SPECS_LINE_MAX);
+    const ru = clampSpecLines(extractLangPart(sections.SPECS, 'RU'), COPYWRITER_LIMITS.SPECS_LINE_MAX);
+    sections.SPECS = rebuildLangBlock(uz, ru);
+  }
+  if (sections.FULL_DESC) {
+    const uz = buildDescriptionVariants(extractLangPart(sections.FULL_DESC, 'UZ'), 'UZ');
+    const ru = buildDescriptionVariants(extractLangPart(sections.FULL_DESC, 'RU'), 'RU');
+    sections.FULL_DESC = rebuildLangBlock(uz, ru);
+  }
+  if (sections.PHOTOS_INFO) {
+    const count = getExpectedImagePromptCount(plan);
+    const uz = normalizeImagePromptItems(extractLangPart(sections.PHOTOS_INFO, 'UZ'), count, 'UZ');
+    const ru = normalizeImagePromptItems(extractLangPart(sections.PHOTOS_INFO, 'RU'), count, 'RU');
+    sections.PHOTOS_INFO = rebuildLangBlock(uz, ru);
+  }
+
+  return COPYWRITER_MARKERS
+    .filter((marker) => Object.prototype.hasOwnProperty.call(sections, marker))
+    .map((marker) => `---${marker}---\n${sections[marker]}`)
+    .join('\n\n')
+    .trim();
+}
+
 export async function* generateMarketplaceDescriptionStream(
   images: string[],
   marketplace: string = 'uzum',
@@ -675,6 +1041,7 @@ export async function* generateMarketplaceDescriptionStream(
 ): AsyncGenerator<string, void, unknown> {
   const plan = (options?.plan || '').toString().trim().toLowerCase();
   const model = (options?.model || DEFAULT_VERTEX_TEXT_MODEL).trim();
+  const expectedImagePrompts = getExpectedImagePromptCount(plan);
 
   let planRules = '';
   if (plan === 'starter') {
@@ -697,7 +1064,7 @@ QO'SHIMCHA TALABLAR (PRO):
     planRules = `
 QO'SHIMCHA TALABLAR (BUSINESS+):
 - Maksimal detal: agency/katalog darajasida yozing.
-- NAME: 2 ta variant bering (1) Short (2) SEO (UZ va RU ichida ham).
+- NAME: 1 ta kuchli sotuv nomi bering (har tilda 90 belgidan oshmasin).
 - FULL_DESC: taxminan 2000-3500 belgi (UZ va RU alohida).
 - SPECS: 15-20 ta band.
 - PROPS: 8-12 ta band.
@@ -710,8 +1077,20 @@ Vazifa: Yuklangan rasmlar asosida ${marketplace} platformasi uchun 18 ta blokdan
 MUHIM QOIDALAR:
 1. HAR BIR blokni ---KEY_NAME--- markeridan boshlang.
 2. Har bir band ichida "UZ:" va "RU:" prefikslaridan foydalaning.
-3. Toza matn: markdown (#, *, _) ishlatmang.
+3. Faqat FULL_DESC blokida markdown bold (**...**) ishlatish mumkin. Qolgan bloklarda markdown ishlatmang.
 4. KAFOLAT: FAQAT "10 kun (ishlab chiqaruvchi nuqsonlari uchun)" deb yozing.
+5. LIMITLAR:
+   - NAME (tovar nomi): har tilda maksimum ${COPYWRITER_LIMITS.NAME_MAX} belgi.
+   - SHORT_DESC (qisqacha tavsif): har tilda maksimum ${COPYWRITER_LIMITS.SHORT_DESC_MAX} belgi.
+   - SPECS (tovar xususiyatlari): har bir band maksimum ${COPYWRITER_LIMITS.SPECS_LINE_MAX} belgi.
+6. FULL_DESC bo'limi har tilda 3 ta copy-pastega tayyor variant bersin:
+   - 1) **Variant A (Asosiy sotuv matni):** ...
+   - 2) **Variant B (SEO va afzallik):** ...
+   - 3) **Variant C (CTA urg'u):** ...
+7. PHOTOS_INFO bo'limida har bir tilda aynan ${expectedImagePrompts} ta rasm prompt bo'lsin (na ko'p, na kam).
+   - Har prompt alohida qatorda va 1), 2), 3)... formatida yozilsin.
+   - Har bir prompt marketplace image generationga tayyor bo'lsin.
+8. Matnlar bozorga tayyor bo'lsin: aniq foyda, aniq auditoriya va aniq chaqiriq (CTA) bo'lsin.
 ${planRules}
 
 MARKERLAR:
@@ -740,7 +1119,8 @@ MARKERLAR:
   };
 
   const response = await vertexGenerateContent(model, body);
-  yield extractText(response).trim();
+  const normalized = normalizeCopywriterOutput(extractText(response).trim(), plan);
+  yield normalized;
 }
 
 export async function generateVideoScript(
