@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios';
+import { checkImagePromptSafety } from '@/lib/content-safety';
 
 type ChatMessage = { role: string; content: string };
 
@@ -292,6 +293,11 @@ export async function generateMarketplaceImage(
   aspectRatio: string = '1:1',
   options?: { model?: string }
 ): Promise<string> {
+  const promptSafety = checkImagePromptSafety(prompt);
+  if (!promptSafety.allowed) {
+    throw new Error('PROMPT_POLICY_BLOCKED: 18+ yoki pornografik kontent taqiqlangan');
+  }
+
   const model = (options?.model || GEMINI_IMAGE_MODEL).trim();
   const parts: any[] = [];
 
@@ -326,6 +332,10 @@ export async function generateMarketplaceImage(
 
   const body = {
     contents: [{ role: 'user', parts }],
+    safetySettings: [
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+    ],
     generationConfig: {
       imageConfig: {
         aspectRatio: normalizeAspectRatio(aspectRatio),
@@ -334,6 +344,11 @@ export async function generateMarketplaceImage(
   };
 
   const response = await geminiGenerateContent(model, body);
+  const blockReason = response?.promptFeedback?.blockReason;
+  if (blockReason) {
+    throw new Error(`PROMPT_POLICY_BLOCKED: Blocked by Gemini safety (${blockReason})`);
+  }
+
   const dataUrl = extractFirstImageDataUrl(response);
 
   if (!dataUrl) {

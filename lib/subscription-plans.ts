@@ -207,7 +207,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
       monthlyLimits: { basic: 6, pro: 0, premium: 0 },
     },
     copywriter: {
-      allowedModels: ['gemini-2.0-flash'],
+      allowedModels: ['gemini-2.0-flash-lite-001'],
       maxBlocks: 18,
       features: ['Mahsulot nomi', 'Tavsifi', 'Xususiyatlar'],
     },
@@ -244,7 +244,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
       monthlyLimits: { basic: 6, pro: 4, premium: 0 },
     },
     copywriter: {
-      allowedModels: ['gemini-2.0-flash', 'gemini-2.5-flash'],
+      allowedModels: ['gemini-2.5-flash-lite'],
       maxBlocks: 18,
       features: ['Marketplace copy', 'SEO tavsif', 'Uzun matn'],
     },
@@ -280,7 +280,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
       monthlyLimits: { basic: 10, pro: 7, premium: 5 },
     },
     copywriter: {
-      allowedModels: ['gemini-2.5-flash', 'gemini-3-pro-preview'],
+      allowedModels: ['gemini-2.5-pro', 'gemini-2.5-flash'],
       maxBlocks: 18,
       features: ['Product copy', 'Marketing/Ads', 'Long description', 'SEO Pro'],
     },

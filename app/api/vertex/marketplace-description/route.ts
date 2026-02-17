@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateMarketplaceDescriptionStream } from '@/services/vertex';
-import { asyncGeneratorToStream } from '@/lib/stream-utils';
 import {
   BillingError,
   getAuthenticatedUserAccount,
@@ -15,7 +14,11 @@ import { query } from '@/lib/db';
 export async function POST(request: NextRequest) {
   let userId: string | null = null;
   let reservedTokens = 0;
-  let reserveMeta: { debited?: { subscription: number; referral: number }; referralDebits?: Array<{ rewardId: string; tokens: number }> } | null = null;
+  let reserveMeta: {
+    debited?: { subscription: number; referral: number };
+    referralDebits?: Array<{ rewardId: string; tokens: number }>;
+  } | null = null;
+
   try {
     const user = await getAuthenticatedUserAccount();
     userId = user.id;
@@ -25,8 +28,8 @@ export async function POST(request: NextRequest) {
     const marketplace = typeof body?.marketplace === 'string' ? body.marketplace : 'uzum';
     const additionalInfo = typeof body?.additionalInfo === 'string' ? body.additionalInfo : '';
 
-    if (!images || !Array.isArray(images) || images.length === 0) {
-      return new Response('Rasm(lar) kerak', { status: 400 });
+    if (!images || images.length === 0) {
+      return new Response("Rasm(lar) kerak", { status: 400 });
     }
 
     const plan = user.role === 'admin' ? 'business_plus' : user.subscription_plan;
@@ -35,7 +38,6 @@ export async function POST(request: NextRequest) {
     const safeImages = images.slice(0, policy.maxImages);
     const safeAdditionalInfo = additionalInfo.slice(0, policy.maxAdditionalInfoChars);
 
-    // Optional monthly quota (as per product spec)
     if (user.role !== 'admin' && plan === 'pro' && user.subscription_expires_at) {
       const periodEnd = new Date(user.subscription_expires_at);
       const periodStart = new Date(periodEnd);
@@ -74,45 +76,26 @@ export async function POST(request: NextRequest) {
       plan,
     });
 
-    let didComplete = false;
-
-    async function* wrapped(): AsyncGenerator<string, void, unknown> {
-      try {
-        for await (const chunk of generator) {
-          yield chunk;
-        }
-        didComplete = true;
-      } catch (err) {
-        if (user.role !== 'admin' && userId && reservedTokens) {
-          await refundTokens({
-            userId,
-            tokens: reservedTokens,
-            debited: reserveMeta?.debited,
-            referralDebits: reserveMeta?.referralDebits,
-          });
-        }
-        throw err;
-      } finally {
-        if (didComplete && user.role !== 'admin') {
-          await recordTokenUsage({
-            userId: user.id,
-            tokensUsed: reservedTokens,
-            serviceType: 'copywriter_card',
-            modelUsed: policy.textModel,
-            prompt: safeAdditionalInfo,
-          });
-        }
-      }
+    let fullText = '';
+    for await (const chunk of generator) {
+      fullText += chunk;
     }
 
-    // Return streaming response
-    return new Response(asyncGeneratorToStream(wrapped()), {
+    if (user.role !== 'admin') {
+      await recordTokenUsage({
+        userId: user.id,
+        tokensUsed: reservedTokens,
+        serviceType: 'copywriter_card',
+        modelUsed: policy.textModel,
+        prompt: safeAdditionalInfo,
+      });
+    }
+
+    return new Response(fullText, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        'Transfer-Encoding': 'chunked',
       },
     });
-
   } catch (error) {
     console.error('Marketplace description error:', error);
 
@@ -136,6 +119,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return new Response('Copywriter xatosi: maʼlumot yaratib bo‘lmadi', { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    const lower = message.toLowerCase();
+    if (lower.includes('publisher model') || lower.includes('not found') || lower.includes('does not have access')) {
+      return new Response("Tanlangan model bu loyiha uchun mavjud emas. Fallback modelga o'tildi, iltimos qayta urinib ko'ring.", { status: 400 });
+    }
+
+    return new Response("Copywriter xatosi: ma'lumot yaratib bo'lmadi", { status: 500 });
   }
 }

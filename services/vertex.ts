@@ -32,6 +32,14 @@ const DEFAULT_VERTEX_TEXT_MODEL =
   process.env.GEMINI_TEXT_MODEL ||
   'gemini-2.5-flash';
 
+const VERTEX_TEXT_FALLBACK_MODELS = (
+  process.env.VERTEX_TEXT_FALLBACK_MODELS ||
+  'gemini-2.5-pro,gemini-2.5-flash,gemini-2.5-flash-lite,gemini-2.0-flash-lite-001'
+)
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+
 const VERTEX_RETRY_ATTEMPTS = Math.max(1, Number(process.env.VERTEX_RETRY_ATTEMPTS || 3));
 
 const GOOGLE_APPLICATION_CREDENTIALS_JSON =
@@ -143,7 +151,16 @@ async function getVertexAccessToken(): Promise<string> {
   return token;
 }
 
-async function vertexGenerateContent(model: string, body: unknown): Promise<any> {
+function isVertexModelNotFound(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) return false;
+  const status = error.response?.status;
+  if (status !== 404) return false;
+
+  const message = String(error.response?.data?.error?.message || error.message || '').toLowerCase();
+  return message.includes('publisher model') || message.includes('not found') || message.includes('does not have access');
+}
+
+async function vertexGenerateContentSingle(model: string, body: unknown): Promise<any> {
   const modelId = (model || '').trim();
   if (!modelId) {
     throw new Error('Vertex text model is empty. Set VERTEX_TEXT_MODEL or pass model explicitly.');
@@ -200,6 +217,28 @@ async function vertexGenerateContent(model: string, body: unknown): Promise<any>
   }
 
   throw lastError;
+}
+
+async function vertexGenerateContent(model: string, body: unknown): Promise<any> {
+  const requested = (model || '').trim();
+  const candidates = Array.from(new Set([requested, ...VERTEX_TEXT_FALLBACK_MODELS].filter(Boolean)));
+  let lastError: unknown;
+
+  for (const candidate of candidates) {
+    try {
+      return await vertexGenerateContentSingle(candidate, body);
+    } catch (error: unknown) {
+      lastError = error;
+      if (isVertexModelNotFound(error)) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Vertex text generation failed after model fallbacks.');
 }
 
 function extractText(response: any): string {

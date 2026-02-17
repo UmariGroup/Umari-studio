@@ -17,6 +17,7 @@ import {
   getImageRateLimit,
 } from '@/lib/image-queue';
 import { generateMarketplaceImage } from '@/services/gemini';
+import { checkImagePromptSafety } from '@/lib/content-safety';
 
 function mergeImagesUpToLimit(groups: string[][], limit: number): string[] {
   const out: string[] = [];
@@ -107,6 +108,18 @@ export async function POST(request: NextRequest) {
     const safePrompt = basePrompt.slice(0, policy.maxPromptChars);
     const safeProductImages = productImages.slice(0, policy.maxProductImages);
     const safeStyleImages = styleImages.slice(0, policy.maxStyleImages);
+
+    const promptSafety = checkImagePromptSafety(safePrompt);
+    if (!promptSafety.allowed) {
+      return NextResponse.json(
+        {
+          error:
+            "18+ yoki axloqsiz/pornografik kontentga ruxsat berilmaydi. Iltimos, promptni neytral va marketplace formatida yozing.",
+          code: 'PROMPT_POLICY_BLOCKED',
+        },
+        { status: 400 }
+      );
+    }
 
     // ============================================================
     // Rate limiting (transparent, plan-based)
@@ -584,6 +597,23 @@ export async function POST(request: NextRequest) {
       } catch {
         // ignore
       }
+    }
+
+    const lower = message.toLowerCase();
+    const isPolicyBlocked =
+      lower.includes('safety') ||
+      lower.includes('sexually explicit') ||
+      lower.includes('prompt_policy_blocked') ||
+      lower.includes('blocked by gemini safety');
+    if (isPolicyBlocked) {
+      return NextResponse.json(
+        {
+          error:
+            "So'rov xavfsizlik siyosatiga mos kelmadi. 18+ yoki axloqsiz kontentga ruxsat yo'q.",
+          code: 'PROMPT_POLICY_BLOCKED',
+        },
+        { status: 400 }
+      );
     }
 
     return NextResponse.json({ error: message }, { status: 500 });

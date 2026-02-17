@@ -566,13 +566,13 @@ export interface CopywriterPolicy {
 
 export function getCopywriterPolicy(plan: SubscriptionPlan): CopywriterPolicy {
   if (plan === 'starter') {
-    return { costPerCard: 3, maxImages: 1, maxAdditionalInfoChars: 500, textModel: 'gemini-2.0-flash' };
+    return { costPerCard: 3, maxImages: 1, maxAdditionalInfoChars: 500, textModel: 'gemini-2.0-flash-lite-001' };
   }
   if (plan === 'pro') {
-    return { costPerCard: 2, maxImages: 2, maxAdditionalInfoChars: 1000, textModel: 'gemini-2.5-flash' };
+    return { costPerCard: 2, maxImages: 2, maxAdditionalInfoChars: 1000, textModel: 'gemini-2.5-flash-lite' };
   }
   if (plan === 'business_plus') {
-    return { costPerCard: 1, maxImages: 3, maxAdditionalInfoChars: 2500, textModel: 'gemini-3-pro-preview' };
+    return { costPerCard: 1, maxImages: 3, maxAdditionalInfoChars: 2500, textModel: 'gemini-2.5-pro' };
   }
 
   throw new BillingError({
