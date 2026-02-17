@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateMarketplaceDescriptionStream } from '../../../../services/gemini';
+import { generateMarketplaceDescriptionStream } from '@/services/vertex';
 import { asyncGeneratorToStream } from '@/lib/stream-utils';
 import {
   BillingError,

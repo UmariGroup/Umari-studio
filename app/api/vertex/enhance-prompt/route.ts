@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { enhancePrompt } from '../../../../services/gemini';
+import { enhancePrompt } from '@/services/vertex';
 
 export async function POST(request: NextRequest) {
   try {

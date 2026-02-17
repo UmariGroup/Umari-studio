@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { generateVideoScript } from '../../../../services/gemini';
+import { generateVideoScript } from '@/services/vertex';
 
 export async function POST(request: NextRequest) {
   try {

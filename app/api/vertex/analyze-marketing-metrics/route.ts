@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { analyzeMarketingMetrics } from '@/services/gemini';
+import { analyzeMarketingMetrics } from '@/services/vertex';
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,20 +16,18 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'text/plain; charset=utf-8',
       },
     });
-
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Failed to analyze metrics';
+    const message = error instanceof Error ? error.message : 'Failed to analyze metrics';
     console.error('Marketing metrics error:', message);
 
     const isAuthError =
-      message.toLowerCase().includes('api key') ||
-      message.toLowerCase().includes('gemini_api_key') ||
-      message.toLowerCase().includes('apikey');
+      message.toLowerCase().includes('vertex') ||
+      message.toLowerCase().includes('credentials') ||
+      message.toLowerCase().includes('service account');
 
     if (isAuthError) {
       return new Response(
-        `Gemini API key yo‘q. .env.local ga GEMINI_API_KEY (yoki GOOGLE_API_KEY / API_KEY) qo‘ying. Vertex/service-account kerak emas.`,
+        "Vertex konfiguratsiyasi yo'q. .env faylga VERTEX_PROJECT_ID va GOOGLE_APPLICATION_CREDENTIALS (yoki GOOGLE_APPLICATION_CREDENTIALS_JSON) ni qo'ying.",
         { status: 500 }
       );
     }

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { generateCopywriterContent } from '../../../../services/gemini';
+import { generateCopywriterContent } from '@/services/vertex';
 
 export async function POST(request: NextRequest) {
   try {

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { chat } from '../../../../services/gemini';
+import { chat } from '@/services/vertex';
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,13 +21,13 @@ export async function POST(request: NextRequest) {
     console.error('Chat error:', error);
     const message = error instanceof Error ? error.message : String(error);
     const isRateLimited =
-      message.includes('Gemini API error (429') ||
+      message.includes('Vertex AI error (429') ||
       message.includes('RESOURCE_EXHAUSTED') ||
       message.toLowerCase().includes('too many requests');
 
     if (isRateLimited) {
       return new Response(
-        "So'rovlar juda ko'p (Gemini limit). 10-30 soniya kutib qayta urinib ko'ring.",
+        "So'rovlar juda ko'p (Vertex limit). 10-30 soniya kutib qayta urinib ko'ring.",
         {
           status: 429,
           headers: {

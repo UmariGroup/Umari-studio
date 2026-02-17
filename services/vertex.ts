@@ -9,6 +9,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 
 type VertexApiVersion = 'v1' | 'v1beta1';
+type ChatMessage = { role: string; content: string };
 
 const VERTEX_PROJECT_ID =
   process.env.VERTEX_PROJECT_ID ||
@@ -25,6 +26,13 @@ const VERTEX_LOCATION =
 
 const DEFAULT_VERTEX_IMAGE_MODEL =
   process.env.VERTEX_IMAGE_MODEL || '' ;
+
+const DEFAULT_VERTEX_TEXT_MODEL =
+  process.env.VERTEX_TEXT_MODEL ||
+  process.env.GEMINI_TEXT_MODEL ||
+  'gemini-2.5-flash';
+
+const VERTEX_RETRY_ATTEMPTS = Math.max(1, Number(process.env.VERTEX_RETRY_ATTEMPTS || 3));
 
 const GOOGLE_APPLICATION_CREDENTIALS_JSON =
   process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON || '';
@@ -51,6 +59,41 @@ function parseDataUrl(dataUrl: string): { mimeType: string; data: string } | nul
   const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
   if (!match) return null;
   return { mimeType: match[1], data: match[2] };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseRetryAfterMs(value: unknown): number | null {
+  if (!value) return null;
+  const raw = Array.isArray(value) ? value[0] : value;
+  const s = String(raw).trim();
+  const seconds = Number(s);
+  if (Number.isFinite(seconds) && seconds > 0) return Math.min(60_000, Math.floor(seconds * 1000));
+  return null;
+}
+
+function validateInlineImage(mimeType: string, base64: string): void {
+  const allowed = new Set(['image/png', 'image/jpeg', 'image/webp']);
+  if (!allowed.has(mimeType)) return;
+
+  const approxBytes = Math.floor((base64.length * 3) / 4);
+  const maxBytesPerImage = 9 * 1024 * 1024;
+  if (approxBytes > maxBytesPerImage) {
+    throw new Error('Image is too large. Please upload an image under 9MB.');
+  }
+}
+
+function toInlineDataPart(image: string): { inlineData: { mimeType: string; data: string } } | null {
+  const parsed = parseDataUrl(image);
+  if (!parsed) return null;
+
+  const mimeType = parsed.mimeType === 'image/jpg' ? 'image/jpeg' : parsed.mimeType;
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(mimeType)) return null;
+
+  validateInlineImage(mimeType, parsed.data);
+  return { inlineData: { mimeType, data: parsed.data } };
 }
 
 function normalizeAspectRatio(aspectRatio: string): string {
@@ -98,6 +141,78 @@ async function getVertexAccessToken(): Promise<string> {
     throw new Error('Failed to acquire Vertex AI access token');
   }
   return token;
+}
+
+async function vertexGenerateContent(model: string, body: unknown): Promise<any> {
+  const modelId = (model || '').trim();
+  if (!modelId) {
+    throw new Error('Vertex text model is empty. Set VERTEX_TEXT_MODEL or pass model explicitly.');
+  }
+
+  const location = VERTEX_LOCATION.trim();
+  const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${encodeURIComponent(
+    VERTEX_PROJECT_ID
+  )}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(
+    modelId
+  )}:generateContent`;
+
+  const token = await getVertexAccessToken();
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= VERTEX_RETRY_ATTEMPTS; attempt++) {
+    try {
+      const res = await axios.post(url, body, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 120_000,
+      });
+      return res.data;
+    } catch (error: unknown) {
+      lastError = error;
+      if (!axios.isAxiosError(error)) throw error;
+
+      const status = error.response?.status;
+      const retryable =
+        status === 408 ||
+        status === 429 ||
+        status === 500 ||
+        status === 502 ||
+        status === 503 ||
+        status === 504;
+
+      if (retryable && attempt < VERTEX_RETRY_ATTEMPTS) {
+        const retryAfterMs = parseRetryAfterMs((error.response?.headers as any)?.['retry-after']);
+        const expBackoffMs = Math.min(15_000, 750 * Math.pow(2, attempt - 1));
+        const jitterMs = Math.floor(Math.random() * 250);
+        await sleep(Math.max(retryAfterMs || 0, expBackoffMs) + jitterMs);
+        continue;
+      }
+
+      const statusText = error.response?.statusText;
+      const details = truncateDetails(safeJsonStringify(error.response?.data));
+      const suffix = details ? `\nVertex response: ${details}` : '';
+      throw new Error(
+        `Vertex AI error${status ? ` (${status}${statusText ? ` ${statusText}` : ''})` : ''}: ${error.message}${suffix}`
+      );
+    }
+  }
+
+  throw lastError;
+}
+
+function extractText(response: any): string {
+  if (!response) return '';
+  if (typeof response.text === 'string') return response.text;
+
+  const parts = response?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return '';
+
+  return parts
+    .map((part: any) => (typeof part?.text === 'string' ? part.text : ''))
+    .filter(Boolean)
+    .join('');
 }
 
 async function vertexPredictImagen(
@@ -476,4 +591,183 @@ export async function generateMarketplaceImage(
 ): Promise<string> {
   const reference = productImages?.[0] || styleImages?.[0] || null;
   return vertexPredictImagen(prompt, aspectRatio, options?.model, reference);
+}
+
+async function generateText(
+  model: string,
+  systemInstruction: string | null,
+  userText: string,
+  cfg?: { temperature?: number; maxOutputTokens?: number; topP?: number }
+): Promise<string> {
+  const body: any = {
+    contents: [{ role: 'user', parts: [{ text: userText }] }],
+    generationConfig: {
+      temperature: cfg?.temperature ?? 0.7,
+      maxOutputTokens: cfg?.maxOutputTokens ?? 2500,
+      topP: cfg?.topP ?? 0.95,
+    },
+  };
+
+  if (systemInstruction) {
+    body.systemInstruction = { parts: [{ text: systemInstruction }] };
+  }
+
+  const response = await vertexGenerateContent(model, body);
+  return extractText(response).trim();
+}
+
+export async function enhancePrompt(prompt: string, options?: { model?: string }): Promise<string> {
+  const model = (options?.model || DEFAULT_VERTEX_TEXT_MODEL).trim();
+
+  const systemInstruction =
+    'You are an expert ecommerce prompt engineer. Return ONLY the final prompt text, in English. No quotes, no markdown, no extra commentary.';
+  const userText =
+    `Quyidagi qisqa mahsulot tavsifini professional marketplace promptiga aylantirib ber. ` +
+    `Faqat prompt matnini ingliz tilida qaytar:\n\n${prompt}`;
+
+  return generateText(model, systemInstruction, userText);
+}
+
+export async function* generateMarketplaceDescriptionStream(
+  images: string[],
+  marketplace: string = 'uzum',
+  additionalInfo: string = '',
+  options?: { model?: string; plan?: string }
+): AsyncGenerator<string, void, unknown> {
+  const plan = (options?.plan || '').toString().trim().toLowerCase();
+  const model = (options?.model || DEFAULT_VERTEX_TEXT_MODEL).trim();
+
+  let planRules = '';
+  if (plan === 'starter') {
+    planRules = `
+QO'SHIMCHA TALABLAR (STARTER):
+- Matn qisqa va sodda bo'lsin (marketplace uchun tayyor).
+- FULL_DESC: taxminan 600-900 belgi (UZ va RU alohida).
+- SPECS: 6-8 ta band.
+- PROPS: 6-8 ta band.
+- VIDEO_REC: 1-2 ta qisqa g'oya.`;
+  } else if (plan === 'pro') {
+    planRules = `
+QO'SHIMCHA TALABLAR (PRO):
+- Matn to'liq va SEO kuchli bo'lsin.
+- FULL_DESC: taxminan 1200-1800 belgi (UZ va RU alohida).
+- SPECS: 10-12 ta band.
+- PROPS: 8-12 ta band.
+- VIDEO_REC: 3-5 ta g'oya.`;
+  } else if (plan === 'business_plus' || plan === 'business+') {
+    planRules = `
+QO'SHIMCHA TALABLAR (BUSINESS+):
+- Maksimal detal: agency/katalog darajasida yozing.
+- NAME: 2 ta variant bering (1) Short (2) SEO (UZ va RU ichida ham).
+- FULL_DESC: taxminan 2000-3500 belgi (UZ va RU alohida).
+- SPECS: 15-20 ta band.
+- PROPS: 8-12 ta band.
+- VIDEO_REC: 4-6 ta g'oya.`;
+  }
+
+  const systemInstruction = `Siz professional marketplace-copywriter va SEO mutaxassisiz.
+Vazifa: Yuklangan rasmlar asosida ${marketplace} platformasi uchun 18 ta blokdan iborat kartani yaratish.
+
+MUHIM QOIDALAR:
+1. HAR BIR blokni ---KEY_NAME--- markeridan boshlang.
+2. Har bir band ichida "UZ:" va "RU:" prefikslaridan foydalaning.
+3. Toza matn: markdown (#, *, _) ishlatmang.
+4. KAFOLAT: FAQAT "10 kun (ishlab chiqaruvchi nuqsonlari uchun)" deb yozing.
+${planRules}
+
+MARKERLAR:
+---CAT---, ---NAME---, ---COUNTRY---, ---BRAND---, ---MODEL---, ---WARRANTY---, ---SHORT_DESC---, ---FULL_DESC---, ---PHOTOS_INFO---, ---VIDEO_REC---, ---SPECS---, ---PROPS---, ---INSTR---, ---SIZE---, ---COMP---, ---CARE---, ---SKU---, ---IKPU---`;
+
+  const parts: any[] = [];
+  for (const img of (images || []).slice(0, 3)) {
+    const inline = toInlineDataPart(img);
+    if (inline) parts.push(inline);
+  }
+
+  parts.push({
+    text:
+      `Ushbu mahsulot uchun ${marketplace} standartida 18 banddan iborat professional kartani tayyorlang. ` +
+      `Qo'shimcha ma'lumot: ${additionalInfo || "Yo'q"}`,
+  });
+
+  const body: any = {
+    contents: [{ role: 'user', parts }],
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: plan === 'business_plus' || plan === 'business+' ? 6500 : plan === 'pro' ? 5000 : 4000,
+      topP: 0.95,
+    },
+  };
+
+  const response = await vertexGenerateContent(model, body);
+  yield extractText(response).trim();
+}
+
+export async function generateVideoScript(
+  topic: string,
+  platform: string = 'youtube',
+  duration: string = '1-3',
+  tone: string = 'professional'
+): Promise<string> {
+  const systemInstruction =
+    'You are a senior video script writer. Output a structured script with hook, body, CTA, and on-screen text suggestions. Keep it practical and audience-friendly.';
+  const userText = `Topic: ${topic}\nPlatform: ${platform}\nDuration: ${duration} minutes\nTone: ${tone}`;
+  return generateText(DEFAULT_VERTEX_TEXT_MODEL, systemInstruction, userText);
+}
+
+export async function generateCopywriterContent(
+  contentType: string,
+  topic: string,
+  tone: string = 'professional',
+  length: string = 'medium',
+  keywords: string[] = []
+): Promise<string> {
+  const systemInstruction =
+    'You are a direct-response copywriter. Produce conversion-focused Uzbek copy. Avoid vague advice; write the actual copy.';
+
+  const userText =
+    `Content type: ${contentType}\n` +
+    `Topic/product: ${topic}\n` +
+    `Tone: ${tone}\nLength: ${length}\n` +
+    `Keywords (if any): ${keywords.join(', ')}`;
+
+  return generateText(DEFAULT_VERTEX_TEXT_MODEL, systemInstruction, userText);
+}
+
+export async function analyzeMarketingMetrics(
+  metrics: string,
+  analysisType: string = 'marketing-metrics'
+): Promise<string> {
+  const systemInstruction =
+    'You are a performance marketing analyst. Analyze the metrics and provide specific actions, calculations, and prioritized recommendations.';
+  const userText = `Analysis type: ${analysisType}\n\nMetrics:\n${metrics}`;
+  return generateText(DEFAULT_VERTEX_TEXT_MODEL, systemInstruction, userText);
+}
+
+export async function chat(message: string, history: ChatMessage[] = []): Promise<string> {
+  const systemInstruction =
+    "You are Umari AI assistant. Reply in Uzbek by default. Be concise, practical, and helpful for ecommerce and content creation.";
+
+  const contents: any[] = [];
+  for (const item of history) {
+    const role = item?.role === 'assistant' || item?.role === 'model' ? 'model' : 'user';
+    const content = typeof item?.content === 'string' ? item.content : '';
+    if (!content) continue;
+    contents.push({ role, parts: [{ text: content }] });
+  }
+  contents.push({ role: 'user', parts: [{ text: message }] });
+
+  const body: any = {
+    contents,
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 2500,
+      topP: 0.95,
+    },
+  };
+
+  const response = await vertexGenerateContent(DEFAULT_VERTEX_TEXT_MODEL, body);
+  return extractText(response) || '';
 }

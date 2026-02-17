@@ -82,6 +82,13 @@ const QUICK_ACTIONS = [
     description: 'Admin amallari tarixi va xavfsizlik kuzatuvi.',
     tone: 'from-slate-600 to-slate-700',
   },
+  {
+    href: '/admin/statistics',
+    icon: <FiBarChart2 className="h-6 w-6" />,
+    title: 'Model statistikasi',
+    description: "Model bo'yicha kunlik, haftalik va oylik so'rovlar.",
+    tone: 'from-indigo-500 to-violet-600',
+  },
 ];
 
 export default function AdminDashboard() {
