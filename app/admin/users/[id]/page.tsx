@@ -78,6 +78,14 @@ type AdminUserDetail = {
   usage: {
     summary_by_service: UsageSummaryRow[];
     recent: RecentUsageRow[];
+    recent_pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+      has_prev: boolean;
+      has_next: boolean;
+    };
   };
   referrals: {
     invited_users: InvitedUserRow[];
@@ -116,6 +124,8 @@ export default function AdminUserDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AdminUserDetail | null>(null);
+  const [usagePage, setUsagePage] = useState(1);
+  const [usageLimit, setUsageLimit] = useState(50);
 
   useEffect(() => {
     if (!id) return;
@@ -125,7 +135,10 @@ export default function AdminUserDetailPage() {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch(`/api/admin/users/${id}`);
+        const params = new URLSearchParams();
+        params.set('usage_page', String(usagePage));
+        params.set('usage_limit', String(usageLimit));
+        const res = await fetch(`/api/admin/users/${id}?${params.toString()}`);
         const json = await res.json();
         if (!res.ok) throw new Error(json?.error || 'Failed to load user detail');
         if (isMounted) setData(json as AdminUserDetail);
@@ -139,6 +152,10 @@ export default function AdminUserDetailPage() {
     return () => {
       isMounted = false;
     };
+  }, [id, usagePage, usageLimit]);
+
+  useEffect(() => {
+    setUsagePage(1);
   }, [id]);
 
   const user = data?.user;
@@ -400,10 +417,28 @@ export default function AdminUserDetailPage() {
 
             {/* Recent usage */}
             <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
-              <h3 className="text-white font-bold flex items-center gap-2">
-                <FiClock className="text-white/70" aria-hidden />
-                So'nggi operatsiyalar (token_usage)
-              </h3>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <h3 className="text-white font-bold flex items-center gap-2">
+                  <FiClock className="text-white/70" aria-hidden />
+                  Token ishlatish tarixi (token_usage)
+                </h3>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-white/60">Sahifada:</span>
+                  <select
+                    value={usageLimit}
+                    onChange={(e) => {
+                      setUsageLimit(Number(e.target.value));
+                      setUsagePage(1);
+                    }}
+                    className="rounded-lg border border-white/20 bg-white/10 px-2 py-1 text-white outline-none"
+                  >
+                    <option value={25} className="text-slate-900">25</option>
+                    <option value={50} className="text-slate-900">50</option>
+                    <option value={100} className="text-slate-900">100</option>
+                    <option value={200} className="text-slate-900">200</option>
+                  </select>
+                </div>
+              </div>
 
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full text-left text-sm">
@@ -436,6 +471,33 @@ export default function AdminUserDetailPage() {
                     )}
                   </tbody>
                 </table>
+              </div>
+
+              <div className="mt-4 flex flex-col gap-3 border-t border-white/10 pt-4 text-sm md:flex-row md:items-center md:justify-between">
+                <p className="text-white/60">
+                  Jami: {data?.usage?.recent_pagination?.total || 0} ta operatsiya
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setUsagePage((prev) => Math.max(1, prev - 1))}
+                    disabled={!data?.usage?.recent_pagination?.has_prev || loading}
+                    className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Oldingi
+                  </button>
+                  <span className="text-white/70">
+                    {data?.usage?.recent_pagination?.page || usagePage} / {data?.usage?.recent_pagination?.pages || 1}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setUsagePage((prev) => prev + 1)}
+                    disabled={!data?.usage?.recent_pagination?.has_next || loading}
+                    className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Keyingi
+                  </button>
+                </div>
               </div>
 
               <p className="text-white/40 text-xs mt-4">

@@ -9,6 +9,12 @@ function coerceNumber(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function parsePositiveInt(raw: string | null, fallback: number, min: number, max: number): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(parsed)));
+}
+
 export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
   try {
     const admin = await getCurrentUser();
@@ -20,6 +26,11 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
     if (!userId) {
       return NextResponse.json({ error: 'User ID required' }, { status: 400 });
     }
+
+    const searchParams = req.nextUrl.searchParams;
+    const usagePage = parsePositiveInt(searchParams.get('usage_page'), 1, 1, 10_000);
+    const usageLimit = parsePositiveInt(searchParams.get('usage_limit'), 50, 10, 200);
+    const usageOffset = (usagePage - 1) * usageLimit;
 
     // Ensure referral schema exists for older DBs.
     const client = await getClient();
@@ -86,6 +97,7 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
       model_used: string | null;
       prompt: string | null;
     }> = [];
+    let recentUsageTotal = 0;
 
     try {
       const usageRes = await query(
@@ -107,13 +119,22 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
         last_used_at: r.last_used_at ? new Date(r.last_used_at).toISOString() : null,
       }));
 
+      const recentCountRes = await query(
+        `SELECT COUNT(*)::int AS total
+         FROM token_usage
+         WHERE user_id = $1`,
+        [userId]
+      );
+      recentUsageTotal = Number(recentCountRes.rows?.[0]?.total || 0);
+
       const recentRes = await query(
         `SELECT id, created_at, service_type, tokens_used, model_used, prompt
          FROM token_usage
          WHERE user_id = $1
          ORDER BY created_at DESC
-         LIMIT 50`,
-        [userId]
+         LIMIT $2
+         OFFSET $3`,
+        [userId, usageLimit, usageOffset]
       );
 
       recentUsage = (recentRes.rows || []).map((r: any) => ({
@@ -127,6 +148,7 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
     } catch {
       usageSummary = [];
       recentUsage = [];
+      recentUsageTotal = 0;
     }
 
     // Referral: invited users + rewards history for this referrer
@@ -209,6 +231,14 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
       usage: {
         summary_by_service: usageSummary,
         recent: recentUsage,
+        recent_pagination: {
+          page: usagePage,
+          limit: usageLimit,
+          total: recentUsageTotal,
+          pages: Math.max(1, Math.ceil(recentUsageTotal / usageLimit)),
+          has_prev: usagePage > 1,
+          has_next: usagePage * usageLimit < recentUsageTotal,
+        },
       },
       referrals: {
         invited_users: invitedUsers,
