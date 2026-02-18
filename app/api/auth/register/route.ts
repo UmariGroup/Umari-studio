@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getClient, query } from '@/lib/db';
-import { generateToken, hashPassword } from '@/lib/auth';
+import { hashPassword, setAuthCookies } from '@/lib/auth';
 import { validateEmail, validatePassword, sanitizeInput } from '@/lib/password';
 import { REFERRAL_COOKIE_NAME, ensureReferralSchema, ensureUserReferralCode, maybeAttachReferralToUser } from '@/lib/referral';
 
@@ -83,13 +83,12 @@ export async function POST(req: NextRequest) {
       client.release();
     }
 
-    // Generate token
-    const token = generateToken({
+    const authPayload = {
       id: user.id,
       email: user.email,
       role: user.role,
       subscription_status: user.subscription_status,
-    });
+    };
 
     // Set cookie and return
     const response = NextResponse.json(
@@ -106,13 +105,7 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
 
-    response.cookies.set('auth_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60,
-      path: '/',
-    });
+    setAuthCookies(response, authPayload);
 
     if (referralAttached) {
       response.cookies.set(REFERRAL_COOKIE_NAME, '', {

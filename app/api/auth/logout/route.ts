@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { clearAuthCookiesOnResponse } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
@@ -7,15 +8,7 @@ export async function POST(req: NextRequest) {
       message: 'Logged out successfully',
     });
 
-    // Clear auth token cookie
-    response.cookies.set('auth_token', '', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 0,
-      expires: new Date(0),
-      path: '/',
-    });
+    clearAuthCookiesOnResponse(response);
 
     return response;
   } catch (error) {

@@ -3,6 +3,14 @@ import { jwtVerify } from 'jose';
 
 type Language = 'uz' | 'ru';
 
+const ACCESS_COOKIE_NAME = process.env.AUTH_ACCESS_COOKIE || 'umari_access';
+const REFRESH_COOKIE_NAME = process.env.AUTH_REFRESH_COOKIE || 'umari_refresh';
+const LEGACY_COOKIE_NAME = 'auth_token';
+const ACCESS_SECRET =
+  process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const REFRESH_SECRET =
+  process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || ACCESS_SECRET;
+
 function parseLocalePrefix(pathname: string): { lang: Language; strippedPathname: string } | null {
   const match = pathname.match(/^\/(uz|ru)(\/|$)/);
   if (!match) return null;
@@ -11,15 +19,34 @@ function parseLocalePrefix(pathname: string): { lang: Language; strippedPathname
   return { lang, strippedPathname: stripped };
 }
 
-async function verifyEdgeJwt(token: string) {
+async function verifyEdgeJwt(
+  token: string,
+  secret: string,
+  expectedType?: 'access' | 'refresh'
+) {
   try {
-    const secret = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
     const key = new TextEncoder().encode(secret);
     const { payload } = await jwtVerify(token, key);
+    const tokenType = payload?.token_type;
+    if (expectedType === 'refresh' && tokenType !== 'refresh') return null;
+    if (expectedType === 'access' && tokenType && tokenType !== 'access') return null;
     return payload as any;
   } catch {
     return null;
   }
+}
+
+function applySecurityHeaders(response: NextResponse, opts?: { noStore?: boolean }) {
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  response.headers.set('Content-Security-Policy', "frame-ancestors 'none'; object-src 'none'; base-uri 'self'");
+  if (opts?.noStore) {
+    response.headers.set('Cache-Control', 'no-store');
+  }
+  return response;
 }
 
 export async function middleware(request: NextRequest) {
@@ -91,24 +118,37 @@ export async function middleware(request: NextRequest) {
     return withReferralCookie(response);
   }
 
-  const authToken = request.cookies.get('auth_token')?.value;
+  const accessToken =
+    request.cookies.get(ACCESS_COOKIE_NAME)?.value || request.cookies.get(LEGACY_COOKIE_NAME)?.value;
+  const refreshToken = request.cookies.get(REFRESH_COOKIE_NAME)?.value;
 
   const needsAuthPayload =
     pathname.startsWith('/admin') ||
     pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/api/admin') ||
     pathname === '/pricing' ||
     pathname === '/login' ||
     pathname === '/register';
 
   // Parse token payload only when needed
-  const userPayload = needsAuthPayload && authToken ? await verifyEdgeJwt(authToken) : null;
+  let userPayload: any = null;
+  if (needsAuthPayload) {
+    if (accessToken) {
+      userPayload =
+        (await verifyEdgeJwt(accessToken, ACCESS_SECRET, 'access')) ||
+        (await verifyEdgeJwt(accessToken, ACCESS_SECRET));
+    }
+    if (!userPayload && refreshToken) {
+      userPayload = await verifyEdgeJwt(refreshToken, REFRESH_SECRET, 'refresh');
+    }
+  }
 
   // ============================================
   // ADMIN ROUTES - Strict Protection
   // ============================================
   if (pathname.startsWith('/admin')) {
     // Require authentication
-    if (!authToken || !userPayload) {
+    if (!userPayload) {
       return withReferralCookie(NextResponse.redirect(new URL(`${localePrefix}/login`, request.url)));
     }
 
@@ -119,7 +159,7 @@ export async function middleware(request: NextRequest) {
 
     // Admins don't need subscription check - they have full access
     if (!locale) {
-      return withReferralCookie(NextResponse.next());
+      return withReferralCookie(applySecurityHeaders(NextResponse.next(), { noStore: true }));
     }
 
     const headers = new Headers(request.headers);
@@ -132,7 +172,7 @@ export async function middleware(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 365,
       sameSite: 'lax',
     });
-    return withReferralCookie(response);
+    return withReferralCookie(applySecurityHeaders(response, { noStore: true }));
   }
 
   // ============================================
@@ -140,7 +180,7 @@ export async function middleware(request: NextRequest) {
   // ============================================
   if (pathname.startsWith('/dashboard')) {
     // Require authentication
-    if (!authToken || !userPayload) {
+    if (!userPayload) {
       return withReferralCookie(NextResponse.redirect(new URL(`${localePrefix}/login`, request.url)));
     }
   }
@@ -149,7 +189,7 @@ export async function middleware(request: NextRequest) {
   // PRICING ROUTE - Only for unauthenticated or free users
   // ============================================
   if (pathname === '/pricing') {
-    if (authToken && userPayload && userPayload.subscription_status === 'active') {
+    if (userPayload && userPayload.subscription_status === 'active') {
       return withReferralCookie(NextResponse.redirect(new URL(`${localePrefix}/dashboard`, request.url)));
     }
   }
@@ -158,7 +198,7 @@ export async function middleware(request: NextRequest) {
   // LOGIN/REGISTER - Redirect if already authenticated
   // ============================================
   if (pathname === '/login' || pathname === '/register') {
-    if (authToken && userPayload) {
+    if (userPayload) {
       if (userPayload.role === 'admin') {
         return withReferralCookie(NextResponse.redirect(new URL(`${localePrefix}/admin`, request.url)));
       }
@@ -166,19 +206,33 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  if (pathname.startsWith('/api/admin') && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) {
+    const origin = request.headers.get('origin');
+    const host = request.headers.get('host');
+    const expectedOrigin = request.nextUrl.origin;
+    const expectedHost = request.nextUrl.host;
+    const secFetchSite = request.headers.get('sec-fetch-site');
+
+    const originOk = !origin || origin === expectedOrigin;
+    const hostOk = !host || host === expectedHost;
+    const fetchSiteOk = !secFetchSite || secFetchSite === 'same-origin' || secFetchSite === 'same-site';
+
+    if (!originOk || !hostOk || !fetchSiteOk) {
+      return withReferralCookie(
+        applySecurityHeaders(
+          NextResponse.json({ error: 'CSRF protection: invalid request origin' }, { status: 403 }),
+          { noStore: true }
+        )
+      );
+    }
+  }
+
   // ============================================
   // API Routes - Security Headers
   // ============================================
   if (pathname.startsWith('/api')) {
-    // Add security headers
     const response = NextResponse.next();
-    
-    response.headers.set('X-Content-Type-Options', 'nosniff');
-    response.headers.set('X-Frame-Options', 'DENY');
-    response.headers.set('X-XSS-Protection', '1; mode=block');
-    response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-    
-    return withReferralCookie(response);
+    return withReferralCookie(applySecurityHeaders(response, { noStore: pathname.startsWith('/api/admin') }));
   }
 
   if (locale) {
@@ -193,10 +247,10 @@ export async function middleware(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 365,
       sameSite: 'lax',
     });
-    return withReferralCookie(response);
+    return withReferralCookie(applySecurityHeaders(response, { noStore: pathname.startsWith('/admin') }));
   }
 
-  return withReferralCookie(NextResponse.next());
+  return withReferralCookie(applySecurityHeaders(NextResponse.next()));
 }
 
 export const config = {

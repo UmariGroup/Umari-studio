@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { generateToken } from '@/lib/auth';
+import { setAuthCookies } from '@/lib/auth';
 import { OAuth2Client } from 'google-auth-library';
 import { FREE_TRIAL_TOKENS } from '@/lib/subscription-plans';
 import { getClient } from '@/lib/db';
@@ -104,13 +104,12 @@ export async function POST(req: NextRequest) {
       client.release();
     }
 
-    // Generate token
-    const token = generateToken({
+    const authPayload = {
       id: user.id,
       email: user.email,
       role: user.role,
       subscription_status: user.subscription_status,
-    });
+    };
 
     const response = NextResponse.json({
       success: true,
@@ -123,13 +122,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    response.cookies.set('auth_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60,
-      path: '/',
-    });
+    setAuthCookies(response, authPayload);
 
     if (referralAttached) {
       response.cookies.set(REFERRAL_COOKIE_NAME, '', {

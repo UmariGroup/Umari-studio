@@ -76,6 +76,9 @@ export default function AdminLayout({
             <Link href="/admin/statistics" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
               Statistika
             </Link>
+            <Link href="/admin/tokens" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
+              Token qo'shish
+            </Link>
             <button
               onClick={handleLogout}
               className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"

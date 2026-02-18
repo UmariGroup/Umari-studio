@@ -11,6 +11,7 @@ import {
   FiEdit2,
   FiFileText,
   FiFilter,
+  FiGift,
   FiKey,
   FiRefreshCw,
   FiSearch,
@@ -44,6 +45,10 @@ function getActionMeta(action: string): { label: string; Icon: IconType; badgeCl
       return { label: 'Obuna faollashtirildi', Icon: FiCheckCircle, badgeClass: 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20' };
     case 'EXPIRE_SUBSCRIPTION':
       return { label: 'Obuna tugatildi', Icon: FiXCircle, badgeClass: 'bg-red-500/10 text-red-200 border-red-500/20' };
+    case 'ADD_TOKENS':
+      return { label: "Token qo'shildi", Icon: FiGift, badgeClass: 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20' };
+    case 'MAKE_ADMIN':
+      return { label: 'Admin qilindi', Icon: FiUserPlus, badgeClass: 'bg-sky-500/10 text-sky-200 border-sky-500/20' };
     default:
       return { label: action, Icon: FiActivity, badgeClass: 'bg-gray-500/10 text-gray-200 border-gray-500/20' };
   }
@@ -161,6 +166,8 @@ export default function AdminLogsPage() {
                   <option value="all">Barchasi</option>
                   <option value="ACTIVATE_SUBSCRIPTION">Obuna faollashtirish</option>
                   <option value="EXPIRE_SUBSCRIPTION">Obunani tugatish</option>
+                  <option value="ADD_TOKENS">Token qo'shish</option>
+                  <option value="MAKE_ADMIN">Admin qilish</option>
                   <option value="user_update">Foydalanuvchini yangilash</option>
                   <option value="password_change">Parolni o‘zgartirish</option>
                   <option value="create_admin">Admin qo‘shish</option>

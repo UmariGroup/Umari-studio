@@ -9,6 +9,7 @@ import {
   FiCreditCard,
   FiDollarSign,
   FiFileText,
+  FiGift,
   FiLogOut,
   FiShield,
   FiUsers,
@@ -88,6 +89,13 @@ const QUICK_ACTIONS = [
     title: 'Model statistikasi',
     description: "Model bo'yicha kunlik, haftalik va oylik so'rovlar.",
     tone: 'from-indigo-500 to-violet-600',
+  },
+  {
+    href: '/admin/tokens',
+    icon: <FiGift className="h-6 w-6" />,
+    title: "Token qo'shish",
+    description: "Foydalanuvchi balansiga qo'lda token qo'shish.",
+    tone: 'from-emerald-500 to-green-600',
   },
 ];
 

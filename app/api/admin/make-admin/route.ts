@@ -1,66 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { verifyToken } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';
 
 export async function PATCH(req: NextRequest) {
   try {
-    // Faqat login qilingan admin foydalanishi mumkin
-    const authToken = req.cookies.get('auth_token')?.value;
-    
-    if (!authToken) {
-      return NextResponse.json(
-        { error: 'Login qiling' },
-        { status: 401 }
-      );
-    }
-
-    const userPayload = verifyToken(authToken);
-    if (!userPayload || userPayload.role !== 'admin') {
-      return NextResponse.json(
-        { error: 'Admin huquqi kerak' },
-        { status: 403 }
-      );
+    const currentUser = await getCurrentUser();
+    if (!currentUser || currentUser.role !== 'admin') {
+      return NextResponse.json({ error: 'Admin huquqi kerak' }, { status: 403 });
     }
 
     const { email } = await req.json();
-    if (!email) {
-      return NextResponse.json(
-        { error: 'Email talab qilinadi' },
-        { status: 400 }
-      );
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!normalizedEmail) {
+      return NextResponse.json({ error: 'Email talab qilinadi' }, { status: 400 });
     }
 
-    // Update user role to admin
     const result = await query(
-      `UPDATE users SET 
-         role = $1, 
-         subscription_plan = $2, 
-         subscription_status = $3,
-         tokens_remaining = $4,
-         updated_at = NOW()
-       WHERE email = $5 
+      `UPDATE users
+       SET role = 'admin',
+           subscription_plan = 'business_plus',
+           subscription_status = 'active',
+           tokens_remaining = GREATEST(tokens_remaining, 999999),
+           updated_at = NOW()
+       WHERE LOWER(email) = $1
        RETURNING id, email, first_name, role`,
-      ['admin', '1year', 'active', 999999, email]
+      [normalizedEmail]
     );
 
-    if (result.length === 0) {
-      return NextResponse.json(
-        { error: 'Foydalanuvchi topilmadi' },
-        { status: 404 }
-      );
+    if (result.rows.length === 0) {
+      return NextResponse.json({ error: 'Foydalanuvchi topilmadi' }, { status: 404 });
     }
+
+    await query(
+      `INSERT INTO admin_logs (admin_id, action, target_user_id, changes)
+       VALUES ($1, 'MAKE_ADMIN', $2, $3::jsonb)`,
+      [
+        currentUser.id,
+        result.rows[0].id,
+        JSON.stringify({ email: normalizedEmail, by: currentUser.email }),
+      ]
+    );
 
     return NextResponse.json({
       success: true,
       message: 'Foydalanuvchi admin qilib tayinlandi',
-      user: result[0]
+      user: result.rows[0],
     });
-
   } catch (error) {
     console.error('Make admin error:', error);
-    return NextResponse.json(
-      { error: 'Server xatosi' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Server xatosi' }, { status: 500 });
   }
 }

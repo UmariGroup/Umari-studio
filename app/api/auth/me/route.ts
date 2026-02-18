@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BillingError, getAuthenticatedUserAccount, getNextPlan, SUBSCRIPTION_PLANS } from '@/lib/subscription';
+import {
+  AUTH_COOKIE_NAMES,
+  setAuthCookies,
+  verifyRefreshToken,
+  verifyToken,
+} from '@/lib/auth';
 
 /**
  * Get current authenticated user
  */
 export async function GET(req: NextRequest) {
   try {
+    const accessRaw =
+      req.cookies.get(AUTH_COOKIE_NAMES.access)?.value || req.cookies.get(AUTH_COOKIE_NAMES.legacy)?.value;
+    const refreshRaw = req.cookies.get(AUTH_COOKIE_NAMES.refresh)?.value;
+    const accessPayload = accessRaw ? verifyToken(accessRaw) : null;
+    const refreshPayload = refreshRaw ? verifyRefreshToken(refreshRaw) : null;
+
     const user = await getAuthenticatedUserAccount();
     const planMeta = SUBSCRIPTION_PLANS[user.subscription_plan] || SUBSCRIPTION_PLANS.free;
 
@@ -22,7 +34,7 @@ export async function GET(req: NextRequest) {
     const blockedReason = isExpired ? 'expired' : outOfTokens ? 'no_tokens' : null;
     const canUse = user.role === 'admin' ? true : !blockedReason;
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       user: {
         ...user,
@@ -34,6 +46,12 @@ export async function GET(req: NextRequest) {
       blocked_reason: blockedReason,
       recommended_plan: blockedReason === 'no_tokens' ? getNextPlan(user.subscription_plan) : null,
     });
+
+    if (!accessPayload && refreshPayload) {
+      setAuthCookies(response, refreshPayload);
+    }
+
+    return response;
   } catch (error) {
     if (error instanceof BillingError) {
       return NextResponse.json(
