@@ -11,6 +11,43 @@ const ACCESS_SECRET =
 const REFRESH_SECRET =
   process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || ACCESS_SECRET;
 
+function normalizeHost(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const first = raw.split(',')[0]?.trim().toLowerCase();
+  if (!first) return null;
+  return first.split(':')[0] || null;
+}
+
+function parseHostFromUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    return new URL(raw).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function getTrustedHosts(request: NextRequest): Set<string> {
+  const hosts = new Set<string>();
+
+  const nextHost = request.nextUrl.hostname?.toLowerCase();
+  if (nextHost) hosts.add(nextHost);
+
+  const hostHeader = normalizeHost(request.headers.get('host'));
+  if (hostHeader) hosts.add(hostHeader);
+
+  const forwardedHost = normalizeHost(request.headers.get('x-forwarded-host'));
+  if (forwardedHost) hosts.add(forwardedHost);
+
+  const configuredAppHost =
+    parseHostFromUrl(process.env.APP_URL) ||
+    parseHostFromUrl(process.env.NEXT_PUBLIC_APP_URL) ||
+    parseHostFromUrl(process.env.PUBLIC_APP_URL);
+  if (configuredAppHost) hosts.add(configuredAppHost);
+
+  return hosts;
+}
+
 function parseLocalePrefix(pathname: string): { lang: Language; strippedPathname: string } | null {
   const match = pathname.match(/^\/(uz|ru)(\/|$)/);
   if (!match) return null;
@@ -209,13 +246,20 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith('/api/admin') && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) {
     const origin = request.headers.get('origin');
     const host = request.headers.get('host');
-    const expectedOrigin = request.nextUrl.origin;
-    const expectedHost = request.nextUrl.host;
+    const forwardedHost = request.headers.get('x-forwarded-host');
     const secFetchSite = request.headers.get('sec-fetch-site');
+    const trustedHosts = getTrustedHosts(request);
 
-    const originOk = !origin || origin === expectedOrigin;
-    const hostOk = !host || host === expectedHost;
-    const fetchSiteOk = !secFetchSite || secFetchSite === 'same-origin' || secFetchSite === 'same-site';
+    const originHost = parseHostFromUrl(origin);
+    const hostHeaderHost = normalizeHost(host);
+    const forwardedHeaderHost = normalizeHost(forwardedHost);
+
+    const originOk = !originHost || trustedHosts.has(originHost);
+    const hostOk =
+      (!hostHeaderHost || trustedHosts.has(hostHeaderHost)) &&
+      (!forwardedHeaderHost || trustedHosts.has(forwardedHeaderHost));
+    const fetchSiteOk =
+      !secFetchSite || secFetchSite === 'same-origin' || secFetchSite === 'same-site' || secFetchSite === 'none';
 
     if (!originOk || !hostOk || !fetchSiteOk) {
       return withReferralCookie(
