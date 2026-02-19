@@ -58,6 +58,7 @@
     "examples_title": "Namunalar",
     "examples_heading": "Ishlardan jonli namunalar",
     "examples_subtitle": "Umari AI yordamida yaratilgan namuna ishlanmalar",
+    "examples_telegram_cta": "Ko'proq jonli namunalarni Telegram kanalimizda ko'ring",
     "example_alt": "Ish namunasi",
     "pricing_title": "Narxlar",
     "pricing_subtitle": "O'zingizga mos tarifni tanlang",
@@ -412,6 +413,7 @@
     "selectPlan": "Tarifni tanlang",
     "upgradePlan": "Tarifni yangilash",
     "billingInfo": "Faqat oylik to'lov mavjud. Tugma orqali Telegram'da @UmariAI_admin ga so'rov yuboring.",
+    "moneyBackGuarantee": "To'lov qilganingizdan keyin 3 kun sinab ko'ring. Ma'qul kelmasa, pullingizni 100% qaytaramiz.",
     "starterSubtitle": "Tez va arzon boshlash uchun",
     "starterFeature1": "140 token/oy",
     "starterFeature2": "Oddiy + Professional rasmlari",
@@ -427,6 +429,17 @@
     "businessFeature2": "Eng kuchli rasm rejimi",
     "businessFeature3": "Ko'p video va rakurs",
     "businessFeature4": "Yuqori tezlik va hajm"
+  },
+  "guide": {
+    "badge": "Qo'llanma",
+    "title": "Umari AI dan foydalanish bo'yicha qo'llanma",
+    "subtitle": "Video darslarni ketma-ket ko'rib, platformani tez o'zlashtiring.",
+    "video": "Video",
+    "video1": "1-dars: Platformaga kirish va asosiy sozlamalar",
+    "video2": "2-dars: Market Studio va prompt bilan ishlash",
+    "video3": "3-dars: Video/Copywriter jarayonlari va eksport",
+    "prev": "Oldingi",
+    "next": "Keyingi"
   },
   "faq": {
     "title": "Savol-javob",

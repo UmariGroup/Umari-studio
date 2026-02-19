@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { Container } from '@/components/ui/Container';
 import { Badge } from '@/components/ui/Badge';
 import { useLanguage } from '@/lib/LanguageContext';
+import { FiSend } from 'react-icons/fi';
 
 const exampleImages = [
   '/examples/marketplace.png',
@@ -72,6 +73,15 @@ export function ExamplesCarousel() {
           <Badge variant="violet" className="mb-4">{t('home.examples_title')}</Badge>
           <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-5xl">{t('home.examples_heading')}</h2>
           <p className="mx-auto mt-4 max-w-2xl text-slate-600">{t('home.examples_subtitle')}</p>
+          <a
+            href="https://t.me/UmariAI"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mx-auto mt-5 inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
+          >
+            <FiSend className="h-4 w-4" />
+            {t('home.examples_telegram_cta')}
+          </a>
         </motion.div>
       </Container>
 

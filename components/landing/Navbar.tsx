@@ -31,8 +31,9 @@ export function Navbar() {
                         ? 'bg-white/80 backdrop-blur-md border border-slate-200 shadow-sm'
                         : 'bg-transparent'
                     }`}>
-                    <Link href={prefix} className="text-xl font-bold tracking-tight text-slate-900">
+                    <Link href={prefix} className="text-xl flex flex-row gap-2 font-bold tracking-tight text-slate-900">
                         <Image src="/favicon.ico" alt="Umari AI Logo" width={36} height={36} className="inline-block mr-2" />
+                        Umari AI
                     </Link>
 
                     {/* Desktop Nav */}

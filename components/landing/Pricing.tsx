@@ -107,6 +107,9 @@ export function Pricing() {
           <p className="mx-auto mt-3 max-w-2xl text-sm text-slate-500">
             {t('pricing.billingInfo')}
           </p>
+          <p className="mx-auto mt-2 max-w-2xl text-sm font-medium text-emerald-700">
+            {t('pricing.moneyBackGuarantee')}
+          </p>
         </div>
 
         <div className="grid grid-cols-1 gap-8 md:grid-cols-3 lg:gap-10">

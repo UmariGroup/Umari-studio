@@ -91,6 +91,8 @@ export default function Header() {
     user?.role !== 'admin' &&
     !String(user?.phone || '').trim() &&
     !String(user?.telegram_username || '').trim();
+  const isActivePath = (targetPath: string): boolean =>
+    strippedPathname === targetPath || strippedPathname.startsWith(`${targetPath}/`);
 
   // Admin routes have their own header.
   if (strippedPathname?.startsWith('/admin')) {
@@ -102,30 +104,43 @@ export default function Header() {
   }
 
   if (isAuthenticated) {
+    const navItems = [
+      { href: `${prefix}/dashboard`, label: "Boshqaruv", active: isActivePath('/dashboard') },
+      { href: `${prefix}/marketplace`, label: "Market studiya", active: isActivePath('/marketplace') },
+      { href: `${prefix}/infografika`, label: "Infografika", active: isActivePath('/infografika') },
+      { href: `${prefix}/video-studio`, label: "Video studiya", active: isActivePath('/video-studio') },
+      { href: `${prefix}/copywriter`, label: "Copywriter studiya", active: isActivePath('/copywriter') },
+    ];
+
     return (
       <>
-        <header className="border-b border-slate-200 bg-white">
+        <header className="fixed left-0 right-0 top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
             <Logo href={prefix} />
 
           <nav className="hidden md:flex items-center gap-2 text-sm">
-            <Link href={`${prefix}/dashboard`} className="px-3 py-2 rounded-lg text-slate-700 hover:text-slate-900 hover:bg-slate-100">
-              Boshqaruv
-            </Link>
-            <Link href={`${prefix}/marketplace`} className="px-3 py-2 rounded-lg text-slate-700 hover:text-slate-900 hover:bg-slate-100">
-              Market studiya
-            </Link>
-            <Link href={`${prefix}/infografika`} className="px-3 py-2 rounded-lg text-slate-700 hover:text-slate-900 hover:bg-slate-100">
-              Infografika
-            </Link>
-            <Link href={`${prefix}/video-studio`} className="px-3 py-2 rounded-lg text-slate-700 hover:text-slate-900 hover:bg-slate-100">
-              Video studiya
-            </Link>
-            <Link href={`${prefix}/copywriter`} className="px-3 py-2 rounded-lg text-slate-700 hover:text-slate-900 hover:bg-slate-100">
-              Copywriter studiya
-            </Link>
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`px-3 py-2 rounded-lg transition ${
+                  item.active
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
             {user?.role === 'admin' && (
-              <Link href={`${prefix}/admin`} className="px-3 py-2 rounded-lg text-blue-700 hover:text-blue-900 hover:bg-blue-50">
+              <Link
+                href={`${prefix}/admin`}
+                className={`px-3 py-2 rounded-lg transition ${
+                  isActivePath('/admin')
+                    ? 'bg-blue-100 text-blue-800'
+                    : 'text-blue-700 hover:text-blue-900 hover:bg-blue-50'
+                }`}
+              >
                 Admin
               </Link>
             )}
@@ -163,13 +178,28 @@ export default function Header() {
           {mobileMenuOpen && (
             <div className="md:hidden border-t border-slate-200 bg-white">
               <div className="px-4 py-3 flex flex-col gap-2 text-sm">
-                <Link href={`${prefix}/dashboard`} onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Boshqaruv</Link>
-                <Link href={`${prefix}/marketplace`} onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Market studiya</Link>
-                <Link href={`${prefix}/infografika`} onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Infografika</Link>
-                <Link href={`${prefix}/video-studio`} onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Video studiya</Link>
-                <Link href={`${prefix}/copywriter`} onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded hover:bg-slate-100">Copywriter studiya</Link>
+                {navItems.map((item) => (
+                  <Link
+                    key={`mobile-${item.href}`}
+                    href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`px-2 py-2 rounded ${
+                      item.active ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-100'
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
                 {user?.role === 'admin' && (
-                  <Link href={`${prefix}/admin`} onClick={() => setMobileMenuOpen(false)} className="px-2 py-2 rounded text-blue-700 hover:bg-blue-50">Admin</Link>
+                  <Link
+                    href={`${prefix}/admin`}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`px-2 py-2 rounded ${
+                      isActivePath('/admin') ? 'bg-blue-100 text-blue-800' : 'text-blue-700 hover:bg-blue-50'
+                    }`}
+                  >
+                    Admin
+                  </Link>
                 )}
                 <button
                   onClick={handleLogout}
@@ -181,6 +211,7 @@ export default function Header() {
             </div>
           )}
         </header>
+        <div className="h-16" />
 
         <ContactInfoModal
           open={needsContactInfo}

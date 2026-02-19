@@ -3,6 +3,7 @@ import { LogoTicker } from '@/components/landing/LogoTicker';
 import { Features } from '@/components/landing/Features';
 import { ExamplesCarousel } from '@/components/landing/ExamplesCarousel';
 import { Pricing } from '@/components/landing/Pricing';
+import { UsageGuideCarousel } from '@/components/landing/UsageGuideCarousel';
 import { FAQ } from '@/components/landing/FAQ';
 
 export default function HomePage() {
@@ -13,6 +14,7 @@ export default function HomePage() {
       <Features />
       <ExamplesCarousel />
       <Pricing />
+      <UsageGuideCarousel />
       <FAQ />
     </main>
   );
