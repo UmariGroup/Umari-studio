@@ -84,6 +84,7 @@ export async function buildTokenInactivityCandidates(client: PoolClient): Promis
             AND tu.created_at >= lp.purchase_started_at
         ) AS usage_after ON true
         WHERE u.role = 'user'
+          AND u.subscription_status = 'active'
       )
       SELECT
         b.user_id::text,
@@ -92,15 +93,19 @@ export async function buildTokenInactivityCandidates(client: PoolClient): Promis
         b.subscription_plan::text,
         b.subscription_status::text,
         b.tokens_remaining::float8,
-        v.threshold_days::int,
+        CASE
+          WHEN b.days_without_usage >= 10 THEN 10
+          WHEN b.days_without_usage >= 7 THEN 7
+          WHEN b.days_without_usage >= 3 THEN 3
+          ELSE NULL
+        END::int AS threshold_days,
         b.purchase_started_at,
         b.last_token_usage_at,
         b.usage_count_after_purchase,
         b.days_without_usage
       FROM base b
-      CROSS JOIN (VALUES (3), (7), (10)) AS v(threshold_days)
       WHERE b.usage_count_after_purchase = 0
-        AND b.days_without_usage >= v.threshold_days
+        AND b.days_without_usage >= 3
       ORDER BY b.days_without_usage DESC, b.purchase_started_at ASC
     `
   );

@@ -57,14 +57,14 @@ function formatDate(value: string | null | undefined): string {
 
 function prettyPlan(plan: string): string {
   if (plan === 'business_plus') return 'Business+';
-  return plan || 'free';
+  if (plan === 'free') return 'Bepul';
+  return plan || 'Bepul';
 }
 
 export default function AdminInactiveUsersPage() {
   const [rows, setRows] = useState<InactiveUserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [threshold, setThreshold] = useState<'all' | '3' | '7' | '10'>('all');
   const [status, setStatus] = useState<'open' | 'resolved' | 'all'>('open');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -84,7 +84,6 @@ export default function AdminInactiveUsersPage() {
     setError(null);
     try {
       const params = new URLSearchParams();
-      params.set('threshold', threshold);
       params.set('status', status);
       params.set('search', search);
       params.set('page', String(page));
@@ -117,11 +116,11 @@ export default function AdminInactiveUsersPage() {
   useEffect(() => {
     void fetchData(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threshold, status, page, limit, search]);
+  }, [status, page, limit, search]);
 
   useEffect(() => {
     setPage(1);
-  }, [threshold, status, limit, search]);
+  }, [status, limit, search]);
 
   return (
     <main className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
@@ -139,7 +138,7 @@ export default function AdminInactiveUsersPage() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-slate-900">Token ishlatmaslik nazorati</h1>
-              <p className="text-sm text-slate-500">Sotib olgan, lekin 3/7/10 kun token ishlatmagan userlar</p>
+              <p className="text-sm text-slate-500">Sotib olgan, lekin 3/7/10 kun token ishlatmagan foydalanuvchilar</p>
             </div>
           </div>
           <button
@@ -155,7 +154,7 @@ export default function AdminInactiveUsersPage() {
       </header>
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard title="Open (jami)" value={openTotal} tone="text-amber-700 border-amber-200 bg-amber-50" />
+        <SummaryCard title="Faol (jami)" value={openTotal} tone="text-amber-700 border-amber-200 bg-amber-50" />
         <SummaryCard title="3 kun" value={summary?.open_by_threshold['3'] || 0} tone="text-blue-700 border-blue-200 bg-blue-50" />
         <SummaryCard title="7 kun" value={summary?.open_by_threshold['7'] || 0} tone="text-violet-700 border-violet-200 bg-violet-50" />
         <SummaryCard title="10 kun" value={summary?.open_by_threshold['10'] || 0} tone="text-rose-700 border-rose-200 bg-rose-50" />
@@ -182,28 +181,14 @@ export default function AdminInactiveUsersPage() {
           </label>
 
           <label>
-            <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Threshold</span>
-            <select
-              value={threshold}
-              onChange={(event) => setThreshold(event.target.value as any)}
-              className="rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none"
-            >
-              <option value="all">Barchasi</option>
-              <option value="3">&gt;= 3 kun</option>
-              <option value="7">&gt;= 7 kun</option>
-              <option value="10">&gt;= 10 kun</option>
-            </select>
-          </label>
-
-          <label>
-            <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Holat</span>
             <select
               value={status}
               onChange={(event) => setStatus(event.target.value as any)}
               className="rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none"
             >
-              <option value="open">Open</option>
-              <option value="resolved">Resolved</option>
+              <option value="open">Faol</option>
+              <option value="resolved">Yopilgan</option>
               <option value="all">Barchasi</option>
             </select>
           </label>
@@ -232,7 +217,7 @@ export default function AdminInactiveUsersPage() {
 
         {sync?.refreshed_at && (
           <p className="mt-3 text-xs text-slate-500">
-            Oxirgi monitoring: {formatDate(sync.refreshed_at)} • Active: {sync.active} • Yangilangan: {sync.openedOrUpdated} • Resolved: {sync.resolved}
+            Oxirgi kuzatuv: {formatDate(sync.refreshed_at)} | Faol: {sync.active} | Yangilandi: {sync.openedOrUpdated} | Yopildi: {sync.resolved}
           </p>
         )}
       </section>
@@ -245,20 +230,19 @@ export default function AdminInactiveUsersPage() {
               <tr>
                 <th className="px-4 py-3 text-left font-semibold text-slate-600">Foydalanuvchi</th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-600">Tarif</th>
-                <th className="px-4 py-3 text-left font-semibold text-slate-600">Threshold</th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-600">Ishlatmagan kun</th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-600">Sotib olingan sana</th>
-                <th className="px-4 py-3 text-left font-semibold text-slate-600">Status</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-600">Holati</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-500">Yuklanmoqda...</td>
+                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">Yuklanmoqda...</td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-500">Mos yozuv topilmadi</td>
+                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">Mos yozuv topilmadi</td>
                 </tr>
               ) : (
                 rows.map((row) => (
@@ -271,12 +255,7 @@ export default function AdminInactiveUsersPage() {
                     </td>
                     <td className="px-4 py-3 text-slate-700">
                       <div className="font-semibold">{prettyPlan(row.subscription_plan)}</div>
-                      <div className="text-xs text-slate-500">{row.subscription_status}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
-                        {row.threshold_days} kun
-                      </span>
+                      <div className="text-xs text-slate-500">faol</div>
                     </td>
                     <td className="px-4 py-3 font-semibold text-slate-900">{row.days_without_usage} kun</td>
                     <td className="px-4 py-3 text-slate-600">{formatDate(row.purchase_started_at)}</td>
@@ -288,7 +267,7 @@ export default function AdminInactiveUsersPage() {
                             : 'bg-emerald-100 text-emerald-800'
                         }`}
                       >
-                        {row.status === 'open' ? 'open' : 'resolved'}
+                        {row.status === 'open' ? 'faol' : 'yopilgan'}
                       </span>
                     </td>
                   </tr>
@@ -343,8 +322,9 @@ function SummaryCard({
       <p className="text-xs font-semibold uppercase tracking-wide">{title}</p>
       <p className="mt-1 text-2xl font-black">{value}</p>
       <div className="mt-2 inline-flex items-center gap-1 text-xs opacity-80">
-        <FiUsers className="h-3.5 w-3.5" /> monitoring
+        <FiUsers className="h-3.5 w-3.5" /> kuzatuvda
       </div>
     </article>
   );
 }
+

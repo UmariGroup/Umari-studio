@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import {
-  INACTIVITY_THRESHOLDS,
   ensureTokenInactivityTable,
   refreshTokenInactivityAlerts,
 } from '@/lib/token-inactivity';
@@ -16,19 +15,16 @@ function parsePositiveInt(raw: string | null, fallback: number, min: number, max
 export async function GET(req: NextRequest) {
   const admin = await getCurrentUser();
   if (!admin || admin.role !== 'admin') {
-    return NextResponse.json({ error: 'Unauthorized - Admin access required' }, { status: 403 });
+    return NextResponse.json({ error: "Ruxsat yo'q: faqat admin kirishi mumkin" }, { status: 403 });
   }
 
   const searchParams = req.nextUrl.searchParams;
-  const thresholdRaw = String(searchParams.get('threshold') || 'all').trim().toLowerCase();
   const statusRaw = String(searchParams.get('status') || 'open').trim().toLowerCase();
   const search = String(searchParams.get('search') || '').trim();
   const page = parsePositiveInt(searchParams.get('page'), 1, 1, 10_000);
   const limit = parsePositiveInt(searchParams.get('limit'), 20, 5, 200);
   const refresh = searchParams.get('refresh') !== '0';
 
-  const threshold =
-    thresholdRaw === 'all' ? null : INACTIVITY_THRESHOLDS.includes(Number(thresholdRaw) as any) ? Number(thresholdRaw) : null;
   const status =
     statusRaw === 'all' || statusRaw === 'resolved' || statusRaw === 'open' ? statusRaw : 'open';
 
@@ -46,10 +42,6 @@ export async function GET(req: NextRequest) {
     const where: string[] = [];
     const params: any[] = [];
 
-    if (threshold !== null) {
-      params.push(threshold);
-      where.push(`ua.threshold_days = $${params.length}`);
-    }
     if (status !== 'all') {
       params.push(status);
       where.push(`ua.status = $${params.length}`);
@@ -61,11 +53,11 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    const whereClause = `WHERE u.subscription_status = 'active'${where.length > 0 ? ` AND ${where.join(' AND ')}` : ''}`;
 
     const countRes = await client.query(
       `
-        SELECT COUNT(*)::int AS total
+        SELECT COUNT(DISTINCT ua.user_id)::int AS total
         FROM user_token_inactivity_alerts ua
         JOIN users u ON u.id = ua.user_id
         ${whereClause}
@@ -80,33 +72,64 @@ export async function GET(req: NextRequest) {
     const listParams = [...params, limit, offset];
     const listRes = await client.query(
       `
+        WITH ranked AS (
+          SELECT
+            ua.id::text,
+            ua.user_id::text,
+            ua.threshold_days,
+            ua.purchase_started_at,
+            ua.last_token_usage_at,
+            ua.usage_count_after_purchase,
+            ua.days_without_usage,
+            ua.status,
+            ua.first_detected_at,
+            ua.last_detected_at,
+            ua.resolved_at,
+            ua.updated_at,
+            ua.meta,
+            u.email,
+            u.first_name,
+            u.subscription_plan,
+            u.subscription_status,
+            COALESCE(u.tokens_remaining, 0)::float8 AS tokens_remaining,
+            ROW_NUMBER() OVER (
+              PARTITION BY ua.user_id
+              ORDER BY
+                CASE WHEN ua.status = 'open' THEN 0 ELSE 1 END,
+                ua.threshold_days DESC,
+                ua.days_without_usage DESC,
+                ua.last_detected_at DESC
+            ) AS rn
+          FROM user_token_inactivity_alerts ua
+          JOIN users u ON u.id = ua.user_id
+          ${whereClause}
+        )
         SELECT
-          ua.id::text,
-          ua.user_id::text,
-          ua.threshold_days,
-          ua.purchase_started_at,
-          ua.last_token_usage_at,
-          ua.usage_count_after_purchase,
-          ua.days_without_usage,
-          ua.status,
-          ua.first_detected_at,
-          ua.last_detected_at,
-          ua.resolved_at,
-          ua.updated_at,
-          ua.meta,
-          u.email,
-          u.first_name,
-          u.subscription_plan,
-          u.subscription_status,
-          COALESCE(u.tokens_remaining, 0)::float8 AS tokens_remaining
-        FROM user_token_inactivity_alerts ua
-        JOIN users u ON u.id = ua.user_id
-        ${whereClause}
+          id,
+          user_id,
+          threshold_days,
+          purchase_started_at,
+          last_token_usage_at,
+          usage_count_after_purchase,
+          days_without_usage,
+          status,
+          first_detected_at,
+          last_detected_at,
+          resolved_at,
+          updated_at,
+          meta,
+          email,
+          first_name,
+          subscription_plan,
+          subscription_status,
+          tokens_remaining
+        FROM ranked
+        WHERE rn = 1
         ORDER BY
-          CASE WHEN ua.status = 'open' THEN 0 ELSE 1 END,
-          ua.threshold_days DESC,
-          ua.days_without_usage DESC,
-          ua.last_detected_at DESC
+          CASE WHEN status = 'open' THEN 0 ELSE 1 END,
+          threshold_days DESC,
+          days_without_usage DESC,
+          last_detected_at DESC
         LIMIT $${listParams.length - 1}
         OFFSET $${listParams.length}
       `,
@@ -116,7 +139,9 @@ export async function GET(req: NextRequest) {
     const summaryRes = await client.query(
       `
         SELECT threshold_days, status, COUNT(*)::int AS total
-        FROM user_token_inactivity_alerts
+        FROM user_token_inactivity_alerts ua
+        JOIN users u ON u.id = ua.user_id
+        WHERE u.subscription_status = 'active'
         GROUP BY threshold_days, status
       `
     );
@@ -162,7 +187,6 @@ export async function GET(req: NextRequest) {
         has_next: safePage < totalPages,
       },
       filters: {
-        threshold: threshold ?? 'all',
         status,
         search,
       },
@@ -181,8 +205,9 @@ export async function GET(req: NextRequest) {
       // ignore
     }
     console.error('Admin inactive users error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Ichki server xatosi' }, { status: 500 });
   } finally {
     client.release();
   }
 }
+
