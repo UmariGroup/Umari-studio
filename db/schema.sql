@@ -122,6 +122,32 @@ CREATE INDEX idx_token_usage_user ON token_usage(user_id);
 CREATE INDEX idx_admin_logs_admin ON admin_logs(admin_id);
 CREATE INDEX idx_admin_logs_target ON admin_logs(target_user_id);
 
+-- Users with paid subscriptions but no token usage (3/7/10-day monitoring)
+CREATE TABLE IF NOT EXISTS user_token_inactivity_alerts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  threshold_days INT NOT NULL CHECK (threshold_days IN (3, 7, 10)),
+  purchase_started_at TIMESTAMP NOT NULL,
+  last_token_usage_at TIMESTAMP,
+  usage_count_after_purchase INT NOT NULL DEFAULT 0,
+  days_without_usage INT NOT NULL DEFAULT 0,
+  status VARCHAR(16) NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'resolved')),
+  first_detected_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_detected_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at TIMESTAMP,
+  meta JSONB,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (user_id, threshold_days)
+);
+
+CREATE INDEX IF NOT EXISTS idx_token_inactivity_status_threshold
+  ON user_token_inactivity_alerts(status, threshold_days);
+CREATE INDEX IF NOT EXISTS idx_token_inactivity_days
+  ON user_token_inactivity_alerts(days_without_usage DESC);
+CREATE INDEX IF NOT EXISTS idx_token_inactivity_user
+  ON user_token_inactivity_alerts(user_id);
+
 -- ============================================================
 -- Image generation queue (DB-backed, persistent)
 -- ============================================================

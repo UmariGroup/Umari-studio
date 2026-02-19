@@ -841,16 +841,32 @@ function normalizeMultiLine(text: string): string {
     .trim();
 }
 
+function sanitizeFullDescriptionSource(raw: string): string {
+  return normalizeMultiLine(raw)
+    .replace(/\b(?:variant|вариант)\s*[a-zа-я0-9\s-]*(?:\([^)]*\))?\s*:?/gi, ' ')
+    .replace(
+      /\b(?:cta\s*urg['`’]?u|cta|call[\s-]*to[\s-]*action|призыв[\s-]*к[\s-]*действию)\s*:?/gi,
+      ' '
+    )
+    .replace(/^\s*\d+[.)-]\s*/gm, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function collectDescriptionIdeas(raw: string): string[] {
-  const normalized = normalizeMultiLine(raw);
+  const normalized = sanitizeFullDescriptionSource(raw);
   if (!normalized) return [];
 
   const lines = normalized
     .split('\n')
     .map((line) =>
       line
-        .replace(/^\s*\d+[.)-]\s*/g, '')
-        .replace(/^\s*\*\*(?:variant)\s*[a-z0-9\s-]*\*\*\s*:?/i, '')
+        .replace(/^\s*(?:[-*•]|\d+[.)-])\s*/g, '')
+        .replace(
+          /^(?:asosiy\s+sotuv\s+matni|seo\s+va\s+afzallik|cta\s*urg['`’]?u|главный\s+продающий\s+текст|seo\s+и\s+преимущества)\s*:\s*/i,
+          ''
+        )
         .trim()
     )
     .filter(Boolean);
@@ -960,28 +976,57 @@ function clampSpecLines(block: string, maxLenPerLine: number): string {
     .join('\n');
 }
 
-function buildDescriptionVariants(raw: string, lang: 'UZ' | 'RU'): string {
-  const text = String(raw || '').trim();
-  if (!text) return '';
+function getFullDescBounds(plan: string): { min: number; max: number } {
+  const normalized = String(plan || '').trim().toLowerCase();
+  if (normalized === 'business_plus' || normalized === 'business+') {
+    return { min: 2600, max: 4200 };
+  }
+  if (normalized === 'pro') {
+    return { min: 1700, max: 2600 };
+  }
+  return { min: 1100, max: 1600 };
+}
 
-  const ideas = collectDescriptionIdeas(text);
-  const first = clampTextLength(ideas[0] || text, 1100);
-  const second = clampTextLength(ideas[1] || first, 1100);
-  const third = clampTextLength(ideas[2] || second, 1100);
-
-  if (lang === 'UZ') {
-    return [
-      `1) **Variant A (Asosiy sotuv matni):** ${first}`,
-      `2) **Variant B (SEO va afzallik):** ${second}`,
-      `3) **Variant C (CTA urg'u):** ${third}`,
-    ].join('\n');
+function buildSingleFullDescription(raw: string, lang: 'UZ' | 'RU', minLen: number, maxLen: number): string {
+  const text = sanitizeFullDescriptionSource(String(raw || ''));
+  if (!text) {
+    return lang === 'UZ'
+      ? "Mahsulot kundalik foydalanish uchun qulay, puxta va ishonchli yechim bo'lib, dizayn hamda funksionallikni birlashtiradi. Hoziroq buyurtma bering va mahsulotning amaliy afzalliklarini birinchi kundan his qiling."
+      : 'Товар сочетает удобство, надежность и продуманный дизайн для ежедневного использования. Оформите заказ сейчас и оцените практические преимущества уже с первых дней.';
   }
 
-  return [
-    `1) **Variant A (Main sales text):** ${first}`,
-    `2) **Variant B (SEO + benefits):** ${second}`,
-    `3) **Variant C (Strong CTA):** ${third}`,
-  ].join('\n');
+  const ideas = collectDescriptionIdeas(text);
+  let composed = normalizeOneLine(ideas.join(' ').replace(/\b(?:variant|вариант)\s*[a-zа-я0-9\s-]*:?/gi, ''));
+
+  composed = normalizeOneLine(ideas.join(' '));
+
+  const fillersUz = [
+    "Har bir detalida amaliy qulaylik, estetik ko'rinish va uzoq muddatli foydalanish ustuvor qilingan.",
+    "Mahsulot o'z segmentida sifat, funksionallik va dizayn uyg'unligi bilan ajralib turadi.",
+    "Bu yechim kundalik foydalanishda vaqtni tejaydi va natijani yanada barqaror qiladi.",
+  ];
+  const fillersRu = [
+    'В каждой детали учтены практичность, эстетика и комфорт в повседневном использовании.',
+    'Товар выгодно выделяется сочетанием качества, функциональности и современного дизайна.',
+    'Это решение помогает экономить время и получать стабильный результат каждый день.',
+  ];
+  const fillers = lang === 'UZ' ? fillersUz : fillersRu;
+
+  let fillIndex = 0;
+  while (composed.length < minLen && fillIndex < 14) {
+    composed = `${composed} ${fillers[fillIndex % fillers.length]}`.trim();
+    fillIndex += 1;
+  }
+
+  const ctaUz = "Hoziroq buyurtma bering va mahsulotning afzalliklarini amalda his qiling.";
+  const ctaRu = 'Оформите заказ сейчас и оцените преимущества товара на практике.';
+  const hasCta = /buyurtma|xarid|hoziroq|закаж|оформ/i.test(composed);
+  const hasCtaNormalized = hasCta || /закаж|оформ/i.test(composed);
+  if (!hasCtaNormalized) {
+    composed = `${composed} ${lang === 'UZ' ? ctaUz : ctaRu}`.trim();
+  }
+
+  return clampTextLength(composed, maxLen);
 }
 
 function normalizeCopywriterOutput(rawText: string, plan: string): string {
@@ -1015,8 +1060,9 @@ function normalizeCopywriterOutput(rawText: string, plan: string): string {
     sections.SPECS = rebuildLangBlock(uz, ru);
   }
   if (sections.FULL_DESC) {
-    const uz = buildDescriptionVariants(extractLangPart(sections.FULL_DESC, 'UZ'), 'UZ');
-    const ru = buildDescriptionVariants(extractLangPart(sections.FULL_DESC, 'RU'), 'RU');
+    const bounds = getFullDescBounds(plan);
+    const uz = buildSingleFullDescription(extractLangPart(sections.FULL_DESC, 'UZ'), 'UZ', bounds.min, bounds.max);
+    const ru = buildSingleFullDescription(extractLangPart(sections.FULL_DESC, 'RU'), 'RU', bounds.min, bounds.max);
     sections.FULL_DESC = rebuildLangBlock(uz, ru);
   }
   if (sections.PHOTOS_INFO) {
@@ -1048,7 +1094,7 @@ export async function* generateMarketplaceDescriptionStream(
     planRules = `
 QO'SHIMCHA TALABLAR (STARTER):
 - Matn qisqa va sodda bo'lsin (marketplace uchun tayyor).
-- FULL_DESC: taxminan 600-900 belgi (UZ va RU alohida).
+- FULL_DESC: taxminan 1100-1600 belgi (UZ va RU alohida), bitta uzluksiz matn.
 - SPECS: 6-8 ta band.
 - PROPS: 6-8 ta band.
 - VIDEO_REC: 1-2 ta qisqa g'oya.`;
@@ -1056,7 +1102,7 @@ QO'SHIMCHA TALABLAR (STARTER):
     planRules = `
 QO'SHIMCHA TALABLAR (PRO):
 - Matn to'liq va SEO kuchli bo'lsin.
-- FULL_DESC: taxminan 1200-1800 belgi (UZ va RU alohida).
+- FULL_DESC: taxminan 1700-2600 belgi (UZ va RU alohida), bitta uzluksiz matn.
 - SPECS: 10-12 ta band.
 - PROPS: 8-12 ta band.
 - VIDEO_REC: 3-5 ta g'oya.`;
@@ -1065,7 +1111,7 @@ QO'SHIMCHA TALABLAR (PRO):
 QO'SHIMCHA TALABLAR (BUSINESS+):
 - Maksimal detal: agency/katalog darajasida yozing.
 - NAME: 1 ta kuchli sotuv nomi bering (har tilda 90 belgidan oshmasin).
-- FULL_DESC: taxminan 2000-3500 belgi (UZ va RU alohida).
+- FULL_DESC: taxminan 2600-4200 belgi (UZ va RU alohida), bitta uzluksiz matn.
 - SPECS: 15-20 ta band.
 - PROPS: 8-12 ta band.
 - VIDEO_REC: 4-6 ta g'oya.`;
@@ -1077,16 +1123,17 @@ Vazifa: Yuklangan rasmlar asosida ${marketplace} platformasi uchun 18 ta blokdan
 MUHIM QOIDALAR:
 1. HAR BIR blokni ---KEY_NAME--- markeridan boshlang.
 2. Har bir band ichida "UZ:" va "RU:" prefikslaridan foydalaning.
-3. Faqat FULL_DESC blokida markdown bold (**...**) ishlatish mumkin. Qolgan bloklarda markdown ishlatmang.
+3. Toza matn qaytaring: markdown (#, *, _, **) ishlatmang.
 4. KAFOLAT: FAQAT "10 kun (ishlab chiqaruvchi nuqsonlari uchun)" deb yozing.
 5. LIMITLAR:
    - NAME (tovar nomi): har tilda maksimum ${COPYWRITER_LIMITS.NAME_MAX} belgi.
    - SHORT_DESC (qisqacha tavsif): har tilda maksimum ${COPYWRITER_LIMITS.SHORT_DESC_MAX} belgi.
    - SPECS (tovar xususiyatlari): har bir band maksimum ${COPYWRITER_LIMITS.SPECS_LINE_MAX} belgi.
-6. FULL_DESC bo'limi har tilda 3 ta copy-pastega tayyor variant bersin:
-   - 1) **Variant A (Asosiy sotuv matni):** ...
-   - 2) **Variant B (SEO va afzallik):** ...
-   - 3) **Variant C (CTA urg'u):** ...
+6. FULL_DESC bo'limida har tilda FAQAT BITTA uzun, copy-pastega tayyor tavsif yozing.
+   - Variant A/B/C yozmang.
+   - Ro'yxat (1), 2), 3)) yozmang.
+   - Sarlavha yoki "CTA:" yorlig'ini yozmang.
+   - Oxirgi jumla kuchli chaqiriq (CTA) bo'lsin.
 7. PHOTOS_INFO bo'limida har bir tilda aynan ${expectedImagePrompts} ta rasm prompt bo'lsin (na ko'p, na kam).
    - Har prompt alohida qatorda va 1), 2), 3)... formatida yozilsin.
    - Har bir prompt marketplace image generationga tayyor bo'lsin.

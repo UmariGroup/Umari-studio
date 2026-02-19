@@ -97,6 +97,13 @@ const QUICK_ACTIONS = [
     description: "Foydalanuvchi balansiga qo'lda token qo'shish.",
     tone: 'from-emerald-500 to-green-600',
   },
+  {
+    href: '/admin/inactive-users',
+    icon: <FiClock className="h-6 w-6" />,
+    title: 'Inaktiv userlar',
+    description: "3/7/10 kun token ishlatmagan pullik foydalanuvchilar nazorati.",
+    tone: 'from-amber-500 to-orange-600',
+  },
 ];
 
 export default function AdminDashboard() {
