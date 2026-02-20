@@ -29,6 +29,19 @@
     "businessPlus": "Business+"
   },
   "dashboard": {
+    "title": "Панель управления",
+    "myTokens": "Мои токены",
+    "myPlan": "Мой план",
+    "upgrade": "Обновить",
+    "profile": "Профиль",
+    "settings": "Параметры",
+    "help": "Справка",
+    "recentActivity": "Последняя активность",
+    "noActivity": "Нет активности",
+    "stats": "Статистика",
+    "imagesGenerated": "Созданные изображения",
+    "videosGenerated": "Созданные видео",
+    "copyGenerated": "Созданный текст",
     "hero": {
       "kicker": "Панель Umari",
       "greeting": "Здравствуйте",
@@ -582,21 +595,7 @@
     "addTelegram": "Добавить Telegram",
     "optionalLater": "Вы можете добавить это позже"
   },
-  "dashboard": {
-    "title": "Панель управления",
-    "myTokens": "Мои токены",
-    "myPlan": "Мой план",
-    "upgrade": "Обновить",
-    "profile": "Профиль",
-    "settings": "Параметры",
-    "help": "Справка",
-    "recentActivity": "Последняя активность",
-    "noActivity": "Нет активности",
-    "stats": "Статистика",
-    "imagesGenerated": "Созданные изображения",
-    "videosGenerated": "Созданные видео",
-    "copyGenerated": "Созданный текст"
-  },
+ 
   "errors": {
     "notFound": "Не найдено",
     "unauthorized": "Неавторизованный",

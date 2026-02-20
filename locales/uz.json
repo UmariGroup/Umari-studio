@@ -29,6 +29,19 @@
     "businessPlus": "Business+"
   },
   "dashboard": {
+    "title": "Boshqaruv paneli",
+    "myTokens": "Mening tokenlarim",
+    "myPlan": "Mening tarifim",
+    "upgrade": "Yangilash",
+    "profile": "Profil",
+    "settings": "Sozlamalar",
+    "help": "Yordam",
+    "recentActivity": "So'nggi faoliyat",
+    "noActivity": "Faoliyat yo'q",
+    "stats": "Statistika",
+    "imagesGenerated": "Yaratilgan rasmlar",
+    "videosGenerated": "Yaratilgan videolar",
+    "copyGenerated": "Yaratilgan matn",
     "hero": {
       "kicker": "Umari boshqaruv paneli",
       "greeting": "Assalomu alaykum",
@@ -592,21 +605,6 @@
     "addPhone": "Telefonni qo'sh",
     "addTelegram": "Telegramni qo'sh",
     "optionalLater": "Uni keyinroq qo'shishingiz mumkin"
-  },
-  "dashboard": {
-    "title": "Boshqaruv paneli",
-    "myTokens": "Mening tokenlarim",
-    "myPlan": "Mening tarifim",
-    "upgrade": "Yangilash",
-    "profile": "Profil",
-    "settings": "Sozlamalar",
-    "help": "Yordam",
-    "recentActivity": "So'nggi faoliyat",
-    "noActivity": "Faoliyat yo'q",
-    "stats": "Statistika",
-    "imagesGenerated": "Yaratilgan rasmlar",
-    "videosGenerated": "Yaratilgan videolar",
-    "copyGenerated": "Yaratilgan matn"
   },
   "errors": {
     "notFound": "Topilmadi",
