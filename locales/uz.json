@@ -20,6 +20,97 @@
     "upload": "Yuklash",
     "delete": "O'chirish",
     "confirm": "Tasdiqlash"
+    ,"token": "token"
+  },
+  "plan": {
+    "free": "Bepul",
+    "starter": "Starter",
+    "pro": "Pro",
+    "businessPlus": "Business+"
+  },
+  "dashboard": {
+    "hero": {
+      "kicker": "Umari boshqaruv paneli",
+      "greeting": "Assalomu alaykum",
+      "subtitle": "Barcha studiyalar bitta joyda: Market, Video va Copywriter."
+    },
+    "labels": {
+      "plan": "Tarif",
+      "tokensRemaining": "Qolgan token",
+      "tokenStatus": "Token holati"
+    },
+    "blocked": {
+      "expired": {
+        "title": "Obuna muddati tugagan",
+        "body": "Davom etish uchun tarifni qayta faollashtiring.",
+        "cta": "Tarifni faollashtirish"
+      },
+      "noTokens": {
+        "title": "Token tugagan",
+        "body": "Rejani yangilang yoki yuqori tarifga o'ting.",
+        "renew": "Rejani yangilash",
+        "upgradePrefix": "Tarifni yangilash"
+      }
+    },
+    "referral": {
+      "title": "Referral dasturi",
+      "subtitle": "Do'stlaringizni taklif qiling. Ular tarif sotib olsa sizga bonus token beriladi.",
+      "stats": {
+        "invites": "Takliflar",
+        "bonuses": "Bonuslar",
+        "tokens": "Yig'ilgan token"
+      },
+      "linkTitle": "Sizning referral linkingiz",
+      "hint": "Linkni ulashing. Ular shu link orqali kirib (URL: ref=code) tarif sotib olsa, bonus sizning balansingizga qo‘shiladi.",
+      "invitedTitle": "Taklif qilinganlar",
+      "table": {
+        "user": "Foydalanuvchi",
+        "plan": "Tarif",
+        "bonus": "Bonus",
+        "date": "Sana",
+        "userFallback": "User"
+      },
+      "empty": "Hozircha taklif qilinganlar yo‘q.",
+      "pending": "kutilmoqda"
+    },
+    "costs": {
+      "title": "Token narxlari",
+      "basicImage": "Oddiy rasm",
+      "proImage": "Pro rasm",
+      "basicVideo": "Oddiy video",
+      "proVideo": "Pro video",
+      "premiumVideo": "Premium video",
+      "copywriter": "Copywriter studiya",
+      "perRequest": "token / so'rov",
+      "perVideo": "token / video",
+      "perText": "token / matn"
+    },
+    "studios": {
+      "title": "AI studiyalar",
+      "marketplace": { "desc": "Mahsulot rasmlari, listingga tayyor format va marketplace ish jarayoni." },
+      "video": { "desc": "Mahsulot rasmlaridan tez promo video va reklama variantlari." },
+      "copywriter": { "desc": "UZ/RU marketplace matnlari, 18 blokli strukturada kontent yaratish." },
+      "chat": {
+        "title": "AI suhbat",
+        "desc": "Savol-javob, kontent va strategiya bo'yicha yordamchi chat.",
+        "badge": "24/7 yordam"
+      },
+      "badge": {
+        "request": "So'rov",
+        "video": "Video",
+        "text": "Matn"
+      }
+    },
+    "estimate": {
+      "title": "Taxminiy imkoniyat",
+      "approxRequests": "taxminan so'rov"
+    },
+    "promo": {
+      "upgrade": "Pro ga o'ting",
+      "start": "Starter bilan boshlang",
+      "body": "Ko'proq token, kengroq studio imkoniyatlari va tezroq ish jarayoni uchun tarifni yangilang.",
+      "cta": "Tariflarni ko'rish"
+    }
   },
   "nav": {
     "features": "Imkoniyatlar",

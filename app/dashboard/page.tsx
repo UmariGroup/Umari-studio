@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { planLabelUz } from '@/lib/uzbek-errors';
+import { useLanguage } from '@/lib/LanguageContext';
 import {
   FiAlertTriangle,
   FiArrowRight,
@@ -74,6 +74,7 @@ const TOKEN_COSTS: Record<string, TokenCostInfo> = {
 };
 
 export default function DashboardPage() {
+  const { t, language } = useLanguage();
   const [user, setUser] = useState<UserData | null>(null);
   const [access, setAccess] = useState<{
     canUse: boolean;
@@ -98,6 +99,15 @@ export default function DashboardPage() {
   const isAdmin = user?.role === 'admin';
   const plan = user?.subscription_plan || 'free';
   const planTokenCosts = TOKEN_COSTS[plan] || TOKEN_COSTS.starter;
+
+  const planLabel = (planId: string | null | undefined): string => {
+    const p = (planId || '').toString().trim().toLowerCase();
+    if (p === 'starter') return t('plan.starter', 'Starter');
+    if (p === 'pro') return t('plan.pro', 'Pro');
+    if (p === 'business_plus' || p === 'business+') return t('plan.businessPlus', 'Business+');
+    if (p === 'free') return t('plan.free', language === 'ru' ? 'Бесплатно' : 'Bepul');
+    return planId ? String(planId) : '-';
+  };
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -193,7 +203,7 @@ export default function DashboardPage() {
         <div className="absolute right-0 top-10 h-80 w-80 rounded-full bg-violet-300/20 blur-3xl" />
         <div className="relative text-center">
           <div className="mx-auto mb-5 h-16 w-16 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
-          <p className="font-medium text-slate-600">Yuklanmoqda...</p>
+          <p className="font-medium text-slate-600">{t('common.loading', 'Yuklanmoqda...')}</p>
         </div>
       </div>
     );
@@ -210,22 +220,22 @@ export default function DashboardPage() {
         <section className="overflow-hidden rounded-3xl border border-blue-200/60 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-6 text-white shadow-2xl shadow-blue-200/30 sm:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-sm font-semibold text-white/80">Umari boshqaruv paneli</p>
+              <p className="text-sm font-semibold text-white/80">{t('dashboard.hero.kicker', 'Umari boshqaruv paneli')}</p>
               <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">
-                Assalomu alaykum{user?.first_name ? `, ${user.first_name}` : ''}
+                {t('dashboard.hero.greeting', language === 'ru' ? 'Здравствуйте' : 'Assalomu alaykum')}{user?.first_name ? `, ${user.first_name}` : ''}
               </h1>
               <p className="mt-2 text-sm text-white/80">
-                Barcha studiyalar bitta joyda: Market, Video va Copywriter.
+                {t('dashboard.hero.subtitle', "Barcha studiyalar bitta joyda: Market, Video va Copywriter.")}
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:gap-4">
               <div className="rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur">
-                <p className="text-xs text-white/70">Tarif</p>
-                <p className="text-xl font-bold">{plan === 'business_plus' ? 'Business+' : (planLabelUz(plan) || 'Bepul')}</p>
+                <p className="text-xs text-white/70">{t('dashboard.labels.plan', 'Tarif')}</p>
+                <p className="text-xl font-bold">{planLabel(plan)}</p>
               </div>
               <div className="rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur">
-                <p className="text-xs text-white/70">Qolgan token</p>
+                <p className="text-xs text-white/70">{t('dashboard.labels.tokensRemaining', 'Qolgan token')}</p>
                 <p className="text-xl font-black">{isAdmin ? '∞' : stats.tokensRemaining.toLocaleString()}</p>
               </div>
             </div>
@@ -234,7 +244,7 @@ export default function DashboardPage() {
           {!isAdmin && (
             <div className="mt-6">
               <div className="mb-2 flex items-center justify-between text-xs text-white/80">
-                <span>Token holati</span>
+                <span>{t('dashboard.labels.tokenStatus', 'Token holati')}</span>
                 <span>{tokenPercentage}%</span>
               </div>
               <div className="h-2.5 overflow-hidden rounded-full bg-white/20">
@@ -252,15 +262,15 @@ export default function DashboardPage() {
                   <FiClock className="h-6 w-6 text-amber-700" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-amber-900">Obuna muddati tugagan</h3>
-                  <p className="text-sm text-amber-800">Davom etish uchun tarifni qayta faollashtiring.</p>
+                  <h3 className="font-bold text-amber-900">{t('dashboard.blocked.expired.title', 'Obuna muddati tugagan')}</h3>
+                  <p className="text-sm text-amber-800">{t('dashboard.blocked.expired.body', 'Davom etish uchun tarifni qayta faollashtiring.')}</p>
                 </div>
               </div>
               <Link
                 href={`/pricing?plan=${encodeURIComponent(user?.subscription_plan || 'starter')}`}
                 className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-5 py-3 font-semibold text-white"
               >
-                Tarifni faollashtirish <FiArrowRight className="ml-2 h-4 w-4" />
+                {t('dashboard.blocked.expired.cta', 'Tarifni faollashtirish')} <FiArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </div>
           </section>
@@ -274,8 +284,8 @@ export default function DashboardPage() {
                   <FiAlertTriangle className="h-6 w-6 text-rose-700" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-rose-900">Token tugagan</h3>
-                  <p className="text-sm text-rose-800">Rejani yangilang yoki yuqori tarifga o'ting.</p>
+                  <h3 className="font-bold text-rose-900">{t('dashboard.blocked.noTokens.title', 'Token tugagan')}</h3>
+                  <p className="text-sm text-rose-800">{t('dashboard.blocked.noTokens.body', "Rejani yangilang yoki yuqori tarifga o'ting.")}</p>
                 </div>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -283,14 +293,14 @@ export default function DashboardPage() {
                   href={`/pricing?plan=${encodeURIComponent(user?.subscription_plan || 'starter')}`}
                   className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-rose-500 to-pink-600 px-5 py-3 font-semibold text-white"
                 >
-                  Rejani yangilash
+                  {t('dashboard.blocked.noTokens.renew', 'Rejani yangilash')}
                 </Link>
                 {access.recommendedPlan && (
                   <Link
                     href={`/pricing?plan=${encodeURIComponent(access.recommendedPlan)}`}
                     className="inline-flex items-center justify-center rounded-xl border border-rose-300 bg-white px-5 py-3 font-semibold text-rose-700"
                   >
-                    {planLabelUz(access.recommendedPlan) || 'Yuqori tarif'}ga o'tish
+                    {t('dashboard.blocked.noTokens.upgradePrefix', 'Tarifni yangilash')}: {planLabel(access.recommendedPlan)}
                   </Link>
                 )}
               </div>
@@ -301,35 +311,35 @@ export default function DashboardPage() {
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-lg font-black text-slate-900">Referral dasturi</h2>
+              <h2 className="text-lg font-black text-slate-900">{t('dashboard.referral.title', 'Referral dasturi')}</h2>
               <p className="mt-1 text-sm text-slate-600">
-                Do'stlaringizni taklif qiling. Ular tarif sotib olsa sizga bonus token beriladi.
+                {t('dashboard.referral.subtitle', "Do'stlaringizni taklif qiling. Ular tarif sotib olsa sizga bonus token beriladi.")}
               </p>
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">Starter: +30 token</span>
-                <span className="rounded-full bg-blue-50 px-3 py-1 font-semibold text-blue-700">Pro: +50 token</span>
-                <span className="rounded-full bg-violet-50 px-3 py-1 font-semibold text-violet-700">Business+: +100 token</span>
+                <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">{t('plan.starter', 'Starter')}: +30 {t('common.token', language === 'ru' ? 'токен' : 'token')}</span>
+                <span className="rounded-full bg-blue-50 px-3 py-1 font-semibold text-blue-700">{t('plan.pro', 'Pro')}: +50 {t('common.token', language === 'ru' ? 'токен' : 'token')}</span>
+                <span className="rounded-full bg-violet-50 px-3 py-1 font-semibold text-violet-700">{t('plan.businessPlus', 'Business+')}: +100 {t('common.token', language === 'ru' ? 'токен' : 'token')}</span>
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs text-slate-500">Takliflar</p>
+                <p className="text-xs text-slate-500">{t('dashboard.referral.stats.invites', 'Takliflar')}</p>
                 <p className="mt-1 text-xl font-black text-slate-900">{referral?.stats?.invited_count ?? 0}</p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs text-slate-500">Bonuslar</p>
+                <p className="text-xs text-slate-500">{t('dashboard.referral.stats.bonuses', 'Bonuslar')}</p>
                 <p className="mt-1 text-xl font-black text-slate-900">{referral?.stats?.rewards_count ?? 0}</p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs text-slate-500">Yig'ilgan token</p>
+                <p className="text-xs text-slate-500">{t('dashboard.referral.stats.tokens', "Yig'ilgan token")}</p>
                 <p className="mt-1 text-xl font-black text-slate-900">{referral?.stats?.tokens_earned ?? 0}</p>
               </div>
             </div>
           </div>
 
           <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
-            <p className="text-sm font-semibold text-slate-900">Sizning referral linkingiz</p>
+            <p className="text-sm font-semibold text-slate-900">{t('dashboard.referral.linkTitle', 'Sizning referral linkingiz')}</p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
               <input
                 value={referralLink || (referral?.referral_code ? `ref=${referral.referral_code}` : '')}
@@ -341,49 +351,53 @@ export default function DashboardPage() {
                 disabled={!referralLink}
                 className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {copyStatus === 'copied' ? 'Nusxa olindi' : copyStatus === 'error' ? 'Xatolik' : 'Copy'}
+                {copyStatus === 'copied'
+                  ? t('common.copied', 'Nusxalandi!')
+                  : copyStatus === 'error'
+                    ? t('common.error', 'Xatolik')
+                    : t('common.copy', 'Nusxalash')}
               </button>
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              Linkni ulashing. Ular shu link orqali kirib (URL: <span className="font-semibold">ref=code</span>) tarif sotib olsa, bonus sizning balansingizga qo‘shiladi.
+              {t('dashboard.referral.hint', "Linkni ulashing. Ular shu link orqali kirib (URL: ref=code) tarif sotib olsa, bonus sizning balansingizga qo‘shiladi.")}
             </p>
           </div>
 
           <div className="mt-6">
-            <h3 className="text-sm font-bold text-slate-900">Taklif qilinganlar</h3>
+            <h3 className="text-sm font-bold text-slate-900">{t('dashboard.referral.invitedTitle', 'Taklif qilinganlar')}</h3>
             <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
                   <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Foydalanuvchi</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Tarif</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Bonus</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Sana</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">{t('dashboard.referral.table.user', 'Foydalanuvchi')}</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">{t('dashboard.referral.table.plan', 'Tarif')}</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">{t('dashboard.referral.table.bonus', 'Bonus')}</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">{t('dashboard.referral.table.date', 'Sana')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 bg-white">
                     {(referral?.invited_users || []).length === 0 ? (
                       <tr>
                         <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
-                          Hozircha taklif qilinganlar yo‘q.
+                          {t('dashboard.referral.empty', "Hozircha taklif qilinganlar yo‘q.")}
                         </td>
                       </tr>
                     ) : (
                       (referral?.invited_users || []).map((inv) => (
                         <tr key={inv.id} className="hover:bg-slate-50">
                           <td className="px-4 py-3">
-                            <div className="font-semibold text-slate-900">{inv.first_name || 'User'}</div>
+                            <div className="font-semibold text-slate-900">{inv.first_name || t('dashboard.referral.table.userFallback', 'User')}</div>
                             <div className="text-xs text-slate-500">{inv.email_masked || ''}</div>
                           </td>
                           <td className="px-4 py-3 text-slate-700">
-                            {inv.subscription_plan ? (inv.subscription_plan === 'business_plus' ? 'Business+' : inv.subscription_plan) : '-'}
+                            {inv.subscription_plan ? planLabel(inv.subscription_plan) : '-'}
                           </td>
                           <td className="px-4 py-3">
                             {inv.reward ? (
-                              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">+{inv.reward.tokens_awarded} token</span>
+                              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">+{inv.reward.tokens_awarded} {t('common.token', language === 'ru' ? 'токен' : 'token')}</span>
                             ) : (
-                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">kutilmoqda</span>
+                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{t('dashboard.referral.pending', 'kutilmoqda')}</span>
                             )}
                           </td>
                           <td className="px-4 py-3 text-xs text-slate-500">
@@ -406,54 +420,54 @@ export default function DashboardPage() {
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-5 flex items-center gap-2">
             <span className="rounded-xl bg-blue-100 p-2 text-blue-700"><FaCoins className="h-5 w-5" /></span>
-            <h2 className="text-lg font-bold text-slate-900">Token narxlari</h2>
+            <h2 className="text-lg font-bold text-slate-900">{t('dashboard.costs.title', 'Token narxlari')}</h2>
             <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-              {plan === 'business_plus' ? 'Business+' : (planLabelUz(plan) || 'Bepul')}
+              {planLabel(plan)}
             </span>
           </div>
 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
-            <TokenCard title="Oddiy rasm" value={planTokenCosts.basic} subtitle="token / so'rov" tone="emerald" icon={<FiImage className="h-5 w-5" />} />
-            <TokenCard title="Pro rasm" value={planTokenCosts.pro} subtitle="token / so'rov" tone="blue" icon={<FiZap className="h-5 w-5" />} />
-            <TokenCard title="Oddiy video" value={planTokenCosts.videoBasic} subtitle="token / video" tone="amber" icon={<FiVideo className="h-5 w-5" />} />
-            {planTokenCosts.videoPro ? <TokenCard title="Pro video" value={planTokenCosts.videoPro} subtitle="token / video" tone="violet" icon={<FiFilm className="h-5 w-5" />} /> : null}
-            {planTokenCosts.videoPremium ? <TokenCard title="Premium video" value={planTokenCosts.videoPremium} subtitle="token / video" tone="rose" icon={<FaGem className="h-5 w-5" />} /> : null}
-            <TokenCard title="Copywriter studiya" value={planTokenCosts.copywriter} subtitle="token / matn" tone="green" icon={<FiEdit3 className="h-5 w-5" />} />
+            <TokenCard title={t('dashboard.costs.basicImage', 'Oddiy rasm')} value={planTokenCosts.basic} subtitle={t('dashboard.costs.perRequest', "token / so'rov")} tone="emerald" icon={<FiImage className="h-5 w-5" />} />
+            <TokenCard title={t('dashboard.costs.proImage', 'Pro rasm')} value={planTokenCosts.pro} subtitle={t('dashboard.costs.perRequest', "token / so'rov")} tone="blue" icon={<FiZap className="h-5 w-5" />} />
+            <TokenCard title={t('dashboard.costs.basicVideo', 'Oddiy video')} value={planTokenCosts.videoBasic} subtitle={t('dashboard.costs.perVideo', 'token / video')} tone="amber" icon={<FiVideo className="h-5 w-5" />} />
+            {planTokenCosts.videoPro ? <TokenCard title={t('dashboard.costs.proVideo', 'Pro video')} value={planTokenCosts.videoPro} subtitle={t('dashboard.costs.perVideo', 'token / video')} tone="violet" icon={<FiFilm className="h-5 w-5" />} /> : null}
+            {planTokenCosts.videoPremium ? <TokenCard title={t('dashboard.costs.premiumVideo', 'Premium video')} value={planTokenCosts.videoPremium} subtitle={t('dashboard.costs.perVideo', 'token / video')} tone="rose" icon={<FaGem className="h-5 w-5" />} /> : null}
+            <TokenCard title={t('dashboard.costs.copywriter', 'Copywriter studiya')} value={planTokenCosts.copywriter} subtitle={t('dashboard.costs.perText', 'token / matn')} tone="green" icon={<FiEdit3 className="h-5 w-5" />} />
           </div>
         </section>
 
         <section>
-          <h2 className="mb-4 text-xl font-bold text-slate-900">AI studiyalar</h2>
+          <h2 className="mb-4 text-xl font-bold text-slate-900">{t('dashboard.studios.title', 'AI studiyalar')}</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StudioCard
               href="/marketplace"
-              title="Market studiya"
-              description="Mahsulot rasmlari, listingga tayyor format va marketplace ish jarayoni."
-              badge={`So'rov: ${planTokenCosts.basic} - ${planTokenCosts.pro} token`}
+              title={t('nav.marketplace', 'Market studiya')}
+              description={t('dashboard.studios.marketplace.desc', 'Mahsulot rasmlari, listingga tayyor format va marketplace ish jarayoni.')}
+              badge={`${t('dashboard.studios.badge.request', "So'rov")}: ${planTokenCosts.basic} - ${planTokenCosts.pro} ${t('common.token', language === 'ru' ? 'токен' : 'token')}`}
               icon={<FiImage className="h-6 w-6" />}
               gradient="from-blue-500 to-indigo-600"
             />
             <StudioCard
               href="/video-studio"
-              title="Video studiya"
-              description="Mahsulot rasmlaridan tez promo video va reklama variantlari."
-              badge={`Video: ${planTokenCosts.videoBasic}${planTokenCosts.videoPro ? ` - ${planTokenCosts.videoPremium || planTokenCosts.videoPro}` : ''} token`}
+              title={t('nav.videoStudio', 'Video studiya')}
+              description={t('dashboard.studios.video.desc', 'Mahsulot rasmlaridan tez promo video va reklama variantlari.')}
+              badge={`${t('dashboard.studios.badge.video', 'Video')}: ${planTokenCosts.videoBasic}${planTokenCosts.videoPro ? ` - ${planTokenCosts.videoPremium || planTokenCosts.videoPro}` : ''} ${t('common.token', language === 'ru' ? 'токен' : 'token')}`}
               icon={<FiVideo className="h-6 w-6" />}
               gradient="from-indigo-500 to-violet-600"
             />
             <StudioCard
               href="/copywriter"
-              title="Copywriter studiya"
-              description="UZ/RU marketplace matnlari, 18 blokli strukturada kontent yaratish."
-              badge={`Matn: ${planTokenCosts.copywriter} token`}
+              title={t('nav.copywriter', 'Copywriter studiya')}
+              description={t('dashboard.studios.copywriter.desc', 'UZ/RU marketplace matnlari, 18 blokli strukturada kontent yaratish.')}
+              badge={`${t('dashboard.studios.badge.text', 'Matn')}: ${planTokenCosts.copywriter} ${t('common.token', language === 'ru' ? 'токен' : 'token')}`}
               icon={<FiEdit3 className="h-6 w-6" />}
               gradient="from-violet-500 to-fuchsia-600"
             />
             <StudioCard
               href="/chat"
-              title="AI suhbat"
-              description="Savol-javob, kontent va strategiya bo'yicha yordamchi chat."
-              badge="24/7 yordam"
+              title={t('dashboard.studios.chat.title', 'AI suhbat')}
+              description={t('dashboard.studios.chat.desc', "Savol-javob, kontent va strategiya bo'yicha yordamchi chat.")}
+              badge={t('dashboard.studios.chat.badge', '24/7 yordam')}
               icon={<FiMessageSquare className="h-6 w-6" />}
               gradient="from-sky-500 to-blue-600"
             />
@@ -461,12 +475,12 @@ export default function DashboardPage() {
         </section>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-bold text-slate-900">Taxminiy imkoniyat</h2>
+          <h2 className="mb-4 text-lg font-bold text-slate-900">{t('dashboard.estimate.title', 'Taxminiy imkoniyat')}</h2>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <EstimateCard title="Oddiy rasm" value={estimateUsage(planTokenCosts.basic)} tone="text-blue-700" icon={<FiImage className="h-5 w-5" />} />
-            <EstimateCard title="Pro rasm" value={estimateUsage(planTokenCosts.pro)} tone="text-indigo-700" icon={<FiZap className="h-5 w-5" />} />
-            <EstimateCard title="Video studiya" value={estimateUsage(planTokenCosts.videoBasic)} tone="text-violet-700" icon={<FiFilm className="h-5 w-5" />} />
-            <EstimateCard title="Copywriter studiya" value={estimateUsage(planTokenCosts.copywriter)} tone="text-emerald-700" icon={<FiSearch className="h-5 w-5" />} />
+            <EstimateCard title={t('dashboard.costs.basicImage', 'Oddiy rasm')} value={estimateUsage(planTokenCosts.basic)} tone="text-blue-700" icon={<FiImage className="h-5 w-5" />} />
+            <EstimateCard title={t('dashboard.costs.proImage', 'Pro rasm')} value={estimateUsage(planTokenCosts.pro)} tone="text-indigo-700" icon={<FiZap className="h-5 w-5" />} />
+            <EstimateCard title={t('nav.videoStudio', 'Video studiya')} value={estimateUsage(planTokenCosts.videoBasic)} tone="text-violet-700" icon={<FiFilm className="h-5 w-5" />} />
+            <EstimateCard title={t('nav.copywriter', 'Copywriter studiya')} value={estimateUsage(planTokenCosts.copywriter)} tone="text-emerald-700" icon={<FiSearch className="h-5 w-5" />} />
           </div>
         </section>
 
@@ -475,17 +489,17 @@ export default function DashboardPage() {
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <h3 className="mb-1 flex items-center gap-2 text-2xl font-black">
-                  <FaGem className="text-white" /> {plan === 'starter' ? "Pro ga o'ting" : "Starter bilan boshlang"}
+                  <FaGem className="text-white" /> {plan === 'starter' ? t('dashboard.promo.upgrade', "Pro ga o'ting") : t('dashboard.promo.start', 'Starter bilan boshlang')}
                 </h3>
                 <p className="text-white/80">
-                  Ko'proq token, kengroq studio imkoniyatlari va tezroq ish jarayoni uchun tarifni yangilang.
+                  {t('dashboard.promo.body', "Ko'proq token, kengroq studio imkoniyatlari va tezroq ish jarayoni uchun tarifni yangilang.")}
                 </p>
               </div>
               <Link
                 href="/pricing"
                 className="inline-flex items-center justify-center rounded-xl bg-white px-7 py-3 text-base font-bold text-indigo-700"
               >
-                Tariflarni ko'rish <FiArrowRight className="ml-2 h-4 w-4" />
+                {t('dashboard.promo.cta', "Tariflarni ko'rish")} <FiArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </div>
           </section>
@@ -569,12 +583,13 @@ function EstimateCard({
   tone: string;
   icon: React.ReactNode;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center">
       <div className={`mx-auto mb-2 inline-flex rounded-lg bg-white p-2 ${tone}`}>{icon}</div>
       <p className="text-xs text-slate-500">{title}</p>
       <p className={`text-2xl font-black ${tone}`}>{value}</p>
-      <p className="text-xs text-slate-400">taxminan so'rov</p>
+      <p className="text-xs text-slate-400">{t('dashboard.estimate.approxRequests', "taxminan so'rov")}</p>
     </div>
   );
 }

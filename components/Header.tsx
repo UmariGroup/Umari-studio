@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { planLabelUz } from '@/lib/uzbek-errors';
 import { Navbar } from '@/components/landing/Navbar';
 import { ContactInfoModal } from '@/components/ContactInfoModal';
 import Image from 'next/image';
+import { useLanguage } from '@/lib/LanguageContext';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 type Language = 'uz' | 'ru';
 
@@ -34,8 +35,10 @@ interface User {
 
 function Logo({ href }: { href: string }) {
   return (
-    <Link href={href} className="inline-flex items-center gap-3">
+    <Link href={href} className="inline-flex flex flex-row items-center gap-3">
      <Image src="/favicon.ico" alt="Umari AI Logo" width={32} height={32} className="inline-block" />
+      <span className="font-bold text-lg text-slate-900">Umari AI</span>
+
     </Link>
   );
 }
@@ -43,11 +46,21 @@ function Logo({ href }: { href: string }) {
 export default function Header() {
   const router = useRouter();
   const pathname = usePathname();
+  const { t, language } = useLanguage();
   const lang = getLangFromPathname(pathname) ?? 'uz';
   const prefix = `/${lang}`;
   const strippedPathname = stripLocalePrefix(pathname);
   const [user, setUser] = useState<User | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const planLabel = (plan: string): string => {
+    const p = (plan || '').toString().trim().toLowerCase();
+    if (p === 'starter') return t('plan.starter', 'Starter');
+    if (p === 'pro') return t('plan.pro', 'Pro');
+    if (p === 'business_plus' || p === 'business+') return t('plan.businessPlus', 'Business+');
+    if (p === 'free') return t('plan.free', language === 'ru' ? 'Бесплатно' : 'Bepul');
+    return plan;
+  };
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -105,11 +118,11 @@ export default function Header() {
 
   if (isAuthenticated) {
     const navItems = [
-      { href: `${prefix}/dashboard`, label: "Boshqaruv", active: isActivePath('/dashboard') },
-      { href: `${prefix}/marketplace`, label: "Market studiya", active: isActivePath('/marketplace') },
-      { href: `${prefix}/infografika`, label: "Infografika", active: isActivePath('/infografika') },
-      { href: `${prefix}/video-studio`, label: "Video studiya", active: isActivePath('/video-studio') },
-      { href: `${prefix}/copywriter`, label: "Copywriter studiya", active: isActivePath('/copywriter') },
+      { href: `${prefix}/dashboard`, label: t('nav.dashboard', 'Boshqaruv'), active: isActivePath('/dashboard') },
+      { href: `${prefix}/marketplace`, label: t('nav.marketplace', 'Market studiya'), active: isActivePath('/marketplace') },
+      { href: `${prefix}/infografika`, label: t('nav.infografika', 'Infografika'), active: isActivePath('/infografika') },
+      { href: `${prefix}/video-studio`, label: t('nav.videoStudio', 'Video studiya'), active: isActivePath('/video-studio') },
+      { href: `${prefix}/copywriter`, label: t('nav.copywriter', 'Copywriter studiya'), active: isActivePath('/copywriter') },
     ];
 
     return (
@@ -147,16 +160,19 @@ export default function Header() {
           </nav>
 
           <div className="hidden md:flex items-center gap-3">
+            <LanguageSwitcher />
             <div className="px-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-600">
-              <span className="font-semibold text-slate-800">{planLabelUz(plan)}</span>
+              <span className="font-semibold text-slate-800">{planLabel(plan)}</span>
               <span className="mx-2">|</span>
-              <span>{tokens} token</span>
+              <span>
+                {tokens} {t('common.token', language === 'ru' ? 'токен' : 'token')}
+              </span>
             </div>
             <button
               onClick={handleLogout}
               className="px-4 py-2 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 text-sm font-semibold"
             >
-              Chiqish
+              {t('common.logout', 'Chiqish')}
             </button>
           </div>
 
@@ -178,6 +194,9 @@ export default function Header() {
           {mobileMenuOpen && (
             <div className="md:hidden border-t border-slate-200 bg-white">
               <div className="px-4 py-3 flex flex-col gap-2 text-sm">
+                <div className="py-2">
+                  <LanguageSwitcher />
+                </div>
                 {navItems.map((item) => (
                   <Link
                     key={`mobile-${item.href}`}
@@ -205,7 +224,7 @@ export default function Header() {
                   onClick={handleLogout}
                   className="mt-2 px-3 py-2 rounded-lg border border-rose-200 text-rose-700 text-left"
                 >
-                  Chiqish
+                  {t('common.logout', 'Chiqish')}
                 </button>
               </div>
             </div>
@@ -230,20 +249,21 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <Logo href={prefix} />
         <div className="flex items-center gap-3">
+          <LanguageSwitcher />
           <Link href={`${prefix}/#features`} className="hidden md:inline-flex px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">
-            Imkoniyatlar
+            {t('nav.features', 'Imkoniyatlar')}
           </Link>
           <Link href={`${prefix}/#examples`} className="hidden md:inline-flex px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">
-            Namunalar
+            {t('nav.examples', 'Namunalar')}
           </Link>
           <Link href={`${prefix}/#pricing`} className="hidden sm:inline-flex px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">
-            Narxlar
+            {t('nav.pricing', 'Narxlar')}
           </Link>
           <Link href={`${prefix}/#faq`} className="hidden md:inline-flex px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">
-            Savol-javob
+            {t('nav.faq', 'Savol-javob')}
           </Link>
           <Link href={`${prefix}/login`} className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800">
-            Kirish
+            {t('nav.login', 'Kirish')}
           </Link>
         </div>
       </div>
