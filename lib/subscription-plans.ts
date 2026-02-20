@@ -6,7 +6,7 @@
 export type SubscriptionStatus = 'free' | 'active' | 'expired';
 export type SubscriptionPlan = 'free' | 'starter' | 'pro' | 'business_plus';
 
-export type ImageMode = 'basic' | 'pro';
+export type ImageMode = 'basic' | 'pro' | 'ultra';
 export type VideoMode = 'basic' | 'pro' | 'premium';
 
 // ============ TOKEN COSTS ============
@@ -14,6 +14,7 @@ export type VideoMode = 'basic' | 'pro' | 'premium';
 export interface ImageTokenCost {
   basic: number;
   pro: number;
+  ultra: number;
 }
 
 export interface VideoTokenCost {
@@ -23,10 +24,10 @@ export interface VideoTokenCost {
 }
 
 export const IMAGE_TOKEN_COSTS: Record<SubscriptionPlan, ImageTokenCost> = {
-  free: { basic: 2, pro: 999 },      // Faqat basic, pro mavjud emas
-  starter: { basic: 2, pro: 7 },     // $9/oy - 140 token
-  pro: { basic: 1.5, pro: 6 },       // $19/oy - 350 token
-  business_plus: { basic: 1, pro: 5 }, // $29/oy - 600 token
+  free: { basic: 2, pro: 999, ultra: 999 },      // Faqat basic
+  starter: { basic: 2, pro: 7, ultra: 999 },     // $9/oy - 140 token
+  pro: { basic: 1.5, pro: 6, ultra: 999 },       // $19/oy - 350 token
+  business_plus: { basic: 1, pro: 5, ultra: 15 }, // $29/oy - 600 token
 };
 
 export const VIDEO_TOKEN_COSTS: Record<SubscriptionPlan, VideoTokenCost> = {
@@ -55,18 +56,18 @@ export const IMAGE_MODELS: ImageModelConfig[] = [
     description: 'Tez va tejamli - kundalik ishlar uchun',
   },
   {
-    id: 'gemini-3-pro-image-preview',
+    id: 'nano-banana-pro-preview',
     name: 'Umari Pro',
     service: 'gemini',
     mode: 'pro',
     description: 'Yuqori sifat - e-commerce uchun',
   },
   {
-    id: 'nano-banana-pro-preview',
-    name: 'Umari AI',
+    id: 'gemini-3-pro-image-preview',
+    name: 'Umari Ultra',
     service: 'gemini',
-    mode: 'pro',
-    description: 'Premium alternativ model',
+    mode: 'ultra',
+    description: 'Eng yuqori sifat - premium katalog va brending uchun',
   },
 ];
 
@@ -193,11 +194,11 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
     badge: 'Ommabop',
     image: {
       maxProductImages: 3,
-      maxStyleImages: 1,
+      maxStyleImages: 0,
       maxTextInput: 150,
       outputCount: 2,
       allowedModes: ['basic', 'pro'],
-      allowedModels: ['gemini-2.5-flash-image', 'gemini-3-pro-image-preview'],
+      allowedModels: ['gemini-2.5-flash-image', 'nano-banana-pro-preview'],
     },
     video: {
       maxImages: 2,
@@ -230,11 +231,11 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
     badge: 'Tavsiya etiladi',
     image: {
       maxProductImages: 4,
-      maxStyleImages: 1,
+      maxStyleImages: 0,
       maxTextInput: 200,
       outputCount: 3,
       allowedModes: ['basic', 'pro'],
-      allowedModels: ['gemini-2.5-flash-image', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview'],
+      allowedModels: ['gemini-2.5-flash-image', 'nano-banana-pro-preview'],
     },
     video: {
       maxImages: 3,
@@ -269,8 +270,8 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
       maxStyleImages: 2,
       maxTextInput: 300,
       outputCount: 4,
-      allowedModes: ['basic', 'pro'],
-      allowedModels: ['gemini-2.5-flash-image', 'gemini-3-pro-image-preview', 'nano-banana-pro-preview'],
+      allowedModes: ['basic', 'pro', 'ultra'],
+      allowedModels: ['gemini-2.5-flash-image', 'nano-banana-pro-preview', 'gemini-3-pro-image-preview'],
     },
     video: {
       maxImages: 4,
@@ -288,6 +289,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanMeta> 
       '600 token / oy',
       "Oddiy: 1 token/so'rov",
       "Pro: 5 token/so'rov",
+      "Ultra: 15 token/so'rov",
       'Oddiy video: 20 token',
       'Pro video: 30 token',
       'Premium (Upscale): 45 token',

@@ -317,6 +317,56 @@ export async function enhancePrompt(prompt: string, options?: { model?: string }
   return generateText(model, systemInstruction, userText);
 }
 
+export async function generateMarketplacePromptFromImages(
+  productImages: string[],
+  options?: { model?: string; mode?: 'basic' | 'pro' | 'ultra'; outputCount?: number }
+): Promise<string> {
+  const images = Array.isArray(productImages) ? productImages.filter(Boolean).slice(0, 3) : [];
+  if (images.length === 0) {
+    throw new Error('At least one product image is required.');
+  }
+
+  const model = (options?.model || GEMINI_TEXT_MODEL).trim();
+  const mode = (options?.mode || 'pro').toString().toLowerCase();
+  const outputCount = Math.max(1, Math.min(6, Number(options?.outputCount || 3)));
+
+  const systemInstruction =
+    'You are an expert ecommerce prompt engineer. Return ONLY one final English image-generation prompt. No markdown, no bullets, no JSON, no explanations.';
+
+  const parts: any[] = [
+    {
+      text:
+        `Create one professional marketplace image prompt based on uploaded product photos.\n` +
+        `Mode: ${mode}. Planned output images: ${outputCount}.\n` +
+        `Requirements: preserve product identity, shape, logo, material, and colors exactly; clean ecommerce composition; realistic studio lighting; brand-safe; no people unless requested.\n` +
+        `The prompt must be practical and ready to paste into image generation.`,
+    },
+  ];
+
+  for (const img of images) {
+    const inlinePart = toInlineDataPart(img);
+    if (inlinePart) parts.push(inlinePart);
+  }
+
+  const body: any = {
+    contents: [{ role: 'user', parts }],
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 350,
+      topP: 0.9,
+    },
+  };
+
+  const response = await geminiGenerateContent(model, body);
+  const prompt = extractText(response).trim();
+  if (!prompt) {
+    throw new Error('Model did not return prompt text.');
+  }
+
+  return prompt;
+}
+
 export async function generateMarketplaceImage(
   prompt: string,
   productImages: string[] = [],

@@ -5,11 +5,11 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useToast } from './ToastProvider';
 import { getTelegramSubscribeUrl } from '@/lib/telegram';
 import { parseApiErrorResponse, toUzbekErrorMessage } from '@/lib/uzbek-errors';
-import { FiZap, FiArrowLeft } from 'react-icons/fi';
+import { FiZap, FiArrowLeft, FiStar } from 'react-icons/fi';
 import { useLanguage } from '@/lib/LanguageContext';
 
 // ============ TYPES ============
-type ImageMode = 'basic' | 'pro';
+type ImageMode = 'basic' | 'pro' | 'ultra';
 type SubscriptionPlan = 'free' | 'starter' | 'pro' | 'business_plus';
 
 interface UserData {
@@ -22,11 +22,15 @@ interface UserData {
 interface PlanConfig {
   maxProductImages: number;
   maxStyleImages: number;
-  outputCount: number;
+  outputCountBasic: number;
+  outputCountPro: number;
+  outputCountUltra: number;
   basicTokenCost: number;
   proTokenCost: number;
+  ultraTokenCost: number;
   basicModel: string;
-  proModels: string[];
+  proModel: string | null;
+  ultraModel: string | null;
 }
 
 type ImageBatchStatus = 'queued' | 'processing' | 'succeeded' | 'partial' | 'failed' | 'canceled';
@@ -45,45 +49,55 @@ const PLAN_CONFIGS: Record<SubscriptionPlan, PlanConfig> = {
   free: {
     maxProductImages: 1,
     maxStyleImages: 0,
-    outputCount: 1,
+    outputCountBasic: 1,
+    outputCountPro: 0,
+    outputCountUltra: 0,
     basicTokenCost: 2,
     proTokenCost: 999,
+    ultraTokenCost: 999,
     basicModel: 'gemini-2.5-flash-image',
-    proModels: [],
+    proModel: null,
+    ultraModel: null,
   },
   starter: {
     maxProductImages: 3,
-    maxStyleImages: 1,
-    outputCount: 2,
+    maxStyleImages: 0,
+    outputCountBasic: 2,
+    outputCountPro: 2,
+    outputCountUltra: 0,
     basicTokenCost: 2,
     proTokenCost: 7,
+    ultraTokenCost: 999,
     basicModel: 'gemini-2.5-flash-image',
-    proModels: ['gemini-3-pro-image-preview'],
+    proModel: 'nano-banana-pro-preview',
+    ultraModel: null,
   },
   pro: {
     maxProductImages: 4,
-    maxStyleImages: 1,
-    outputCount: 3,
+    maxStyleImages: 0,
+    outputCountBasic: 2,
+    outputCountPro: 3,
+    outputCountUltra: 0,
     basicTokenCost: 1.5,
     proTokenCost: 6,
+    ultraTokenCost: 999,
     basicModel: 'gemini-2.5-flash-image',
-    proModels: ['gemini-3-pro-image-preview', 'nano-banana-pro-preview'],
+    proModel: 'nano-banana-pro-preview',
+    ultraModel: null,
   },
   business_plus: {
     maxProductImages: 5,
     maxStyleImages: 2,
-    outputCount: 4,
+    outputCountBasic: 3,
+    outputCountPro: 4,
+    outputCountUltra: 4,
     basicTokenCost: 1,
     proTokenCost: 5,
+    ultraTokenCost: 15,
     basicModel: 'gemini-2.5-flash-image',
-    proModels: ['gemini-3-pro-image-preview', 'nano-banana-pro-preview'],
+    proModel: 'nano-banana-pro-preview',
+    ultraModel: 'gemini-3-pro-image-preview',
   },
-};
-
-const IMAGE_MODEL_LABELS: Record<string, string> = {
-  'gemini-2.5-flash-image': 'Umari Flash',
-  'gemini-3-pro-image-preview': 'Umari Pro',
-  'nano-banana-pro-preview': 'Umari Studio',
 };
 
 const MarketplaceStudio: React.FC = () => {
@@ -106,7 +120,7 @@ const MarketplaceStudio: React.FC = () => {
   // Image mode tab
   const [imageMode, setImageMode] = useState<ImageMode>('pro');
   const hasManuallySelectedMode = useRef(false);
-  const [selectedProModel, setSelectedProModel] = useState<string>('gemini-3-pro-image-preview');
+  const ultraAutoPromptDoneRef = useRef(false);
 
   // Images
   const [productImages, setProductImages] = useState<(string | null)[]>([null]);
@@ -116,6 +130,7 @@ const MarketplaceStudio: React.FC = () => {
   // UI state
   const [generating, setGenerating] = useState(false);
   const [prompt, setPrompt] = useState('');
+  const [promptGenerating, setPromptGenerating] = useState(false);
   const [batchId, setBatchId] = useState<string | null>(null);
   const [batchStatus, setBatchStatus] = useState<ImageBatchStatus | null>(null);
   const [batchItems, setBatchItems] = useState<ImageBatchItem[]>([]);
@@ -128,8 +143,6 @@ const MarketplaceStudio: React.FC = () => {
   const MARKETPLACE_ASPECT_RATIO = '3:4' as const;
   const TARGET_W = 1080;
   const TARGET_H = 1440;
-
-  const getModelLabel = (modelId: string): string => IMAGE_MODEL_LABELS[modelId] || modelId;
 
   const formatEta = (seconds: number | null): string => {
     if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return '...';
@@ -237,8 +250,24 @@ const MarketplaceStudio: React.FC = () => {
   const plan = user?.subscription_plan || 'free';
   const isAdmin = user?.role === 'admin';
   const config = PLAN_CONFIGS[plan];
+  const proModeAvailable = Boolean(config.proModel);
+  const ultraModeAvailable = Boolean(config.ultraModel);
+  const styleEnabled = imageMode === 'ultra' && ultraModeAvailable && config.maxStyleImages > 0;
+
   const tokensRemaining = isAdmin ? 999999 : (user?.tokens_remaining || 0);
-  const currentTokenCost = imageMode === 'basic' ? config.basicTokenCost : config.proTokenCost;
+  const currentTokenCost =
+    imageMode === 'ultra'
+      ? config.ultraTokenCost
+      : imageMode === 'pro'
+        ? config.proTokenCost
+        : config.basicTokenCost;
+
+  const currentOutputCount =
+    imageMode === 'ultra'
+      ? config.outputCountUltra
+      : imageMode === 'pro'
+        ? config.outputCountPro
+        : config.outputCountBasic;
   const canGenerate = tokensRemaining >= currentTokenCost && plan !== 'free' && cooldownSeconds <= 0;
 
   // Default mode: Pro when available; otherwise Oddiy.
@@ -246,8 +275,12 @@ const MarketplaceStudio: React.FC = () => {
   useEffect(() => {
     if (loading) return;
 
-    // Always prevent invalid Pro selection.
-    if (imageMode === 'pro' && config.proModels.length === 0) {
+    // Always prevent invalid mode selection.
+    if (imageMode === 'ultra' && !ultraModeAvailable) {
+      setImageMode(proModeAvailable ? 'pro' : 'basic');
+      return;
+    }
+    if (imageMode === 'pro' && !proModeAvailable) {
       setImageMode('basic');
       return;
     }
@@ -255,17 +288,13 @@ const MarketplaceStudio: React.FC = () => {
     // Only auto-select if user hasn't clicked the tabs.
     if (hasManuallySelectedMode.current) return;
 
-    setImageMode(config.proModels.length > 0 ? 'pro' : 'basic');
-  }, [loading, config.proModels.length, imageMode]);
+    setImageMode(proModeAvailable ? 'pro' : 'basic');
+  }, [loading, imageMode, proModeAvailable, ultraModeAvailable]);
 
-  // Keep selected pro model valid for the current plan.
   useEffect(() => {
-    if (imageMode !== 'pro') return;
-    if (config.proModels.length === 0) return;
-    if (!config.proModels.includes(selectedProModel)) {
-      setSelectedProModel(config.proModels[0]);
-    }
-  }, [config.proModels, imageMode, selectedProModel]);
+    if (styleEnabled) return;
+    setStyleImages([null]);
+  }, [styleEnabled]);
 
   const openSubscribe = (targetPlan: SubscriptionPlan) => {
     window.open(getTelegramSubscribeUrl(targetPlan), '_blank');
@@ -486,6 +515,97 @@ const MarketplaceStudio: React.FC = () => {
     []
   );
 
+  const handleGeneratePromptByImage = useCallback(
+    async (options?: { auto?: boolean }) => {
+      if (plan === 'free' && !isAdmin) {
+        if (!options?.auto) {
+          toast.error("Bu funksiya Starter va undan yuqori tariflarda mavjud.");
+        }
+        return false;
+      }
+
+      const validProductImages = productImages.filter((img): img is string => img !== null);
+      if (validProductImages.length === 0) {
+        if (!options?.auto) {
+          toast.error(t('marketplaceNew.toasts.uploadAtLeastOneProductImage', 'Kamida bitta mahsulot rasmi yuklang!'));
+        }
+        return false;
+      }
+
+      if (!isAdmin && tokensRemaining < 1) {
+        if (!options?.auto) {
+          toast.error("Prompt yaratish uchun kamida 1 token kerak.");
+        }
+        return false;
+      }
+
+      setPromptGenerating(true);
+      try {
+        const response = await fetch('/api/generate-image-prompt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            productImages: validProductImages.slice(0, config.maxProductImages),
+            mode: imageMode,
+          }),
+        });
+
+        if (!response.ok) {
+          const parsed = await parseApiErrorResponse(response);
+          const { title, message } = toUzbekErrorMessage(parsed);
+          if (!options?.auto) {
+            toast.error(message, title);
+          }
+          return false;
+        }
+
+        const data = await response.json();
+        const generatedPrompt = typeof data?.prompt === 'string' ? data.prompt.trim() : '';
+        if (!generatedPrompt) {
+          if (!options?.auto) {
+            toast.error("Prompt yaratib bo'lmadi.");
+          }
+          return false;
+        }
+
+        setPrompt(generatedPrompt);
+        if (typeof data?.tokens_remaining === 'number') {
+          setUser((prev) => (prev ? { ...prev, tokens_remaining: data.tokens_remaining } : prev));
+        }
+
+        if (!options?.auto) {
+          toast.success("Rasmga mos prompt tayyorlandi (1 token).");
+        }
+        return true;
+      } catch (error) {
+        if (!options?.auto) {
+          toast.error((error as Error).message || t('common.error', 'Xatolik'));
+        }
+        return false;
+      } finally {
+        setPromptGenerating(false);
+      }
+    },
+    [config.maxProductImages, imageMode, isAdmin, plan, productImages, t, toast, tokensRemaining]
+  );
+
+  useEffect(() => {
+    const hasProductImage = productImages.some(Boolean);
+    if (imageMode !== 'ultra' || !hasProductImage) {
+      ultraAutoPromptDoneRef.current = false;
+      return;
+    }
+
+    if (ultraAutoPromptDoneRef.current) return;
+    if (prompt.trim()) {
+      ultraAutoPromptDoneRef.current = true;
+      return;
+    }
+
+    ultraAutoPromptDoneRef.current = true;
+    void handleGeneratePromptByImage({ auto: true });
+  }, [handleGeneratePromptByImage, imageMode, productImages, prompt]);
+
   // Generate images
   const handleGenerate = async () => {
     if (!canGenerate) {
@@ -521,16 +641,32 @@ const MarketplaceStudio: React.FC = () => {
     setGeneratedImages([]);
 
     try {
-      const model = imageMode === 'basic' ? config.basicModel : selectedProModel;
+      const model =
+        imageMode === 'ultra'
+          ? config.ultraModel
+          : imageMode === 'pro'
+            ? config.proModel
+            : config.basicModel;
+
+      if (!model) {
+        toast.error("Bu rejim sizning tarifingizda mavjud emas.");
+        setGenerating(false);
+        return;
+      }
+
+      const validStyleImages = styleEnabled
+        ? styleImages.filter((img): img is string => img !== null)
+        : [];
 
       const response = await fetch('/api/generate-marketplace-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           productImages: validProductImages,
-          styleImages: styleImages.filter((img): img is string => img !== null),
+          styleImages: validStyleImages,
           prompt,
           aspectRatio: MARKETPLACE_ASPECT_RATIO,
+          mode: imageMode,
           model,
         }),
       });
@@ -712,37 +848,13 @@ const MarketplaceStudio: React.FC = () => {
 
       {/* Mode Tabs */}
       <div className="bg-white rounded-2xl border border-gray-200 p-2 shadow-sm">
-        <div className="flex gap-2">
-          <button
-            onClick={() => {
-              hasManuallySelectedMode.current = true;
-              setImageMode('pro');
-            }}
-            disabled={config.proModels.length === 0}
-            className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all ${imageMode === 'pro'
-              ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg'
-              : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-              } ${config.proModels.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            <div className="flex items-center justify-center gap-3">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-              </svg>
-              <span>Pro</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs ${imageMode === 'pro' ? 'bg-white/20' : 'bg-blue-100 text-blue-700'}`}>
-                {config.proModels.length === 0
-                  ? t('marketplaceNew.premiumBadge', 'Premium')
-                  : `${config.proTokenCost} ${t('marketplaceNew.tokenUnit', 'token')}`}
-              </span>
-            </div>
-          </button>
-
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           <button
             onClick={() => {
               hasManuallySelectedMode.current = true;
               setImageMode('basic');
             }}
-            className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all ${imageMode === 'basic'
+            className={`py-4 px-6 rounded-xl font-semibold transition-all ${imageMode === 'basic'
               ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg'
               : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
               }`}
@@ -757,27 +869,60 @@ const MarketplaceStudio: React.FC = () => {
               </span>
             </div>
           </button>
+
+          <button
+            onClick={() => {
+              hasManuallySelectedMode.current = true;
+              setImageMode('pro');
+            }}
+            disabled={!proModeAvailable}
+            className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all ${imageMode === 'pro'
+              ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg'
+              : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+              } ${!proModeAvailable ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            <div className="flex items-center justify-center gap-3">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+              </svg>
+              <span>Pro</span>
+              <span className={`px-2 py-0.5 rounded-full text-xs ${imageMode === 'pro' ? 'bg-white/20' : 'bg-blue-100 text-blue-700'}`}>
+                {!proModeAvailable
+                  ? t('marketplaceNew.premiumBadge', 'Premium')
+                  : `${config.proTokenCost} ${t('marketplaceNew.tokenUnit', 'token')}`}
+              </span>
+            </div>
+          </button>
+
+          <button
+            onClick={() => {
+              hasManuallySelectedMode.current = true;
+              setImageMode('ultra');
+            }}
+            disabled={!ultraModeAvailable}
+            className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all ${imageMode === 'ultra'
+              ? 'bg-gradient-to-r from-fuchsia-600 to-indigo-600 text-white shadow-lg'
+              : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+              } ${!ultraModeAvailable ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            <div className="flex items-center justify-center gap-3">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.213 3.736a1 1 0 00.95.69h3.93c.969 0 1.371 1.24.588 1.81l-3.18 2.31a1 1 0 00-.364 1.118l1.214 3.736c.3.922-.755 1.688-1.54 1.118l-3.18-2.31a1 1 0 00-1.176 0l-3.18 2.31c-.784.57-1.838-.196-1.539-1.118l1.213-3.736a1 1 0 00-.364-1.118l-3.18-2.31c-.783-.57-.38-1.81.588-1.81h3.93a1 1 0 00.951-.69l1.213-3.736z" />
+              </svg>
+              <span>Ultra</span>
+              <span className={`px-2 py-0.5 rounded-full text-xs ${imageMode === 'ultra' ? 'bg-white/20' : 'bg-fuchsia-100 text-fuchsia-700'}`}>
+                {!ultraModeAvailable
+                  ? t('marketplaceNew.premiumBadge', 'Premium')
+                  : `${config.ultraTokenCost} ${t('marketplaceNew.tokenUnit', 'token')}`}
+              </span>
+            </div>
+          </button>
         </div>
       </div>
 
-      {/* Pro Model Selection */}
-      {imageMode === 'pro' && config.proModels.length > 1 && (
-        <div className="bg-blue-50 rounded-2xl p-6 border border-blue-200">
-          <h3 className="font-semibold text-blue-800 mb-4">{t('marketplaceNew.selectProModel', 'Pro modelni tanlang')}</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {config.proModels.map((model) => (
-              <button
-                key={model}
-                onClick={() => setSelectedProModel(model)}
-                className={`p-4 rounded-xl border-2 transition-all text-left ${selectedProModel === model
-                  ? 'border-blue-500 bg-blue-100'
-                  : 'border-gray-200 bg-white hover:border-blue-300'
-                  }`}
-              >
-                <p className="font-semibold text-gray-800">{getModelLabel(model)}</p>
-              </button>
-            ))}
-          </div>
+      {imageMode === 'ultra' && ultraModeAvailable && (
+        <div className="bg-violet-50 rounded-2xl p-4 border border-violet-200 text-sm text-violet-900">
+          Ultra rejimida prompt mahsulot rasmlaridan avtomatik yaratiladi. Uslub rasmlari faqat shu rejimda yoqilgan.
         </div>
       )}
 
@@ -843,7 +988,7 @@ const MarketplaceStudio: React.FC = () => {
           </div>
 
           {/* Style Images */}
-          {config.maxStyleImages > 0 && (
+          {styleEnabled && (
             <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-gray-800">{t('marketplaceNew.styleImagesOptional', 'Uslub rasmlari (ixtiyoriy)')}</h3>
@@ -894,12 +1039,31 @@ const MarketplaceStudio: React.FC = () => {
           {/* Prompt */}
           <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
             <h3 className="font-bold text-gray-800 mb-4">{t('marketplaceNew.promptTitle', "So'rov matni")}</h3>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder={t('marketplaceNew.promptPlaceholder', "Masalan: Mahsulotni oq fonda professional tarzda ko'rsating...")}
-              className="w-full h-32 p-4 border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <div className="relative">
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder={t('marketplaceNew.promptPlaceholder', "Masalan: Mahsulotni oq fonda professional tarzda ko'rsating...")}
+                className="w-full h-32 p-4 pr-24 border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {imageMode !== 'ultra' && plan !== 'free' && (
+                <button
+                  type="button"
+                  onClick={() => void handleGeneratePromptByImage()}
+                  disabled={promptGenerating}
+                  title="Rasmga qarab tayyor prompt generate qilish"
+                  className="absolute right-3 bottom-3 inline-flex items-center gap-1 rounded-lg bg-blue-600 text-white px-3 py-2 text-xs font-semibold hover:bg-blue-700 disabled:opacity-60"
+                >
+                  <FiStar className="w-4 h-4" />
+                  {promptGenerating ? '...' : '1 token'}
+                </button>
+              )}
+            </div>
+            {imageMode !== 'ultra' && plan !== 'free' && (
+              <p className="mt-2 text-xs text-gray-500">
+                Yulduzcha tugmasi rasmga qarab marketplace uchun tayyor prompt yaratadi (1 token).
+              </p>
+            )}
           </div>
 
           {/* Aspect Ratio */}
@@ -1056,7 +1220,7 @@ const MarketplaceStudio: React.FC = () => {
           </svg>
           {t('marketplaceNew.tokenPricingTitle', 'Token narxlari')} ({plan === 'business_plus' ? 'Business+' : plan} {t('marketplaceNew.planSuffix', 'tarif')})
         </h4>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className={`grid grid-cols-2 ${ultraModeAvailable ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-4`}>
           <div className="bg-white p-4 rounded-xl border border-emerald-200">
             <p className="text-xs text-gray-500 mb-1">{t('marketplaceNew.pricing.basicImage', 'Oddiy rasm')}</p>
             <p className="text-2xl font-black text-emerald-600">{config.basicTokenCost}</p>
@@ -1067,9 +1231,16 @@ const MarketplaceStudio: React.FC = () => {
             <p className="text-2xl font-black text-blue-600">{config.proTokenCost}</p>
             <p className="text-xs text-gray-400">{t('marketplaceNew.pricing.perRequest', "token / so'rov")}</p>
           </div>
+          {ultraModeAvailable && (
+            <div className="bg-white p-4 rounded-xl border border-fuchsia-200">
+              <p className="text-xs text-gray-500 mb-1">Ultra rasm</p>
+              <p className="text-2xl font-black text-fuchsia-600">{config.ultraTokenCost}</p>
+              <p className="text-xs text-gray-400">{t('marketplaceNew.pricing.perRequest', "token / so'rov")}</p>
+            </div>
+          )}
           <div className="bg-white p-4 rounded-xl border border-purple-200">
             <p className="text-xs text-gray-500 mb-1">{t('marketplaceNew.pricing.outputs', 'Chiqadigan rasmlar')}</p>
-            <p className="text-2xl font-black text-purple-600">{config.outputCount}</p>
+            <p className="text-2xl font-black text-purple-600">{currentOutputCount}</p>
             <p className="text-xs text-gray-400">{t('marketplaceNew.pricing.perGeneration', 'ta / generatsiya')}</p>
           </div>
           <div className="bg-white p-4 rounded-xl border border-amber-200">

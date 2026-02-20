@@ -87,7 +87,7 @@ export async function ensureImageJobsTable(): Promise<void> {
       batch_index INT NOT NULL,
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       plan VARCHAR(50) NOT NULL CHECK (plan IN ('free', 'starter', 'pro', 'business_plus')),
-      mode VARCHAR(16) NOT NULL CHECK (mode IN ('basic', 'pro')),
+      mode VARCHAR(16) NOT NULL CHECK (mode IN ('basic', 'pro', 'ultra')),
       provider VARCHAR(32) NOT NULL DEFAULT 'gemini',
       model VARCHAR(128),
       aspect_ratio VARCHAR(16),
@@ -116,6 +116,12 @@ export async function ensureImageJobsTable(): Promise<void> {
   await query(
     `CREATE INDEX IF NOT EXISTS idx_image_jobs_queue ON image_jobs(plan, status, priority, created_at)`
   );
+
+  await query(`ALTER TABLE image_jobs DROP CONSTRAINT IF EXISTS image_jobs_mode_check`);
+  await query(
+    `ALTER TABLE image_jobs
+     ADD CONSTRAINT image_jobs_mode_check CHECK (mode IN ('basic', 'pro', 'ultra'))`
+  );
 }
 
 export async function estimateAvgImageJobSeconds(plan: SubscriptionPlan, mode?: ImageMode): Promise<number> {
@@ -124,6 +130,8 @@ export async function estimateAvgImageJobSeconds(plan: SubscriptionPlan, mode?: 
       ? envNumber('IMAGE_QUEUE_ESTIMATE_SECONDS_BASIC')
       : mode === 'pro'
         ? envNumber('IMAGE_QUEUE_ESTIMATE_SECONDS_PRO')
+        : mode === 'ultra'
+          ? envNumber('IMAGE_QUEUE_ESTIMATE_SECONDS_ULTRA')
         : null;
 
   const fallback = Math.max(5, modeFallback ?? envNumber('IMAGE_QUEUE_ESTIMATE_SECONDS_PER_IMAGE') ?? 45);

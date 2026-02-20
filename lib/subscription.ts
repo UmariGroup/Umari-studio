@@ -392,63 +392,94 @@ export interface ImagePolicy {
 
 export function getImagePolicy(plan: SubscriptionPlan, mode: ImageMode): ImagePolicy {
   if (plan === 'starter') {
+    if (mode === 'ultra') {
+      throw new BillingError({
+        status: 403,
+        code: 'PLAN_RESTRICTED',
+        message: "Ultra rejim faqat Business+ tarifida mavjud.",
+        recommendedPlan: 'business_plus',
+      });
+    }
+
     return mode === 'pro'
       ? {
           costPerRequest: 7,
           outputCount: 2,
           maxProductImages: 3,
-          maxStyleImages: 1,
+          maxStyleImages: 0,
           maxPromptChars: 150,
-          allowedModels: ['gemini-3-pro-image-preview', 'nano-banana-pro-preview'],
+          allowedModels: ['nano-banana-pro-preview'],
         }
       : {
           costPerRequest: 2,
           outputCount: 2,
           maxProductImages: 3,
-          maxStyleImages: 1,
+          maxStyleImages: 0,
           maxPromptChars: 150,
           allowedModels: ['gemini-2.5-flash-image'],
         };
   }
 
   if (plan === 'pro') {
+    if (mode === 'ultra') {
+      throw new BillingError({
+        status: 403,
+        code: 'PLAN_RESTRICTED',
+        message: "Ultra rejim faqat Business+ tarifida mavjud.",
+        recommendedPlan: 'business_plus',
+      });
+    }
+
     return mode === 'pro'
       ? {
           costPerRequest: 6,
           outputCount: 3,
           maxProductImages: 4,
-          maxStyleImages: 1,
+          maxStyleImages: 0,
           maxPromptChars: 200,
-          allowedModels: ['gemini-3-pro-image-preview', 'nano-banana-pro-preview'],
+          allowedModels: ['nano-banana-pro-preview'],
         }
       : {
           costPerRequest: 1.5,
           outputCount: 2,
           maxProductImages: 3,
-          maxStyleImages: 1,
+          maxStyleImages: 0,
           maxPromptChars: 150,
           allowedModels: ['gemini-2.5-flash-image'],
         };
   }
 
   if (plan === 'business_plus') {
-    return mode === 'pro'
-      ? {
-          costPerRequest: 5,
-          outputCount: 4,
-          maxProductImages: 5,
-          maxStyleImages: 2,
-          maxPromptChars: 300,
-          allowedModels: ['gemini-3-pro-image-preview', 'nano-banana-pro-preview'],
-        }
-      : {
-          costPerRequest: 1,
-          outputCount: 3,
-          maxProductImages: 5,
-          maxStyleImages: 2,
-          maxPromptChars: 250,
-          allowedModels: ['gemini-2.5-flash-image'],
-        };
+    if (mode === 'ultra') {
+      return {
+        costPerRequest: 15,
+        outputCount: 4,
+        maxProductImages: 5,
+        maxStyleImages: 2,
+        maxPromptChars: 320,
+        allowedModels: ['gemini-3-pro-image-preview'],
+      };
+    }
+
+    if (mode === 'pro') {
+      return {
+        costPerRequest: 5,
+        outputCount: 4,
+        maxProductImages: 5,
+        maxStyleImages: 0,
+        maxPromptChars: 300,
+        allowedModels: ['nano-banana-pro-preview'],
+      };
+    }
+
+    return {
+      costPerRequest: 1,
+      outputCount: 3,
+      maxProductImages: 5,
+      maxStyleImages: 0,
+      maxPromptChars: 250,
+      allowedModels: ['gemini-2.5-flash-image'],
+    };
   }
 
   // Free: allow ONLY basic model (no pro)

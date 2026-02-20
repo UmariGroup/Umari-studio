@@ -72,12 +72,15 @@ export async function POST(request: NextRequest) {
     const model = typeof body?.model === 'string' ? body.model.trim() : '';
     const requestedMode = typeof body?.mode === 'string' ? body.mode.trim().toLowerCase() : '';
 
+    const modelLc = model.toLowerCase();
     const inferredMode =
-      requestedMode === 'basic' || requestedMode === 'pro'
+      requestedMode === 'basic' || requestedMode === 'pro' || requestedMode === 'ultra'
         ? requestedMode
-        : model.toLowerCase().includes('flash-image')
+        : modelLc.includes('flash-image')
           ? 'basic'
-          : 'pro';
+          : modelLc.includes('gemini-3-pro-image-preview')
+            ? 'ultra'
+            : 'pro';
 
     const plan = user.role === 'admin' ? 'business_plus' : user.subscription_plan;
     const policy = getImagePolicy(plan, inferredMode as any);

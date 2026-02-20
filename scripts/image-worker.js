@@ -280,7 +280,7 @@ async function ensureImageJobsTable(pool) {
       batch_index INT NOT NULL,
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       plan VARCHAR(50) NOT NULL CHECK (plan IN ('free', 'starter', 'pro', 'business_plus')),
-      mode VARCHAR(16) NOT NULL CHECK (mode IN ('basic', 'pro')),
+      mode VARCHAR(16) NOT NULL CHECK (mode IN ('basic', 'pro', 'ultra')),
       provider VARCHAR(32) NOT NULL DEFAULT 'gemini',
       model VARCHAR(128),
       aspect_ratio VARCHAR(16),

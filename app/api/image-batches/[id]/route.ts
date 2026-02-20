@@ -22,7 +22,8 @@ function coerceNumber(value: unknown): number {
 function workloadSecondsByMode(
   rows: Array<{ mode: string; cnt: number }>,
   basicAvgSeconds: number,
-  proAvgSeconds: number
+  proAvgSeconds: number,
+  ultraAvgSeconds: number
 ): number {
   let total = 0;
   for (const row of rows) {
@@ -30,7 +31,7 @@ function workloadSecondsByMode(
     if (!Number.isFinite(cnt) || cnt <= 0) continue;
 
     const mode = String(row?.mode || '').toLowerCase();
-    const perJob = mode === 'pro' ? proAvgSeconds : basicAvgSeconds;
+    const perJob = mode === 'ultra' ? ultraAvgSeconds : mode === 'pro' ? proAvgSeconds : basicAvgSeconds;
     total += cnt * perJob;
   }
   return total;
@@ -65,13 +66,15 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     }
 
     const plan = String(jobs[0]?.plan || 'starter') as any;
-    const mode = String(jobs[0]?.mode || 'basic').toLowerCase() === 'pro' ? 'pro' : 'basic';
+    const modeRaw = String(jobs[0]?.mode || 'basic').toLowerCase();
+    const mode = modeRaw === 'ultra' ? 'ultra' : modeRaw === 'pro' ? 'pro' : 'basic';
     const parallelLimit = getImageParallelLimit(plan);
-    const [basicAvgSeconds, proAvgSeconds] = await Promise.all([
+    const [basicAvgSeconds, proAvgSeconds, ultraAvgSeconds] = await Promise.all([
       estimateAvgImageJobSeconds(plan, 'basic'),
       estimateAvgImageJobSeconds(plan, 'pro'),
+      estimateAvgImageJobSeconds(plan, 'ultra'),
     ]);
-    const currentAvgSeconds = mode === 'pro' ? proAvgSeconds : basicAvgSeconds;
+    const currentAvgSeconds = mode === 'ultra' ? ultraAvgSeconds : mode === 'pro' ? proAvgSeconds : basicAvgSeconds;
 
     const total = jobs.length;
     const counts = jobs.reduce(
@@ -154,8 +157,8 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
         );
 
         queuePosition = Math.max(1, ahead + 1);
-        const queuedWorkSeconds = workloadSecondsByMode(queuedRows, basicAvgSeconds, proAvgSeconds);
-        const activeWorkSeconds = workloadSecondsByMode(activeRows, basicAvgSeconds, proAvgSeconds);
+        const queuedWorkSeconds = workloadSecondsByMode(queuedRows, basicAvgSeconds, proAvgSeconds, ultraAvgSeconds);
+        const activeWorkSeconds = workloadSecondsByMode(activeRows, basicAvgSeconds, proAvgSeconds, ultraAvgSeconds);
         const ownRemainingSeconds = Math.max(0, remaining) * currentAvgSeconds;
         etaSeconds = Math.max(5, Math.ceil((queuedWorkSeconds + activeWorkSeconds + ownRemainingSeconds) / parallelLimit));
       } else if (status === 'processing' && remaining > 0) {
