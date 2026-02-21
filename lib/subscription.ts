@@ -466,7 +466,7 @@ export function getImagePolicy(plan: SubscriptionPlan, mode: ImageMode): ImagePo
         costPerRequest: 5,
         outputCount: 4,
         maxProductImages: 5,
-        maxStyleImages: 0,
+        maxStyleImages: 1,
         maxPromptChars: 300,
         allowedModels: ['nano-banana-pro-preview'],
       };

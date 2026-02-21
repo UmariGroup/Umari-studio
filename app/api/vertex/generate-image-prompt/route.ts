@@ -7,7 +7,7 @@ import {
   refundTokens,
   reserveTokens,
 } from '@/lib/subscription';
-import { generateMarketplacePromptFromImages } from '@/services/gemini';
+import { generateMarketplacePromptBundleFromImages } from '@/services/gemini';
 
 export async function POST(request: NextRequest) {
   let userId: string | null = null;
@@ -50,10 +50,16 @@ export async function POST(request: NextRequest) {
       tokensRemaining = reserveResult.tokensRemaining;
     }
 
-    const prompt = await generateMarketplacePromptFromImages(productImages.slice(0, imagePolicy.maxProductImages), {
-      mode: requestedMode,
-      outputCount: imagePolicy.outputCount,
-    });
+    const isPremiumUltra = plan === 'business_plus' && requestedMode === 'ultra';
+    const { promptEn, promptUz } = await generateMarketplacePromptBundleFromImages(
+      productImages.slice(0, imagePolicy.maxProductImages),
+      {
+        mode: requestedMode,
+        outputCount: imagePolicy.outputCount,
+        premiumQuality: isPremiumUltra,
+        styleAllowed: imagePolicy.maxStyleImages > 0,
+      }
+    );
 
     if (user.role !== 'admin') {
       await recordTokenUsage({
@@ -61,14 +67,16 @@ export async function POST(request: NextRequest) {
         tokensUsed: promptTokenCost,
         serviceType: 'image_prompt_assist',
         modelUsed: null,
-        prompt,
+        prompt: promptEn,
       });
     }
     billingSettled = true;
 
     return NextResponse.json({
       success: true,
-      prompt,
+      prompt: promptEn,
+      prompt_en: promptEn,
+      prompt_uz: promptUz,
       tokens_charged: user.role === 'admin' ? 0 : promptTokenCost,
       tokens_remaining: user.role === 'admin' ? 999999 : Number(tokensRemaining.toFixed(2)),
     });

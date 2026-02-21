@@ -129,8 +129,10 @@ const MarketplaceStudio: React.FC = () => {
 
   // UI state
   const [generating, setGenerating] = useState(false);
-  const [prompt, setPrompt] = useState('');
+  const [promptUz, setPromptUz] = useState('');
+  const [promptEn, setPromptEn] = useState('');
   const [promptGenerating, setPromptGenerating] = useState(false);
+  const lastAutoPromptImageRef = useRef<string | null>(null);
   const [batchId, setBatchId] = useState<string | null>(null);
   const [batchStatus, setBatchStatus] = useState<ImageBatchStatus | null>(null);
   const [batchItems, setBatchItems] = useState<ImageBatchItem[]>([]);
@@ -249,10 +251,17 @@ const MarketplaceStudio: React.FC = () => {
   // Derived values
   const plan = user?.subscription_plan || 'free';
   const isAdmin = user?.role === 'admin';
+  const DEFAULT_PROMPT_UZ = 'Mahsulotni oq fonda professional marketpleys uchun rasm tayyorlab bering';
   const config = PLAN_CONFIGS[plan];
   const proModeAvailable = Boolean(config.proModel);
   const ultraModeAvailable = Boolean(config.ultraModel);
-  const styleEnabled = imageMode === 'ultra' && ultraModeAvailable && config.maxStyleImages > 0;
+  const styleMaxImages =
+    imageMode === 'ultra' && ultraModeAvailable
+      ? config.maxStyleImages
+      : plan === 'business_plus' && imageMode === 'pro'
+        ? 1
+        : 0;
+  const styleEnabled = styleMaxImages > 0;
 
   const tokensRemaining = isAdmin ? 999999 : (user?.tokens_remaining || 0);
   const currentTokenCost =
@@ -292,9 +301,33 @@ const MarketplaceStudio: React.FC = () => {
   }, [loading, imageMode, proModeAvailable, ultraModeAvailable]);
 
   useEffect(() => {
-    if (styleEnabled) return;
-    setStyleImages([null]);
-  }, [styleEnabled]);
+    if (!styleEnabled) {
+      setStyleImages([null]);
+      return;
+    }
+
+    setStyleImages((prev) => {
+      const trimmed = prev.slice(0, Math.max(1, styleMaxImages));
+      return trimmed.length === 0 ? [null] : trimmed;
+    });
+  }, [styleEnabled, styleMaxImages]);
+
+  useEffect(() => {
+    const isBusinessUltra = plan === 'business_plus' && imageMode === 'ultra';
+
+    if (isBusinessUltra) {
+      if (promptUz.trim() === DEFAULT_PROMPT_UZ) {
+        setPromptUz('');
+        setPromptEn('');
+      }
+      return;
+    }
+
+    if (!promptUz.trim()) {
+      setPromptUz(DEFAULT_PROMPT_UZ);
+      setPromptEn('');
+    }
+  }, [DEFAULT_PROMPT_UZ, imageMode, plan, promptUz]);
 
   const openSubscribe = (targetPlan: SubscriptionPlan) => {
     window.open(getTelegramSubscribeUrl(targetPlan), '_blank');
@@ -492,7 +525,7 @@ const MarketplaceStudio: React.FC = () => {
   // Add image slot
   const addImageSlot = useCallback(
     (type: 'product' | 'style') => {
-      const maxCount = type === 'product' ? config.maxProductImages : config.maxStyleImages;
+      const maxCount = type === 'product' ? config.maxProductImages : styleMaxImages;
       const setImages = type === 'product' ? setProductImages : setStyleImages;
       const images = type === 'product' ? productImages : styleImages;
 
@@ -500,7 +533,7 @@ const MarketplaceStudio: React.FC = () => {
         setImages((prev) => [...prev, null]);
       }
     },
-    [config, productImages, styleImages]
+    [config, productImages, styleImages, styleMaxImages]
   );
 
   // Remove image
@@ -560,15 +593,31 @@ const MarketplaceStudio: React.FC = () => {
         }
 
         const data = await response.json();
-        const generatedPrompt = typeof data?.prompt === 'string' ? data.prompt.trim() : '';
-        if (!generatedPrompt) {
+        const generatedPromptUz =
+          typeof data?.prompt_uz === 'string'
+            ? data.prompt_uz.trim()
+            : typeof data?.promptUz === 'string'
+              ? data.promptUz.trim()
+              : '';
+        const generatedPromptEn =
+          typeof data?.prompt_en === 'string'
+            ? data.prompt_en.trim()
+            : typeof data?.promptEn === 'string'
+              ? data.promptEn.trim()
+              : typeof data?.prompt === 'string'
+                ? data.prompt.trim()
+                : '';
+
+        const fallbackPrompt = generatedPromptUz || generatedPromptEn;
+        if (!fallbackPrompt) {
           if (!options?.auto) {
             toast.error("Prompt yaratib bo'lmadi.");
           }
           return false;
         }
 
-        setPrompt(generatedPrompt);
+        setPromptUz(generatedPromptUz || generatedPromptEn);
+        setPromptEn(generatedPromptEn || generatedPromptUz);
         if (typeof data?.tokens_remaining === 'number') {
           setUser((prev) => (prev ? { ...prev, tokens_remaining: data.tokens_remaining } : prev));
         }
@@ -590,21 +639,27 @@ const MarketplaceStudio: React.FC = () => {
   );
 
   useEffect(() => {
-    const hasProductImage = productImages.some(Boolean);
-    if (imageMode !== 'ultra' || !hasProductImage) {
+    const validProductImages = productImages.filter((img): img is string => Boolean(img));
+    const firstImage = validProductImages[0] || null;
+
+    if (imageMode !== 'ultra' || !firstImage) {
       ultraAutoPromptDoneRef.current = false;
+      lastAutoPromptImageRef.current = null;
       return;
     }
 
-    if (ultraAutoPromptDoneRef.current) return;
-    if (prompt.trim()) {
+    if (promptUz.trim()) {
       ultraAutoPromptDoneRef.current = true;
+      lastAutoPromptImageRef.current = firstImage;
       return;
     }
 
+    if (lastAutoPromptImageRef.current === firstImage) return;
+
+    lastAutoPromptImageRef.current = firstImage;
     ultraAutoPromptDoneRef.current = true;
     void handleGeneratePromptByImage({ auto: true });
-  }, [handleGeneratePromptByImage, imageMode, productImages, prompt]);
+  }, [handleGeneratePromptByImage, imageMode, productImages, promptUz]);
 
   // Generate images
   const handleGenerate = async () => {
@@ -625,7 +680,7 @@ const MarketplaceStudio: React.FC = () => {
       return;
     }
 
-    if (!prompt.trim()) {
+    if (!promptUz.trim()) {
       toast.error(t('marketplaceNew.toasts.enterPrompt', "So'rov matnini kiriting!"));
       return;
     }
@@ -655,8 +710,9 @@ const MarketplaceStudio: React.FC = () => {
       }
 
       const validStyleImages = styleEnabled
-        ? styleImages.filter((img): img is string => img !== null)
+        ? styleImages.filter((img): img is string => img !== null).slice(0, styleMaxImages)
         : [];
+      const promptForRequest = (promptEn && promptEn.trim()) ? promptEn.trim() : promptUz.trim();
 
       const response = await fetch('/api/generate-marketplace-image', {
         method: 'POST',
@@ -664,7 +720,7 @@ const MarketplaceStudio: React.FC = () => {
         body: JSON.stringify({
           productImages: validProductImages,
           styleImages: validStyleImages,
-          prompt,
+          prompt: promptForRequest,
           aspectRatio: MARKETPLACE_ASPECT_RATIO,
           mode: imageMode,
           model,
@@ -922,7 +978,7 @@ const MarketplaceStudio: React.FC = () => {
 
       {imageMode === 'ultra' && ultraModeAvailable && (
         <div className="bg-violet-50 rounded-2xl p-4 border border-violet-200 text-sm text-violet-900">
-          Ultra rejimida prompt mahsulot rasmlaridan avtomatik yaratiladi. Uslub rasmlari faqat shu rejimda yoqilgan.
+          Ultra rejimida prompt mahsulot rasmlaridan avtomatik yaratiladi. Uslub rasmlari Ultra rejimida va Business+ Pro rejimida mavjud.
         </div>
       )}
 
@@ -992,7 +1048,7 @@ const MarketplaceStudio: React.FC = () => {
             <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-gray-800">{t('marketplaceNew.styleImagesOptional', 'Uslub rasmlari (ixtiyoriy)')}</h3>
-                <span className="text-sm text-gray-500">{styleImages.filter(Boolean).length}/{config.maxStyleImages}</span>
+                <span className="text-sm text-gray-500">{styleImages.filter(Boolean).length}/{styleMaxImages}</span>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 {styleImages.map((img, idx) => (
@@ -1022,7 +1078,7 @@ const MarketplaceStudio: React.FC = () => {
                     )}
                   </div>
                 ))}
-                {styleImages.length < config.maxStyleImages && (
+                {styleImages.length < styleMaxImages && (
                   <button
                     onClick={() => addImageSlot('style')}
                     className="aspect-square border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center text-gray-400 hover:border-purple-400 hover:text-purple-400"
@@ -1041,8 +1097,11 @@ const MarketplaceStudio: React.FC = () => {
             <h3 className="font-bold text-gray-800 mb-4">{t('marketplaceNew.promptTitle', "So'rov matni")}</h3>
             <div className="relative">
               <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
+                value={promptUz}
+                onChange={(e) => {
+                  setPromptUz(e.target.value);
+                  setPromptEn('');
+                }}
                 placeholder={t('marketplaceNew.promptPlaceholder', "Masalan: Mahsulotni oq fonda professional tarzda ko'rsating...")}
                 className="w-full h-32 p-4 pr-24 border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
               />

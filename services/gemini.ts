@@ -367,6 +367,109 @@ export async function generateMarketplacePromptFromImages(
   return prompt;
 }
 
+function extractDualPrompt(text: string): { en: string; uz: string } | null {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+
+  const enMatch = raw.match(/\bEN\s*[:\-]\s*([\s\S]*?)(?=\n\s*UZ\s*[:\-]|$)/i);
+  const uzMatch = raw.match(/\bUZ\s*[:\-]\s*([\s\S]*?)(?=\n\s*EN\s*[:\-]|$)/i);
+
+  const en = enMatch?.[1]?.trim() || '';
+  const uz = uzMatch?.[1]?.trim() || '';
+  if (!en || !uz) return null;
+
+  return { en, uz };
+}
+
+function sanitizePromptText(text: string): string {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) return '';
+  return trimmed.replace(/^"+|"+$/g, '').trim();
+}
+
+export async function generateMarketplacePromptBundleFromImages(
+  productImages: string[],
+  options?: {
+    model?: string;
+    mode?: 'basic' | 'pro' | 'ultra';
+    outputCount?: number;
+    premiumQuality?: boolean;
+    styleAllowed?: boolean;
+  }
+): Promise<{ promptEn: string; promptUz: string }> {
+  const images = Array.isArray(productImages) ? productImages.filter(Boolean).slice(0, 4) : [];
+  if (images.length === 0) {
+    throw new Error('At least one product image is required.');
+  }
+
+  const model = (options?.model || GEMINI_TEXT_MODEL).trim();
+  const mode = (options?.mode || 'pro').toString().toLowerCase();
+  const outputCount = Math.max(1, Math.min(6, Number(options?.outputCount || 3)));
+  const premiumQuality = Boolean(options?.premiumQuality);
+  const styleAllowed = Boolean(options?.styleAllowed);
+
+  const systemInstruction =
+    'You are an expert ecommerce prompt engineer. Return ONLY two lines in this exact format: ' +
+    'EN: <one English prompt>\nUZ: <one Uzbek prompt>. ' +
+    'No markdown, no bullets, no JSON, no extra commentary.';
+
+  const wardrobeGuidance = styleAllowed
+    ? ''
+    :
+      'If the product looks like apparel or footwear, create a wearable on-model prompt: ' +
+      'for footwear, place it on a model wearing matching trousers/jeans; ' +
+      'for clothing, dress it on a model with correct gender styling (men for menswear, women for womenswear). ' +
+      'Keep background clean and marketplace-friendly.';
+
+  const qualityGuidance = premiumQuality
+    ?
+      'Add premium editorial detail: specify lighting setup, camera angle, lens feel, shadows, ' +
+      'fabric texture, crisp edges, realistic reflections, and ultra-clean background.'
+    :
+      'Keep the prompt concise but complete for a clean marketplace look.';
+
+  const parts: any[] = [
+    {
+      text:
+        `Create one professional marketplace image prompt based on uploaded product photos.\n` +
+        `Mode: ${mode}. Planned output images: ${outputCount}.\n` +
+        `Requirements: preserve product identity, shape, logo, material, and colors exactly; ` +
+        `clean ecommerce composition; realistic studio lighting; brand-safe.\n` +
+        `${wardrobeGuidance}\n` +
+        `${qualityGuidance}`,
+    },
+  ];
+
+  for (const img of images) {
+    const inlinePart = toInlineDataPart(img);
+    if (inlinePart) parts.push(inlinePart);
+  }
+
+  const body: any = {
+    contents: [{ role: 'user', parts }],
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    generationConfig: {
+      temperature: premiumQuality ? 0.25 : 0.3,
+      maxOutputTokens: premiumQuality ? 550 : 350,
+      topP: 0.9,
+    },
+  };
+
+  const response = await geminiGenerateContent(model, body);
+  const rawText = extractText(response).trim();
+  if (!rawText) {
+    throw new Error('Model did not return prompt text.');
+  }
+
+  const parsed = extractDualPrompt(rawText);
+  if (parsed) {
+    return { promptEn: sanitizePromptText(parsed.en), promptUz: sanitizePromptText(parsed.uz) };
+  }
+
+  const fallback = sanitizePromptText(rawText);
+  return { promptEn: fallback, promptUz: fallback };
+}
+
 export async function generateMarketplaceImage(
   prompt: string,
   productImages: string[] = [],
