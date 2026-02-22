@@ -520,6 +520,170 @@ export async function generateMarketplacePromptBundleFromImages(
   return { promptEn: fallback, promptUz: fallback };
 }
 
+function safeJsonParse<T = any>(text: string): T | null {
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
+function extractFirstJsonObject(text: string): string | null {
+  const s = String(text || '');
+  const firstBrace = s.indexOf('{');
+  if (firstBrace < 0) return null;
+  const lastBrace = s.lastIndexOf('}');
+  if (lastBrace <= firstBrace) return null;
+  return s.slice(firstBrace, lastBrace + 1);
+}
+
+export type InfografikaVariant = {
+  id: string;
+  strategy: 'CTR_BOOSTER' | 'TRUST_OPTIMIZER' | 'PREMIUM_PERCEPTION';
+  title: string;
+  headline: string;
+  bullets: string[];
+  badge?: string | null;
+  layout: 'hero' | 'detail' | 'angled';
+  scores: {
+    ctrImpact: number;
+    trustSignal: number;
+    premiumScore: number;
+    marketplaceSafe: number;
+  };
+};
+
+export async function generateInfografikaVariantsFromImage(
+  productImage: string,
+  options: {
+    model?: string;
+    variantCount: number;
+    additionalInfo?: string;
+    language?: 'uz';
+  }
+): Promise<InfografikaVariant[]> {
+  const model = (options.model || GEMINI_TEXT_MODEL).trim();
+  const variantCount = Math.max(1, Math.min(3, Number(options.variantCount || 1)));
+  const additionalInfo = String(options.additionalInfo || '').slice(0, 2500);
+
+  const systemInstruction =
+    'You are a conversion-first marketplace infographic strategist for ecommerce listings. ' +
+    'You are NOT a beauty engine; you are a sales optimization engine. ' +
+    'You MUST return ONLY valid JSON (no markdown). Language: Uzbek. ' +
+    'OUTPUT SCHEMA (strict): {"variants": Array<Variant>} where Variant has: ' +
+    'id (string), strategy (CTR_BOOSTER|TRUST_OPTIMIZER|PREMIUM_PERCEPTION), title (short), ' +
+    'headline (Uzbek, 3–4 words, bold-impact), bullets (array of 3 short Uzbek benefit-USPs, each max 5 words), ' +
+    'badge (optional short Uzbek, max 2–3 words), layout (hero|detail|angled), ' +
+    'scores {ctrImpact 1-10, trustSignal 1-10, premiumScore 1-10, marketplaceSafe 1-10}. ' +
+    '\n\nEXACT PROMPT ARCHITECTURE (for your reasoning, but output JSON only): ' +
+    'TASK LAYER → create marketplace-ready product infographic. ' +
+    'IDENTITY LOCK LAYER → preserve product identity EXACTLY (shape, color, logo, material). No redesign. ' +
+    'MARKETPLACE RULES LAYER → clean ecommerce composition, no clutter, no excessive text, no artifacts. ' +
+    'CONVERSION STRATEGY LAYER → CTR + trust. ' +
+    'VISUAL PSYCHOLOGY LAYER → eye-flow: product → headline → USPs → badge. ' +
+    'TEXT RULES LAYER → 1 headline + 3 USPs, no paragraphs, whitespace heavy. ' +
+    'OUTPUT INTENT LAYER → variants must be different strategies, not color variations. ' +
+    '\n\nVARIANT PSYCHOLOGY ENGINE (must follow): ' +
+    'TRUST_OPTIMIZER → minimal, white background feel, premium catalog vibe, clean typography, NO aggressive badges. Purpose: conversion rate ↑. ' +
+    'CTR_BOOSTER → scroll-stopping contrast hierarchy, attention anchor element, bold headline emphasis, subtle premium badge as anchor (NOT discount spam). Purpose: CTR ↑. ' +
+    'PREMIUM_PERCEPTION → luxury brand presentation, elegant spacing, premium lighting feel, soft gradient feel (subtle), high-end perception. Badge only as brand accent or omit. Purpose: price perception ↑. ' +
+    '\n\nBADGE INTELLIGENCE: badge must be subtle and marketplace-compliant. NEVER: huge red discount, flashing, clickbait, "100%". ' +
+    '\n\nUSP PERSUASION SYSTEM: bullets must be buyer-value benefits (feature→benefit→emotion). Avoid pure specs-only bullets.';
+
+  const inline = toInlineDataPart(productImage);
+  if (!inline) {
+    throw new Error('Invalid product image data URL.');
+  }
+
+  const userText =
+    `TASK: Create ${variantCount} DIFFERENT infographic variants for the same product photo.\n` +
+    `CRITICAL: Variant != color. Variant == different buyer psychology attack.\n` +
+    `VARIANT STRATEGIES REQUIRED (use different ones): TRUST_OPTIMIZER, CTR_BOOSTER, PREMIUM_PERCEPTION.\n` +
+    `RAKURS DIVERSIFIKATSIYASI: layouts must vary (hero vs detail zoom vs slight angled).\n` +
+    `MARKETPLACE COMPLIANCE: keep text density low, whitespace 40%+, no paragraphs, safe claims.\n` +
+    `USER PRODUCT INFO (optional but IMPORTANT if present):\n${additionalInfo || 'N/A'}\n` +
+    `If user info exists, reflect it naturally in headline + USPs.\n` +
+    `Return JSON only in the required schema.`;
+
+  const body: any = {
+    contents: [
+      {
+        role: 'user',
+        parts: [{ text: userText }, inline],
+      },
+    ],
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    generationConfig: {
+      temperature: 0.35,
+      maxOutputTokens: 900,
+      topP: 0.9,
+    },
+  };
+
+  const response = await geminiGenerateContent(model, body);
+  const raw = extractText(response).trim();
+  if (!raw) throw new Error('Model did not return text.');
+
+  const jsonText = extractFirstJsonObject(raw) || raw;
+  const parsed = safeJsonParse<{ variants?: any[] }>(jsonText);
+  const variantsRaw = Array.isArray(parsed?.variants) ? parsed!.variants! : [];
+
+  const normalizeScore = (n: any) => {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return 6;
+    return Math.max(1, Math.min(10, Math.round(v)));
+  };
+
+  const out: InfografikaVariant[] = variantsRaw
+    .slice(0, variantCount)
+    .map((v: any, idx: number) => {
+      const strategy = String(v?.strategy || '') as InfografikaVariant['strategy'];
+      const allowedStrategies: InfografikaVariant['strategy'][] = ['CTR_BOOSTER', 'TRUST_OPTIMIZER', 'PREMIUM_PERCEPTION'];
+      const finalStrategy = allowedStrategies.includes(strategy) ? strategy : allowedStrategies[idx % allowedStrategies.length];
+
+      const layout = String(v?.layout || '') as InfografikaVariant['layout'];
+      const allowedLayouts: InfografikaVariant['layout'][] = ['hero', 'detail', 'angled'];
+      const finalLayout = allowedLayouts.includes(layout) ? layout : allowedLayouts[idx % allowedLayouts.length];
+
+      const bullets = Array.isArray(v?.bullets) ? v.bullets.map((x: any) => String(x || '').trim()).filter(Boolean) : [];
+      const fixedBullets = bullets.slice(0, 3);
+      while (fixedBullets.length < 3) fixedBullets.push('Yuqori sifat');
+
+      return {
+        id: String(v?.id || `${finalStrategy.toLowerCase()}_${idx + 1}`),
+        strategy: finalStrategy,
+        title: String(v?.title || '').trim() || (finalStrategy === 'CTR_BOOSTER' ? 'CTR Booster' : finalStrategy === 'TRUST_OPTIMIZER' ? 'Trust' : 'Premium'),
+        headline: String(v?.headline || '').trim() || 'Marketplace uchun',
+        bullets: fixedBullets,
+        badge: v?.badge ? String(v.badge).trim() : null,
+        layout: finalLayout,
+        scores: {
+          ctrImpact: normalizeScore(v?.scores?.ctrImpact),
+          trustSignal: normalizeScore(v?.scores?.trustSignal),
+          premiumScore: normalizeScore(v?.scores?.premiumScore),
+          marketplaceSafe: normalizeScore(v?.scores?.marketplaceSafe),
+        },
+      };
+    });
+
+  // Guarantee we return exactly variantCount variants.
+  while (out.length < variantCount) {
+    const idx = out.length;
+    out.push({
+      id: `variant_${idx + 1}`,
+      strategy: idx === 0 ? 'CTR_BOOSTER' : idx === 1 ? 'TRUST_OPTIMIZER' : 'PREMIUM_PERCEPTION',
+      title: idx === 0 ? 'CTR Booster' : idx === 1 ? 'Trust' : 'Premium',
+      headline: 'Marketplace uchun',
+      bullets: ['Yuqori sifat', 'Qulay', 'Ishonchli'],
+      badge: null,
+      layout: idx === 0 ? 'hero' : idx === 1 ? 'detail' : 'angled',
+      scores: { ctrImpact: 7, trustSignal: 7, premiumScore: 7, marketplaceSafe: 8 },
+    });
+  }
+
+  return out.slice(0, variantCount);
+}
+
 export async function generateMarketplaceImage(
   prompt: string,
   productImages: string[] = [],

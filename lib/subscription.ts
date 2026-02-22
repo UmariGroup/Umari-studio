@@ -613,3 +613,49 @@ export function getCopywriterPolicy(plan: SubscriptionPlan): CopywriterPolicy {
     recommendedPlan: 'starter',
   });
 }
+
+export interface InfografikaPolicy {
+  costPerGenerate: number;
+  variantCount: number;
+  maxImages: number;
+  maxAdditionalInfoChars: number;
+  textModel: string;
+}
+
+export function getInfografikaPolicy(plan: SubscriptionPlan): InfografikaPolicy {
+  // Infografika: conversion-oriented variants. Free plan is not allowed.
+  if (plan === 'starter') {
+    return {
+      costPerGenerate: 3,
+      variantCount: 1,
+      maxImages: 1,
+      maxAdditionalInfoChars: 500,
+      textModel: 'gemini-2.0-flash-lite-001',
+    };
+  }
+  if (plan === 'pro') {
+    return {
+      costPerGenerate: 2,
+      variantCount: 2,
+      maxImages: 1,
+      maxAdditionalInfoChars: 1000,
+      textModel: 'gemini-2.5-flash-lite',
+    };
+  }
+  if (plan === 'business_plus') {
+    return {
+      costPerGenerate: 1,
+      variantCount: 3,
+      maxImages: 1,
+      maxAdditionalInfoChars: 2500,
+      textModel: 'gemini-2.5-pro',
+    };
+  }
+
+  throw new BillingError({
+    status: 403,
+    code: 'PLAN_RESTRICTED',
+    message: "Infografika'dan foydalanish uchun tarif kerak. Starter tarifdan boshlang.",
+    recommendedPlan: 'starter',
+  });
+}
