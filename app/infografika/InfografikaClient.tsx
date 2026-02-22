@@ -429,7 +429,15 @@ export default function InfografikaClient() {
       setVariants(v.slice(0, variantLimit));
       toast.success('Variantlar tayyor. Endi tanlang va yuklab oling.');
     } catch (e) {
-      toast.error((e as Error).message || 'Xatolik');
+      const raw = e instanceof Error ? e.message : String(e);
+      const m = raw.toLowerCase();
+      if (m.includes('err_quic_protocol_error') || m.includes('quic_network_idle_timeout') || m.includes('quic')) {
+        toast.error(
+          'Tarmoq ulanishi (HTTP/3/QUIC) vaqt tugadi. Qayta urinib ko‘ring yoki boshqa internet/VPNsiz sinab ko‘ring. Agar davom etsa, brauzerda QUIC/HTTP3 vaqtincha o‘chirilishi mumkin.'
+        );
+      } else {
+        toast.error(raw || 'Xatolik');
+      }
     } finally {
       setGenerating(false);
     }

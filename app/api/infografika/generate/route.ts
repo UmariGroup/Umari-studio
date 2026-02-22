@@ -9,6 +9,10 @@ import {
 } from '@/lib/subscription';
 import { generateInfografikaImageFromVariant, generateInfografikaVariantsFromImage } from '@/services/gemini';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
+
 export async function POST(request: NextRequest) {
   let userId: string | null = null;
   let reservedTokens = 0;
@@ -58,20 +62,28 @@ export async function POST(request: NextRequest) {
 
     // Professional designer-like render using marketplace image models.
     // Best-effort: if image generation fails for a variant, client will fall back to canvas rendering.
-    const variantsWithImages = [] as Array<(typeof variants)[number] & { image?: string | null; image_error?: string | null }>;
-    for (const v of variants) {
-      try {
+    const imageResults = await Promise.allSettled(
+      variants.map(async (v) => {
         const img = await generateInfografikaImageFromVariant(image, v, {
           model: policy.imageModel,
           fallbackModels: policy.imageFallbackModels,
           aspectRatio: '3:4',
         });
-        variantsWithImages.push({ ...v, image: img, image_error: null });
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        variantsWithImages.push({ ...v, image: null, image_error: msg.slice(0, 2000) });
-      }
-    }
+        return { ...v, image: img, image_error: null } as (typeof variants)[number] & {
+          image?: string | null;
+          image_error?: string | null;
+        };
+      })
+    );
+
+    const variantsWithImages = imageResults.map((res, idx) => {
+      if (res.status === 'fulfilled') return res.value;
+      const msg = res.reason instanceof Error ? res.reason.message : String(res.reason);
+      return { ...variants[idx], image: null, image_error: msg.slice(0, 2000) } as (typeof variants)[number] & {
+        image?: string | null;
+        image_error?: string | null;
+      };
+    });
 
     if (user.role !== 'admin') {
       await recordTokenUsage({
