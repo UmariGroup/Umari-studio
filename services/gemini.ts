@@ -1,8 +1,3 @@
-/**
- * Gemini API Service (Generative Language API)
- * Uses API key auth (no Vertex / service account).
- */
-
 import axios from 'axios';
 import { checkImagePromptSafety } from '@/lib/content-safety';
 
@@ -60,6 +55,61 @@ class Semaphore {
       this.release();
     }
   }
+}
+
+const MARKETPLACE_ANGLES = [
+  "Front-facing hero shot, centered composition, primary marketplace listing image.",
+  "Close-up detail shot emphasizing material, texture, and product quality.",
+  "Three-quarter angled perspective showcasing depth and dimensionality.",
+  "Side profile shot highlighting silhouette and proportions.",
+];
+
+function buildMarketplaceImagePrompt(userPrompt: string, angle: string) {
+  return `
+Task: Generate a high-converting professional marketplace product image.
+
+PRIMARY OBJECTIVE:
+Create a realistic, commercially persuasive product photo suitable for a large ecommerce marketplace (Uzum / Amazon / Wildberries style).
+
+CRITICAL PRODUCT IDENTITY RULES:
+- Preserve the MAIN PRODUCT identity EXACTLY
+- Do NOT redesign, restyle, or reinterpret the product
+- Maintain accurate shape, proportions, materials, colors, branding, and details
+- The product must look like the real physical item
+
+STYLE TRANSFER RULES:
+- Copy ONLY: lighting, background, composition, camera style
+- IGNORE the object shown in style reference images
+
+COMMERCIAL PHOTOGRAPHY REQUIREMENTS:
+- Ultra-realistic product photography
+- Clean ecommerce marketplace aesthetic
+- Professional studio-grade lighting
+- Sharp focus, crisp edges
+- Realistic materials & textures
+- Natural reflections & shadows
+- No artistic distortion
+- No surrealism / fantasy / illustration look
+- No AI artifacts
+
+MARKETPLACE OPTIMIZATION:
+- Image must look trustworthy & premium
+- Product must feel tangible & high-quality
+- Suitable for product listing thumbnail
+- Neutral commercial color balance
+
+SALES & CONVERSION OPTIMIZATION:
+- Increase buyer trust
+- Increase perceived product quality
+- Increase click-through rate
+- Visually persuasive ecommerce presentation
+
+CAMERA & FRAMING:
+${angle}
+
+User Intent / Product Context:
+${userPrompt}
+`;
 }
 
 const geminiSemaphore = new Semaphore(GEMINI_MAX_CONCURRENT);
@@ -474,51 +524,54 @@ export async function generateMarketplaceImage(
   prompt: string,
   productImages: string[] = [],
   styleImages: string[] = [],
-  aspectRatio: string = '1:1',
-  options?: { model?: string; fallbackModels?: string[] }
+  aspectRatio: string = '3:4',
+  options?: { model?: string; fallbackModels?: string[]; imageIndex?: number }
 ): Promise<string> {
+
   const promptSafety = checkImagePromptSafety(prompt);
   if (!promptSafety.allowed) {
-    throw new Error('PROMPT_POLICY_BLOCKED: 18+ yoki pornografik kontent taqiqlangan');
+    throw new Error('PROMPT_POLICY_BLOCKED');
   }
 
   const primaryModel = (options?.model || GEMINI_IMAGE_MODEL).trim();
+
   const planFallbacks = Array.isArray(options?.fallbackModels)
     ? options!.fallbackModels!.map((value) => String(value || '').trim()).filter(Boolean)
     : [];
+
   const modelCandidates = Array.from(
     new Set([primaryModel, ...planFallbacks, ...GEMINI_IMAGE_FALLBACK_MODELS].filter(Boolean))
   );
 
   if (modelCandidates.length === 0) {
-    throw new Error('Gemini image model is empty. Set GEMINI_IMAGE_MODEL in .env');
+    throw new Error('Gemini image model is empty.');
   }
 
   const parts: any[] = [];
 
-  // 1. Instructions
-  const hasStyleImages = styleImages.length > 0;
+  /* ✅ ANGLE CONTROL */
+  const imageIndex = Number(options?.imageIndex || 0);
+  const angle = MARKETPLACE_ANGLES[imageIndex % MARKETPLACE_ANGLES.length];
 
-  let finalPrompt = `Task: Generate a high-quality professional marketplace product image.\n`;
-  finalPrompt += `Goal: Place the object described in 'Main Product' section into the context/style of 'Style Reference' section.\n`;
-  finalPrompt += `CRITICAL: You MUST preserve the identity of the MAIN PRODUCT exactly. \n`;
-  finalPrompt += `CRITICAL: Do NOT generate the object shown in the STYLE REFERENCE. Only copy the background, lighting, and composition/pose from the reference.\n`;
-  finalPrompt += `User Prompt/Setting: ${prompt}.\n`;
+  const finalPrompt = buildMarketplaceImagePrompt(prompt, angle);
 
   parts.push({ text: finalPrompt });
 
-  // 2. Add Product Images with explicit label
   if (productImages.length > 0) {
-    parts.push({ text: "\n[[MAIN PRODUCT IMAGES - The Object to Generate]]\n" });
+    parts.push({ text: "\n[[MAIN PRODUCT IMAGES]]\n" });
+
     for (const img of productImages) {
       const inlinePart = toInlineDataPart(img);
       if (inlinePart) parts.push(inlinePart);
     }
   }
 
-  // 3. Add Style Images with explicit label
-  if (hasStyleImages) {
-    parts.push({ text: "\n[[STYLE REFERENCE IMAGES - Copy only background/lighting/context/pose, IGNORE the object itself]]\n" });
+  if (styleImages.length > 0) {
+    parts.push({
+      text:
+        "\n[[STYLE REFERENCE IMAGES - Copy ONLY lighting/background/composition. Ignore the object.]]\n",
+    });
+
     for (const img of styleImages) {
       const inlinePart = toInlineDataPart(img);
       if (inlinePart) parts.push(inlinePart);
@@ -542,11 +595,13 @@ export async function generateMarketplaceImage(
 
   for (let index = 0; index < modelCandidates.length; index++) {
     const model = modelCandidates[index];
+
     try {
       const response = await geminiGenerateContent(model, body);
+
       const blockReason = response?.promptFeedback?.blockReason;
       if (blockReason) {
-        throw new Error(`PROMPT_POLICY_BLOCKED: Blocked by Gemini safety (${blockReason})`);
+        throw new Error(`PROMPT_BLOCKED: ${blockReason}`);
       }
 
       const dataUrl = extractFirstImageDataUrl(response);
@@ -554,22 +609,19 @@ export async function generateMarketplaceImage(
         return dataUrl;
       }
 
-      const finishReason = response?.candidates?.[0]?.finishReason;
-      if (finishReason === 'NO_IMAGE') {
-        lastError = new Error(`Model did not return an image (NO_IMAGE): ${model}`);
-      } else {
-        lastError = new Error(`No image returned from Gemini API: ${model}`);
-      }
-    } catch (error: unknown) {
+      lastError = new Error(`NO_IMAGE: ${model}`);
+    } catch (error) {
       lastError = error;
+
       if (index < modelCandidates.length - 1 && shouldTryNextImageModel(error)) {
         continue;
       }
+
       throw error;
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error('No image returned from Gemini API.');
+  throw lastError instanceof Error ? lastError : new Error('No image returned.');
 }
 
 export async function* generateMarketplaceDescriptionStream(
