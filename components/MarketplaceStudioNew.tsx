@@ -251,7 +251,6 @@ const MarketplaceStudio: React.FC = () => {
   // Derived values
   const plan = user?.subscription_plan || 'free';
   const isAdmin = user?.role === 'admin';
-  const DEFAULT_PROMPT_UZ = 'Mahsulotni oq fonda professional marketpleys uchun rasm tayyorlab bering';
   const config = PLAN_CONFIGS[plan];
   const proModeAvailable = Boolean(config.proModel);
   const ultraModeAvailable = Boolean(config.ultraModel);
@@ -311,23 +310,6 @@ const MarketplaceStudio: React.FC = () => {
       return trimmed.length === 0 ? [null] : trimmed;
     });
   }, [styleEnabled, styleMaxImages]);
-
-  useEffect(() => {
-    const isBusinessUltra = plan === 'business_plus' && imageMode === 'ultra';
-
-    if (isBusinessUltra) {
-      if (promptUz.trim() === DEFAULT_PROMPT_UZ) {
-        setPromptUz('');
-        setPromptEn('');
-      }
-      return;
-    }
-
-    if (!promptUz.trim()) {
-      setPromptUz(DEFAULT_PROMPT_UZ);
-      setPromptEn('');
-    }
-  }, [DEFAULT_PROMPT_UZ, imageMode, plan, promptUz]);
 
   const openSubscribe = (targetPlan: SubscriptionPlan) => {
     window.open(getTelegramSubscribeUrl(targetPlan), '_blank');

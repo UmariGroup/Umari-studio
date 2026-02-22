@@ -317,13 +317,17 @@ export async function POST(request: NextRequest) {
             id: 'close',
             label: 'Close-up',
             productImages: safeProductImages,
-            suffix: ' (Close-up shot, detailed texture focus, shallow depth of field)',
+            suffix:
+              '\n\nCAMERA VIEW (STRICT): CLOSE-UP / MACRO. Crop/zoom so the frame is filled ~70–90% by the product or its key surface. ' +
+              'Show texture/material clearly, shallow depth of field, crisp detail. Do NOT show the entire product if that reduces detail.',
           },
           {
             id: 'wide',
             label: 'Umumiy',
             productImages: safeProductImages,
-            suffix: ' (Wide angle full body shot, environmental context, showing entire product)',
+            suffix:
+              '\n\nCAMERA VIEW (STRICT): HERO/WIDE. Full product visible, centered, straight-on, no heavy crop, clean studio background. ' +
+              'No environmental/lifestyle scene — keep it marketplace studio style.',
           },
         ];
       }
@@ -333,19 +337,24 @@ export async function POST(request: NextRequest) {
             id: 'hero',
             label: 'Umumiy',
             productImages: safeProductImages,
-            suffix: ' (Professional hero shot, clean composition, marketplace-ready)',
+            suffix:
+              '\n\nCAMERA VIEW (STRICT): HERO. Straight-on front view, full product visible, centered, clean composition, studio background, marketplace-ready.',
           },
           {
             id: 'close',
             label: 'Close-up',
             productImages: safeProductImages,
-            suffix: ' (Close-up shot, detailed texture focus, shallow depth of field)',
+            suffix:
+              '\n\nCAMERA VIEW (STRICT): 3/4 ANGLE CLOSE SHOT. Rotate viewpoint ~30–45°. Slight perspective, show depth and side surfaces. ' +
+              'Tighter framing than hero (product fills ~60–80% of frame), but still recognizable as the same product. Crisp lighting.',
           },
           {
             id: 'detail',
             label: 'Detal',
             productImages: safeProductImages,
-            suffix: ' (Detail shot, macro focus on materials/texture, premium lighting)',
+            suffix:
+              '\n\nCAMERA VIEW (STRICT): CLOSE-UP / MACRO DETAIL. Focus on one key area (material, texture, buttons, ports, stitching). ' +
+              'Crop/zoom aggressively; show micro-texture; shallow depth of field; premium studio lighting. Avoid changing product design.',
           },
         ];
       }
@@ -354,25 +363,32 @@ export async function POST(request: NextRequest) {
           id: 'hero',
           label: 'Hero',
           productImages: safeProductImages,
-          suffix: ' (Hero shot, premium advertising look, clean background, studio lighting)',
+          suffix:
+            '\n\nCAMERA VIEW (STRICT): HERO. Straight-on front view, full product visible, centered, clean background, studio lighting. No text.',
         },
         {
           id: 'close',
           label: 'Close-up',
           productImages: safeProductImages,
-          suffix: ' (Close-up shot, detailed texture focus, shallow depth of field)',
+          suffix:
+            '\n\nCAMERA VIEW (STRICT): CLOSE/ANGLE. 3/4 angle close shot (~30–45°). Product fills ~60–85% of the frame. ' +
+            'Show depth/dimension and key details. Keep background clean studio.',
         },
         {
           id: 'detail',
           label: 'Detal',
           productImages: safeProductImages,
-          suffix: ' (Detail macro shot, material and craftsmanship focus)',
+          suffix:
+            '\n\nCAMERA VIEW (STRICT): MACRO DETAIL. Extreme close-up crop of a key detail/texture (material, ports, seams, buttons). ' +
+            'Shallow depth of field, high clarity, realistic texture. Do NOT show the whole product.',
         },
         {
           id: 'lifestyle',
           label: 'Lifestyle',
           productImages: safeProductImages,
-          suffix: ' (Lifestyle/angle shot, real-world context, dynamic composition)',
+          suffix:
+            '\n\nCAMERA VIEW (STRICT): TRUE SIDE PROFILE 90°. Rotate to a real side view; silhouette clearly visible; minimal perspective. ' +
+            'Keep it studio/marketplace-safe: plain white/neutral background, optional simple pedestal only. No busy lifestyle scene.',
         },
       ];
     })();
@@ -422,6 +438,21 @@ export async function POST(request: NextRequest) {
         const productImagesForVariation =
           variation.productImages?.length > 0 ? variation.productImages : safeProductImages;
 
+        const angleIndexForVariation = (() => {
+          const id = String(variation?.id || '').trim().toLowerCase();
+          // Keep view-specific sets (front/back) consistent and avoid conflicting angle hints.
+          if (id === 'front' || id === 'back') return 0;
+          if (id === 'side') return 3;
+          if (id === 'detail') return 1; // macro close-up
+
+          // Marketplace generic variations
+          if (id === 'hero' || id === 'wide') return 0;
+          if (id === 'close') return variations.length <= 2 ? 1 : 2; // 2 outputs: true close-up; otherwise use 3/4 close view
+          if (id === 'lifestyle') return 3; // side profile
+
+          return index;
+        })();
+
         try {
           const dataUrl = await generateMarketplaceImage(
             fullPrompt,
@@ -431,6 +462,7 @@ export async function POST(request: NextRequest) {
             {
               model: selectedModel || undefined,
               fallbackModels: policy.allowedModels.filter((value) => value !== selectedModel),
+              imageIndex: angleIndexForVariation,
             }
           );
 

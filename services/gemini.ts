@@ -58,10 +58,10 @@ class Semaphore {
 }
 
 const MARKETPLACE_ANGLES = [
-  "Front-facing hero shot, centered composition, primary marketplace listing image.",
-  "Close-up detail shot emphasizing material, texture, and product quality.",
-  "Three-quarter angled perspective showcasing depth and dimensionality.",
-  "Side profile shot highlighting silhouette and proportions.",
+  "HERO: front-facing straight-on product shot, centered, full product visible, camera at product mid-height, 50mm look.",
+  "CLOSE-UP: tight close-up / macro detail crop that fills the frame, shallow depth of field, texture/material focus.",
+  "3/4 ANGLE: three-quarter view (about 30–45°), shows depth and sides, slight perspective, still centered.",
+  "SIDE PROFILE: true side profile view (about 90°), silhouette and proportions, clean negative space.",
 ];
 
 function buildMarketplaceImagePrompt(userPrompt: string, angle: string) {
@@ -106,6 +106,12 @@ SALES & CONVERSION OPTIMIZATION:
 
 CAMERA & FRAMING:
 ${angle}
+
+FOLLOW STRICTLY:
+- Treat CAMERA & FRAMING as the highest-priority viewpoint instruction.
+- If any other text conflicts, CAMERA & FRAMING wins.
+- For CLOSE-UP / MACRO: crop/zoom so the subject fills most of the frame.
+- For SIDE PROFILE: true 90° side view (silhouette), not a 3/4 angle.
 
 User Intent / Product Context:
 ${userPrompt}
@@ -499,34 +505,44 @@ export async function generateMarketplacePromptBundleFromImages(
   const styleAllowed = Boolean(options?.styleAllowed);
 
   const systemInstruction =
-    'You are an expert ecommerce prompt engineer. Return ONLY two lines in this exact format: ' +
+    'You are an expert ecommerce prompt engineer for marketplace product images. ' +
+    'Return ONLY two lines in this exact format: ' +
     'EN: <one English prompt>\nUZ: <one Uzbek prompt>. ' +
-    'No markdown, no bullets, no JSON, no extra commentary.';
+    'Each prompt must be ONE single line (no newline characters inside the prompt). ' +
+    'No markdown, no bullets, no JSON, no extra commentary, no quotes.';
 
   const wardrobeGuidance = styleAllowed
     ? ''
     :
-      'If the product looks like apparel or footwear, create a wearable on-model prompt: ' +
-      'for footwear, place it on a model wearing matching trousers/jeans; ' +
-      'for clothing, dress it on a model with correct gender styling (men for menswear, women for womenswear). ' +
-      'Keep background clean and marketplace-friendly.';
+      'If the product is apparel/footwear/bags/accessories, use an ADULT model to show scale and fit; keep face out of frame; ' +
+      'neutral pose; modest, brand-safe styling. For footwear: on-feet with matching jeans/trousers. For clothing: correctly worn and well-fitted. ' +
+      'If the product is NOT wearable, do NOT include people/hands.';
 
   const qualityGuidance = premiumQuality
     ?
-      'Add premium editorial detail: specify lighting setup, camera angle, lens feel, shadows, ' +
-      'fabric texture, crisp edges, realistic reflections, and ultra-clean background.'
+      'Add premium editorial detail: softbox + fill + rim lighting, natural contact shadow, accurate color, crisp edges, micro-texture, ' +
+      'realistic reflections, high dynamic range, ultra-clean background, no artifacts.'
     :
-      'Keep the prompt concise but complete for a clean marketplace look.';
+      'Keep the prompt concise but complete: clean background, studio lighting, sharp focus, realistic materials.';
 
   const parts: any[] = [
     {
       text:
-        `Create one professional marketplace image prompt based on uploaded product photos.\n` +
-        `Mode: ${mode}. Planned output images: ${outputCount}.\n` +
-        `Requirements: preserve product identity, shape, logo, material, and colors exactly; ` +
-        `clean ecommerce composition; realistic studio lighting; brand-safe.\n` +
+        'Analyze the uploaded product photos and infer accurate product details (category, material, color, finish, shape, branding).\n' +
+        `Create ONE copy-paste-ready prompt for generating a high-converting marketplace listing image. Mode: ${mode}. Planned output images: ${outputCount}.\n` +
+        'Hard requirements (must follow):\n' +
+        '- Preserve the REAL product identity exactly: shape/proportions, materials, color, logo/branding placement, key details.\n' +
+        '- Studio commercial product photography; trustworthy ecommerce look; not illustration.\n' +
+        '- Composition: centered hero shot, clean framing, subject dominant, suitable for thumbnail.\n' +
+        '- Background: seamless pure white or very light neutral; minimal props only if needed for realism (do not add extra products).\n' +
+        '- Lighting: soft, even, professional; natural contact shadow; no harsh glare; accurate color.\n' +
+        '- Quality: sharp focus, crisp edges, realistic texture, no AI artifacts.\n' +
+        '- Output framing: 3:4 vertical (1080x1440).\n' +
+        '- Absolutely NO text, watermarks, labels added by the model, collage, borders, UI elements, or extra logos.\n' +
         `${wardrobeGuidance}\n` +
-        `${qualityGuidance}`,
+        `${qualityGuidance}\n` +
+        'Add a short negative/avoid clause inside the prompt (e.g., “avoid: text, watermark, extra items, distorted logo, extra fingers”).\n' +
+        'Remember: return only EN: and UZ: lines.',
     },
   ];
 
