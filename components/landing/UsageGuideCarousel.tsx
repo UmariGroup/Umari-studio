@@ -11,10 +11,10 @@ type GuideVideo = {
   titleKey: string;
 };
 
+
 const videos: GuideVideo[] = [
-  { id: 'dQw4w9WgXcQ', titleKey: 'guide.video1' },
-  { id: 'ysz5S6PUM-U', titleKey: 'guide.video2' },
-  { id: 'aqz-KE-bpKQ', titleKey: 'guide.video3' },
+  { id: '4aDXb_qJu7OPGVJA', titleKey: 'guide.video1' },
+  { id: 'NK59gqEWwkbqRt60', titleKey: 'guide.video2' },
 ];
 
 export function UsageGuideCarousel() {

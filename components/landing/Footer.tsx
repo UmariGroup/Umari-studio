@@ -48,8 +48,9 @@ export default function Footer() {
             <h4 className="mb-4 font-semibold text-white">{t('footer.social')}</h4>
             <div className="flex gap-4">
               <Link href="https://t.me/UmariAI" className="transition-colors hover:text-white"><FaTelegram className="h-5 w-5" /></Link>
-              <Link href="#" className="transition-colors hover:text-white"><Youtube className="h-5 w-5" /></Link>
-              <Link href="#" className="transition-colors hover:text-white"><Instagram className="h-5 w-5" /></Link>
+              <Link href="https://youtube.com/@umariai?si=NKCuPJ5Piv5b41lo" className="transition-colors hover:text-white"><Youtube className="h-5 w-5" /></Link>
+              <Link href="https://www.instagram.com/umariai.uz/" className="transition-colors hover:text-white"><Instagram className="h-5 w-5" /></Link>
+              <Link href="https://t.me/UmariAI" className="transition-colors hover:text-white"><FaTelegram className="h-5 w-5" /></Link>
             </div>
           </div>
         </div>
