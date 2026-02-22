@@ -626,7 +626,7 @@ export function getInfografikaPolicy(plan: SubscriptionPlan): InfografikaPolicy 
   // Infografika: conversion-oriented variants. Free plan is not allowed.
   if (plan === 'starter') {
     return {
-      costPerGenerate: 3,
+      costPerGenerate: 20,
       variantCount: 1,
       maxImages: 1,
       maxAdditionalInfoChars: 500,
@@ -635,7 +635,7 @@ export function getInfografikaPolicy(plan: SubscriptionPlan): InfografikaPolicy 
   }
   if (plan === 'pro') {
     return {
-      costPerGenerate: 2,
+      costPerGenerate: 20,
       variantCount: 2,
       maxImages: 1,
       maxAdditionalInfoChars: 1000,
@@ -644,7 +644,7 @@ export function getInfografikaPolicy(plan: SubscriptionPlan): InfografikaPolicy 
   }
   if (plan === 'business_plus') {
     return {
-      costPerGenerate: 1,
+      costPerGenerate: 20,
       variantCount: 3,
       maxImages: 1,
       maxAdditionalInfoChars: 2500,

@@ -32,6 +32,11 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Install production dependencies so non-Next entrypoints (e.g. scripts/image-worker.js)
+# have access to required modules. Next standalone output only includes traced deps.
+COPY package*.json ./
+RUN npm ci --omit=dev
+
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nextjs -u 1001
 

@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useToast } from '@/components/ToastProvider';
 import { getTelegramSubscribeUrl } from '@/lib/telegram';
 import { parseApiErrorResponse, toUzbekErrorMessage } from '@/lib/uzbek-errors';
+import { Plus } from 'lucide-react';
 
 type SubscriptionPlan = 'free' | 'starter' | 'pro' | 'business_plus';
 
@@ -334,6 +335,8 @@ export default function InfografikaClient() {
   const [variants, setVariants] = useState<InfografikaVariant[]>([]);
   const [rendered, setRendered] = useState<Record<string, string>>({});
 
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const lastRenderedForImageRef = useRef<string>('');
 
   const openSubscribe = (targetPlan: SubscriptionPlan) => {
@@ -458,27 +461,41 @@ export default function InfografikaClient() {
         <div className="flex flex-col gap-6 lg:flex-row">
           <div className="w-full lg:w-[420px]">
             <div className="rounded-2xl border border-slate-200 p-4">
-              <p className="text-sm font-semibold text-slate-900">Mahsulot rasmi</p>
+              <p className="text-sm font-semibold text-slate-900">Mahsulot rasmlari</p>
               <p className="mt-1 text-xs text-slate-600">1 ta rasm yetarli. Variantlar rakurs (crop/zoom) va matnlarda farq qiladi.</p>
 
-              <label className="mt-4 block">
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className="block w-full text-sm"
-                  onChange={(e) => void handlePickFile(e.target.files?.[0] || null)}
-                />
-              </label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => void handlePickFile(e.target.files?.[0] || null)}
+              />
 
               {image ? (
-                <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="mt-4 w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 text-left"
+                  title="Rasmni almashtirish"
+                >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={image} alt="Mahsulot" className="h-auto w-full" />
-                </div>
+                </button>
               ) : (
-                <div className="mt-4 grid h-48 place-items-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">
-                  Rasm yuklang
-                </div>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="mt-4 grid h-56 w-full place-items-center rounded-2xl border-2 border-dashed border-slate-300 bg-white text-slate-500 hover:border-slate-400"
+                  title="Rasm yuklash"
+                >
+                  <div className="grid place-items-center gap-2">
+                    <div className="grid h-14 w-14 place-items-center rounded-2xl border border-slate-200 bg-slate-50">
+                      <Plus className="h-7 w-7" />
+                    </div>
+                    <span className="text-sm font-medium">Rasm yuklang</span>
+                  </div>
+                </button>
               )}
             </div>
 
@@ -550,7 +567,7 @@ export default function InfografikaClient() {
                 onClick={() => void handleGenerateVariants()}
                 className="mt-4 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {generating ? 'Tayyorlayapman...' : 'Infografika variantlarini yaratish'}
+                {generating ? 'Tayyorlayapman...' : 'Infografika variantlarini yaratish (20 token)'}
               </button>
 
               <p className="mt-3 text-xs text-slate-500">Token: {isAdmin ? '∞' : tokensRemaining.toFixed(2)}</p>
