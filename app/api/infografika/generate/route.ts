@@ -13,6 +13,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
+type InfografikaLanguage = 'uz_latn' | 'uz_cyrl' | 'ru';
+
 export async function POST(request: NextRequest) {
   let userId: string | null = null;
   let reservedTokens = 0;
@@ -32,6 +34,9 @@ export async function POST(request: NextRequest) {
     const image = typeof body?.image === 'string' ? body.image : '';
     const productNameRaw = typeof body?.productName === 'string' ? body.productName : '';
     const productDescriptionRaw = typeof body?.productDescription === 'string' ? body.productDescription : '';
+    const languageRaw = typeof body?.language === 'string' ? body.language : '';
+    const language: InfografikaLanguage =
+      languageRaw === 'uz_cyrl' || languageRaw === 'ru' || languageRaw === 'uz_latn' ? languageRaw : 'uz_latn';
 
     if (!image || !image.startsWith('data:image/')) {
       return NextResponse.json({ error: 'Rasm kerak (data URL).' }, { status: 400 });
@@ -43,9 +48,12 @@ export async function POST(request: NextRequest) {
     const productName = productNameRaw.trim().slice(0, policy.maxProductNameChars);
     const productDescription = productDescriptionRaw.trim().slice(0, policy.maxAdditionalInfoChars);
 
-    const combinedInfo = [productName ? `NAME: ${productName}` : '', productDescription ? `DESC: ${productDescription}` : '']
-      .filter(Boolean)
-      .join('\n');
+    const usagePayload = {
+      language,
+      productName: productName || null,
+      productDescription: productDescription || null,
+    };
+    const combinedInfo = JSON.stringify(usagePayload);
 
     reservedTokens = Number(policy.costPerGenerate.toFixed(2));
     if (user.role !== 'admin') {
@@ -57,7 +65,7 @@ export async function POST(request: NextRequest) {
       model: policy.textModel,
       variantCount: policy.variantCount,
       additionalInfo: combinedInfo.slice(0, policy.maxAdditionalInfoChars),
-      language: 'uz',
+      language,
     });
 
     // Professional designer-like render using marketplace image models.
@@ -68,6 +76,7 @@ export async function POST(request: NextRequest) {
           model: policy.imageModel,
           fallbackModels: policy.imageFallbackModels,
           aspectRatio: '3:4',
+          language,
         });
         return { ...v, image: img, image_error: null } as (typeof variants)[number] & {
           image?: string | null;
@@ -89,7 +98,7 @@ export async function POST(request: NextRequest) {
       await recordTokenUsage({
         userId: user.id,
         tokensUsed: reservedTokens,
-        serviceType: 'infografika_variants',
+        serviceType: 'infografika',
         modelUsed: `${policy.textModel} + ${policy.imageModel}`,
         prompt: combinedInfo,
       });

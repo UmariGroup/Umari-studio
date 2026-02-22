@@ -611,13 +611,219 @@ export type InfografikaIcon =
   | 'box'
   | 'info';
 
+export type InfografikaLanguage = 'uz_latn' | 'uz_cyrl' | 'ru';
+
+function describeInfografikaLanguage(lang: InfografikaLanguage): string {
+  switch (lang) {
+    case 'uz_latn':
+      return 'Uzbek (Latin script, O\u2018zbekcha lotin).';
+    case 'uz_cyrl':
+      return 'Uzbek (Cyrillic script, \u040e\u0437\u0431\u0435\u043a\u0447\u0430 \u043a\u0438\u0440\u0438\u043b\u043b).';
+    case 'ru':
+      return 'Russian (ru-RU).';
+    default:
+      return 'Uzbek (Latin script).';
+  }
+}
+
+function normalizeUzApostrophes(s: string): string {
+  return String(s || '')
+    .replace(/o['’`]/gi, (m) => (m[0] === 'O' ? 'O\u2018' : 'o\u2018'))
+    .replace(/g['’`]/gi, (m) => (m[0] === 'G' ? 'G\u2018' : 'g\u2018'))
+    .replace(/[’`]/g, '\u2018');
+}
+
+function uzLatinToCyrl(input: string): string {
+  const s0 = normalizeUzApostrophes(String(input || '')).trim();
+  if (!s0) return '';
+
+  const rules: Array<[RegExp, string]> = [
+    [/O\u2018/g, '\u040e'],
+    [/o\u2018/g, '\u045e'],
+    [/G\u2018/g, '\u0492'],
+    [/g\u2018/g, '\u0493'],
+
+    [/Sh/g, '\u0428'],
+    [/sh/g, '\u0448'],
+    [/Ch/g, '\u0427'],
+    [/ch/g, '\u0447'],
+    [/Ng/g, '\u041d\u0433'],
+    [/ng/g, '\u043d\u0433'],
+
+    [/Ya/g, '\u042f'],
+    [/ya/g, '\u044f'],
+    [/Yo/g, '\u0401'],
+    [/yo/g, '\u0451'],
+    [/Yu/g, '\u042e'],
+    [/yu/g, '\u044e'],
+    [/Ye/g, '\u0415'],
+    [/ye/g, '\u0435'],
+
+    [/A/g, '\u0410'],
+    [/a/g, '\u0430'],
+    [/B/g, '\u0411'],
+    [/b/g, '\u0431'],
+    [/D/g, '\u0414'],
+    [/d/g, '\u0434'],
+    [/E/g, '\u0415'],
+    [/e/g, '\u0435'],
+    [/F/g, '\u0424'],
+    [/f/g, '\u0444'],
+    [/G/g, '\u0413'],
+    [/g/g, '\u0433'],
+    [/H/g, '\u04b2'],
+    [/h/g, '\u04b3'],
+    [/I/g, '\u0418'],
+    [/i/g, '\u0438'],
+    [/J/g, '\u0416'],
+    [/j/g, '\u0436'],
+    [/K/g, '\u041a'],
+    [/k/g, '\u043a'],
+    [/L/g, '\u041b'],
+    [/l/g, '\u043b'],
+    [/M/g, '\u041c'],
+    [/m/g, '\u043c'],
+    [/N/g, '\u041d'],
+    [/n/g, '\u043d'],
+    [/O/g, '\u041e'],
+    [/o/g, '\u043e'],
+    [/P/g, '\u041f'],
+    [/p/g, '\u043f'],
+    [/Q/g, '\u049a'],
+    [/q/g, '\u049b'],
+    [/R/g, '\u0420'],
+    [/r/g, '\u0440'],
+    [/S/g, '\u0421'],
+    [/s/g, '\u0441'],
+    [/T/g, '\u0422'],
+    [/t/g, '\u0442'],
+    [/U/g, '\u0423'],
+    [/u/g, '\u0443'],
+    [/V/g, '\u0412'],
+    [/v/g, '\u0432'],
+    [/X/g, '\u0425'],
+    [/x/g, '\u0445'],
+    [/Y/g, '\u0419'],
+    [/y/g, '\u0439'],
+    [/Z/g, '\u0417'],
+    [/z/g, '\u0437'],
+
+    [/["'`]/g, ''],
+  ];
+
+  let out = s0;
+  for (const [re, rep] of rules) out = out.replace(re, rep);
+  return out;
+}
+
+function translateVariantTextToLanguage(variant: InfografikaVariant, lang: InfografikaLanguage): InfografikaVariant {
+  if (lang !== 'uz_cyrl') return variant;
+  const mapText = (v: string) => uzLatinToCyrl(v);
+
+  return {
+    ...variant,
+    title: mapText(variant.title),
+    headline: mapText(variant.headline),
+    bullets: Array.isArray(variant.bullets) ? variant.bullets.map(mapText) : [],
+    badge: variant.badge ? mapText(String(variant.badge)) : variant.badge,
+    features: Array.isArray(variant.features)
+      ? variant.features.map((f) => ({ ...f, text: mapText(f.text) }))
+      : variant.features,
+  };
+}
+
+async function proofreadInfografikaVariantsText(
+  variants: InfografikaVariant[],
+  lang: InfografikaLanguage
+): Promise<InfografikaVariant[]> {
+  const proofModel = String(process.env.GEMINI_INFOGRAFIKA_PROOFREAD_MODEL || 'gemini-2.0-flash').trim();
+  const model = coerceTextOnlyModel(proofModel, 'gemini-2.0-flash');
+  const languageSpec = describeInfografikaLanguage(lang);
+
+  const payload = {
+    variants: variants.map((v) => ({
+      id: v.id,
+      title: v.title,
+      headline: v.headline,
+      badge: v.badge ?? null,
+      bullets: v.bullets,
+      features: Array.isArray(v.features) ? v.features.map((f) => ({ text: f.text, icon: f.icon })) : null,
+    })),
+  };
+
+  const systemInstruction =
+    'You are a strict orthography proofreader for ecommerce infographic copy. ' +
+    `Language/script: ${languageSpec} ` +
+    'Return ONLY valid JSON. Do NOT add new content. Do NOT translate. ' +
+    'ONLY fix spelling/typos, missing letters, wrong apostrophes, and obvious orthography mistakes. ' +
+    'Keep wording short. Keep meaning identical. No marketing slogans. No exclamation marks.';
+
+  const userText =
+    'Fix typos in this JSON. Rules:\n' +
+    '- Keep id and icon fields unchanged\n' +
+    '- Keep the same number of bullets and features\n' +
+    '- Do not lengthen text; shorten if needed\n' +
+    '- IMPORTANT: avoid truncated words (example: "mato" must not become "mat")\n' +
+    'Return JSON with the exact same shape: {"variants":[...]}\n\n' +
+    JSON.stringify(payload);
+
+  try {
+    const raw = await generateText(model, systemInstruction, userText);
+    const jsonText = extractFirstJsonObject(raw) || raw;
+    const parsed = safeJsonParse<{ variants?: any[] }>(jsonText);
+    const items = Array.isArray(parsed?.variants) ? parsed!.variants! : null;
+    if (!items) return variants;
+
+    const byId = new Map<string, any>();
+    for (const it of items) {
+      const id = String(it?.id || '').trim();
+      if (id) byId.set(id, it);
+    }
+
+    return variants.map((v) => {
+      const it = byId.get(v.id);
+      if (!it) return v;
+
+      const title = sanitizeInfografikaText(it?.title);
+      const headline = sanitizeInfografikaText(it?.headline);
+      const badge = it?.badge == null ? null : sanitizeInfografikaText(it?.badge);
+
+      const bullets = Array.isArray(it?.bullets)
+        ? it.bullets.map((x: any) => sanitizeInfografikaText(x)).filter(Boolean).slice(0, 3)
+        : v.bullets;
+
+      const next: InfografikaVariant = {
+        ...v,
+        title: title || v.title,
+        headline: headline || v.headline,
+        badge: badge === '' ? null : badge ?? v.badge,
+        bullets: bullets.length ? bullets : v.bullets,
+      };
+
+      if (Array.isArray(v.features)) {
+        const features = Array.isArray(it?.features) ? it.features : null;
+        if (features) {
+          next.features = v.features.map((f, idx) => {
+            const correctedText = sanitizeInfografikaText(features?.[idx]?.text);
+            return { ...f, text: correctedText || f.text };
+          });
+        }
+      }
+
+      return next;
+    });
+  } catch {
+    return variants;
+  }
+}
+
 export async function generateInfografikaVariantsFromImage(
   productImage: string,
   options: {
     model?: string;
     variantCount: number;
     additionalInfo?: string;
-    language?: 'uz';
+    language?: InfografikaLanguage;
   }
 ): Promise<InfografikaVariant[]> {
   const safeFallbackModel = 'gemini-2.0-flash';
@@ -625,18 +831,24 @@ export async function generateInfografikaVariantsFromImage(
   const variantCount = Math.max(1, Math.min(3, Number(options.variantCount || 1)));
   const additionalInfo = String(options.additionalInfo || '').slice(0, 2500);
 
+  const requestedLanguage = (options.language || 'uz_latn') as InfografikaLanguage;
+  const generationLanguage: InfografikaLanguage = requestedLanguage === 'uz_cyrl' ? 'uz_latn' : requestedLanguage;
+  const languageSpec = describeInfografikaLanguage(generationLanguage);
+
   const systemInstruction =
     'You are a conversion-first marketplace infographic strategist for ecommerce listings. ' +
     'You are NOT a beauty engine; you are a sales optimization engine. ' +
-    'You MUST return ONLY valid JSON (no markdown). Language: Uzbek. ' +
+    `You MUST return ONLY valid JSON (no markdown). Language/script: ${languageSpec} ` +
     'TEXT HYGIENE: Never use markdown symbols like **, #, _, ` or bullet characters inside strings. Plain text only. ' +
     'NO AD LANGUAGE: Do NOT write CTA, imperatives, or hype (no "Zalda o\'zingni ko\'rsat", no "Buy now", no exclamation marks). ' +
     'NO PROMO WORDS: avoid words that imply an advertisement/poster: tanlov, promo, aksiya, chegirma, sale, skidka. ' +
+    'SPELLING LOCK: zero typos allowed. Double-check every word for missing letters. Do not abbreviate words. ' +
+    'If Uzbek Latin, use correct apostrophes (o\u2018, g\u2018) and never drop letters (example: mato must not be truncated). ' +
     'OUTPUT SCHEMA (strict): {"variants": Array<Variant>} where Variant has: ' +
     'id (string), strategy (CTR_BOOSTER|TRUST_OPTIMIZER|PREMIUM_PERCEPTION), title (short), ' +
-    'headline (Uzbek, 3–4 words, bold-impact), ' +
+    'headline (3–4 words, bold-impact), ' +
     'features (array of EXACTLY 3 objects: {text: short Uzbek USP, max 5 words; icon: one of [wind,cotton,feather,shield,droplet,thermo,stretch,run,sparkles,check,tag,leaf,star,box,info]}), ' +
-    'badge (optional short Uzbek, max 2–3 words), layout (hero|detail|angled), ' +
+    'badge (optional short, max 2–3 words), layout (hero|detail|angled), ' +
     'scores {ctrImpact 1-10, trustSignal 1-10, premiumScore 1-10, marketplaceSafe 1-10}. ' +
     '\n\nEXACT PROMPT ARCHITECTURE (for your reasoning, but output JSON only): ' +
     'TASK LAYER → create marketplace-ready product infographic. ' +
@@ -664,7 +876,8 @@ export async function generateInfografikaVariantsFromImage(
     `VARIANT STRATEGIES REQUIRED (use different ones): TRUST_OPTIMIZER, CTR_BOOSTER, PREMIUM_PERCEPTION.\n` +
     `RAKURS DIVERSIFIKATSIYASI: layouts must vary (hero vs detail zoom vs slight angled).\n` +
     `MARKETPLACE COMPLIANCE: keep text density low, whitespace 40%+, no paragraphs, safe claims.\n` +
-    `NO MARKDOWN: Do not wrap words in **. Plain Uzbek only.\n` +
+    `LANGUAGE/SCRIPT: ${languageSpec}\n` +
+    `NO MARKDOWN: Do not wrap words in **.\n` +
     `NO POSTER TEXT: Headline must NOT be a slogan/CTA and must NOT include '!'.\n` +
     `BADGE RULE: if you output a badge, keep it neutral (e.g., "Yuqori sifat", "100% paxta"), never promo words like "Tanlov".\n` +
     `USER PRODUCT INFO (optional but IMPORTANT if present):\n${additionalInfo || 'N/A'}\n` +
@@ -823,13 +1036,31 @@ export async function generateInfografikaVariantsFromImage(
     });
   }
 
-  return out.slice(0, variantCount);
+  const normalized = out.slice(0, variantCount).map((v) => {
+    if (generationLanguage !== 'uz_latn') return v;
+    return {
+      ...v,
+      title: normalizeUzApostrophes(v.title),
+      headline: normalizeUzApostrophes(v.headline),
+      bullets: Array.isArray(v.bullets) ? v.bullets.map(normalizeUzApostrophes) : v.bullets,
+      badge: v.badge ? normalizeUzApostrophes(String(v.badge)) : v.badge,
+      features: Array.isArray(v.features)
+        ? v.features.map((f) => ({ ...f, text: normalizeUzApostrophes(f.text) }))
+        : v.features,
+    };
+  });
+
+  const proofread = await proofreadInfografikaVariantsText(normalized, generationLanguage);
+  if (requestedLanguage === 'uz_cyrl') {
+    return proofread.map((v) => translateVariantTextToLanguage(v, 'uz_cyrl'));
+  }
+  return proofread;
 }
 
 export async function generateInfografikaImageFromVariant(
   productImage: string,
   variant: InfografikaVariant,
-  options: { model?: string; fallbackModels?: string[]; aspectRatio?: string }
+  options: { model?: string; fallbackModels?: string[]; aspectRatio?: string; language?: InfografikaLanguage }
 ): Promise<string> {
   const aspectRatio = options?.aspectRatio || '3:4';
   const primaryModel = String(options?.model || GEMINI_IMAGE_MODEL).trim();
@@ -961,7 +1192,9 @@ export async function generateInfografikaImageFromVariant(
     (badge ? `Optional: a very small neutral badge pill INSIDE the info container only, text="${badge}". No promo words.\n\n` : '') +
     `${styleHint}\n` +
     `${layoutHint}\n\n` +
-    `TEXT TO RENDER (Uzbek, exact; no markdown, no exclamation):\n` +
+    `LANGUAGE/SCRIPT: ${describeInfografikaLanguage((options?.language || 'uz_latn') as InfografikaLanguage)}\n` +
+    `TEXT RENDERING RULE: Render text EXACTLY as provided. Do NOT translate. Do NOT paraphrase.\n` +
+    `TEXT TO RENDER (exact; no markdown, no exclamation):\n` +
     `HEADLINE: ${headline}\n` +
     `FEATURE CARDS (exact text + icon hint):\n` +
     `${cardsSpec}\n`;

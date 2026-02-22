@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { FiArrowLeft, FiDownload } from 'react-icons/fi';
+import { FiArrowLeft, FiDownload, FiStar } from 'react-icons/fi';
 import { useToast } from './ToastProvider';
 import { getTelegramSubscribeUrl } from '@/lib/telegram';
 import { useLanguage } from '@/lib/LanguageContext';
@@ -90,6 +90,9 @@ const CopywriterStudio: React.FC = () => {
   const [selectedMarketplace, setSelectedMarketplace] = useState(MARKETPLACES[0]);
   const [images, setImages] = useState<(string | null)[]>([]);
   const [categoryRef, setCategoryRef] = useState('');
+  const [imagePromptUz, setImagePromptUz] = useState('');
+  const [imagePromptEn, setImagePromptEn] = useState('');
+  const [promptGenerating, setPromptGenerating] = useState(false);
   const [results, setResults] = useState<Record<string, string>>({});
   const [generating, setGenerating] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -113,6 +116,8 @@ const CopywriterStudio: React.FC = () => {
   const maxImages = isAdmin ? 3 : (plan === 'business_plus' ? 3 : plan === 'pro' ? 2 : 1);
   const uploadedCount = images.filter(Boolean).length;
   const effectiveImages = images.slice(0, maxImages);
+
+  const canUsePromptAssist = isAdmin || plan !== 'free';
 
   // Fetch user
   useEffect(() => {
@@ -319,6 +324,60 @@ const CopywriterStudio: React.FC = () => {
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
+  const copyPlain = (text: string, key: string) => {
+    const final = String(text || '').trim();
+    if (!final) return;
+    navigator.clipboard.writeText(final);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const handleGenerateImagePromptByImages = async () => {
+    if (!canUsePromptAssist) {
+      toast.error("Bu funksiya Starter va undan yuqori tariflarda mavjud.");
+      return;
+    }
+
+    const activeImages = effectiveImages.filter(Boolean) as string[];
+    if (activeImages.length === 0) {
+      toast.error(t('copywriterNew.toasts.uploadImage', 'Iltimos, rasm yuklang.'));
+      return;
+    }
+
+    setPromptGenerating(true);
+    try {
+      const mode = isAdmin || plan === 'business_plus' ? 'ultra' : 'pro';
+      const res = await fetch('/api/generate-image-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productImages: activeImages, mode }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || 'Prompt yaratishda xatolik');
+      }
+
+      const uz = String(data?.prompt_uz || '').trim();
+      const en = String(data?.prompt_en || data?.prompt || '').trim();
+      setImagePromptUz(uz || en);
+      setImagePromptEn(en || uz);
+
+      if (user && !isAdmin && typeof data?.tokens_remaining === 'number') {
+        setUser({
+          ...user,
+          tokens_remaining: Number(data.tokens_remaining || 0),
+        });
+      }
+
+      toast.success(t('copywriterNew.toasts.generated', "Ma'lumotlar muvaffaqiyatli yaratildi!"));
+    } catch (e) {
+      toast.error((e as Error).message || t('common.error', 'Xatolik'));
+    } finally {
+      setPromptGenerating(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -483,6 +542,85 @@ const CopywriterStudio: React.FC = () => {
               placeholder={t('copywriterNew.additionalInfoPlaceholder', "Mahsulot haqida ma'lumot, kategoriya yoki maxsus ko'rsatmalar...")}
               className="w-full p-4 bg-gray-50 rounded-xl text-sm border border-gray-200 h-32 resize-none outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
             />
+          </div>
+
+          {/* Image Prompt Assistant */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 className="font-bold text-gray-800">{t('copywriterNew.imagePromptTitle', 'Rasm yaratish prompti')}</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  {t('copywriterNew.imagePromptHint', '⭐ bosib, rasmga qarab tayyor prompt oling (EN rasm generatsiya uchun).')}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGenerateImagePromptByImages}
+                disabled={promptGenerating || !canUsePromptAssist}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all ${
+                  promptGenerating
+                    ? 'bg-gray-200 text-gray-600 cursor-not-allowed'
+                    : canUsePromptAssist
+                      ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:shadow-md'
+                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                }`}
+                title={canUsePromptAssist ? 'Rasmga qarab prompt yozish (1 token)' : 'Starter va undan yuqori tarif kerak'}
+              >
+                <FiStar className="w-4 h-4" aria-hidden />
+                <span>{promptGenerating ? '...' : '1 token'}</span>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-gray-500">UZ</p>
+                  <button
+                    type="button"
+                    onClick={() => copyPlain(imagePromptUz, 'image-prompt-uz')}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                      copiedKey === 'image-prompt-uz' ? 'bg-green-500 text-white' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                    }`}
+                    disabled={!imagePromptUz}
+                  >
+                    {copiedKey === 'image-prompt-uz' ? t('common.copied', 'Nusxalandi!') : t('common.copy', 'Nusxa')}
+                  </button>
+                </div>
+                <textarea
+                  value={imagePromptUz}
+                  onChange={(e) => setImagePromptUz(e.target.value)}
+                  placeholder={t('copywriterNew.imagePromptPlaceholderUz', 'UZ prompt (izoh uchun)')}
+                  className="mt-2 w-full p-3 bg-gray-50 rounded-xl text-sm border border-gray-200 h-24 resize-none outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-gray-500">EN</p>
+                  <button
+                    type="button"
+                    onClick={() => copyPlain(imagePromptEn, 'image-prompt-en')}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                      copiedKey === 'image-prompt-en' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                    disabled={!imagePromptEn}
+                  >
+                    {copiedKey === 'image-prompt-en' ? t('common.copied', 'Nusxalandi!') : t('common.copy', 'Nusxa')}
+                  </button>
+                </div>
+                <textarea
+                  value={imagePromptEn}
+                  onChange={(e) => setImagePromptEn(e.target.value)}
+                  placeholder={t('copywriterNew.imagePromptPlaceholderEn', 'EN prompt (rasm generatsiya uchun)')}
+                  className="mt-2 w-full p-3 bg-gray-50 rounded-xl text-sm border border-gray-200 h-28 resize-none outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
+                />
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-[12px] text-gray-600">
+                {t('copywriterNew.imagePromptTips', 'Tavsiya: EN promptni Marketplace Studio / rasm generatoriga qo‘ying. UZ prompt — mazmunni tekshirish uchun.')}
+              </div>
+            </div>
           </div>
 
           {/* Token Cost Info */}
