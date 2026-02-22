@@ -7,7 +7,7 @@ import {
   refundTokens,
   reserveTokens,
 } from '@/lib/subscription';
-import { generateInfografikaVariantsFromImage } from '@/services/gemini';
+import { generateInfografikaImageFromVariant, generateInfografikaVariantsFromImage } from '@/services/gemini';
 
 export async function POST(request: NextRequest) {
   let userId: string | null = null;
@@ -26,8 +26,8 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => null);
     const image = typeof body?.image === 'string' ? body.image : '';
-    const productName = typeof body?.productName === 'string' ? body.productName : '';
-    const productDescription = typeof body?.productDescription === 'string' ? body.productDescription : '';
+    const productNameRaw = typeof body?.productName === 'string' ? body.productName : '';
+    const productDescriptionRaw = typeof body?.productDescription === 'string' ? body.productDescription : '';
 
     if (!image || !image.startsWith('data:image/')) {
       return NextResponse.json({ error: 'Rasm kerak (data URL).' }, { status: 400 });
@@ -36,10 +36,10 @@ export async function POST(request: NextRequest) {
     const plan = user.role === 'admin' ? 'business_plus' : user.subscription_plan;
     const policy = getInfografikaPolicy(plan);
 
-    const combinedInfo = [
-      productName ? `NAME: ${productName}` : '',
-      productDescription ? `DESC: ${productDescription}` : '',
-    ]
+    const productName = productNameRaw.trim().slice(0, policy.maxProductNameChars);
+    const productDescription = productDescriptionRaw.trim().slice(0, policy.maxAdditionalInfoChars);
+
+    const combinedInfo = [productName ? `NAME: ${productName}` : '', productDescription ? `DESC: ${productDescription}` : '']
       .filter(Boolean)
       .join('\n');
 
@@ -56,12 +56,29 @@ export async function POST(request: NextRequest) {
       language: 'uz',
     });
 
+    // Professional designer-like render using marketplace image models.
+    // Best-effort: if image generation fails for a variant, client will fall back to canvas rendering.
+    const variantsWithImages = [] as Array<(typeof variants)[number] & { image?: string | null; image_error?: string | null }>;
+    for (const v of variants) {
+      try {
+        const img = await generateInfografikaImageFromVariant(image, v, {
+          model: policy.imageModel,
+          fallbackModels: policy.imageFallbackModels,
+          aspectRatio: '3:4',
+        });
+        variantsWithImages.push({ ...v, image: img, image_error: null });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        variantsWithImages.push({ ...v, image: null, image_error: msg.slice(0, 2000) });
+      }
+    }
+
     if (user.role !== 'admin') {
       await recordTokenUsage({
         userId: user.id,
         tokensUsed: reservedTokens,
         serviceType: 'infografika_variants',
-        modelUsed: policy.textModel,
+        modelUsed: `${policy.textModel} + ${policy.imageModel}`,
         prompt: combinedInfo,
       });
     }
@@ -70,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      variants,
+      variants: variantsWithImages,
       variant_count: policy.variantCount,
       tokens_charged: user.role === 'admin' ? 0 : reservedTokens,
     });

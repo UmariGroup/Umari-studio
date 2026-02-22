@@ -618,14 +618,25 @@ export interface InfografikaPolicy {
   costPerGenerate: number;
   variantCount: number;
   maxImages: number;
+  maxProductNameChars: number;
   maxAdditionalInfoChars: number;
   textModel: string;
+  imageModel: string;
+  imageFallbackModels: string[];
 }
 
 export function getInfografikaPolicy(plan: SubscriptionPlan): InfografikaPolicy {
   // Infografika requires a multimodal TEXT model (it receives an image input and returns JSON text).
-  // Avoid accidentally using image-only models via GEMINI_TEXT_MODEL.
-  const defaultTextModel = (process.env.GEMINI_INFOGRAFIKA_TEXT_MODEL || 'gemini-2.0-flash').trim();
+  // Provide sensible per-plan defaults, with env overrides.
+  const starterTextModel = (process.env.GEMINI_INFOGRAFIKA_TEXT_MODEL_STARTER || process.env.GEMINI_INFOGRAFIKA_TEXT_MODEL || 'gemini-2.0-flash').trim();
+  const proTextModel = (process.env.GEMINI_INFOGRAFIKA_TEXT_MODEL_PRO || process.env.GEMINI_INFOGRAFIKA_TEXT_MODEL || 'gemini-2.5-pro').trim();
+  const businessTextModel = (process.env.GEMINI_INFOGRAFIKA_TEXT_MODEL_BUSINESS || process.env.GEMINI_INFOGRAFIKA_TEXT_MODEL || 'gemini-2.5-pro').trim();
+
+  // Infografika rendering should use the same IMAGE models as Marketplace Studio.
+  // Starter: "oddiy" marketplace model. Pro: nano-banana. Business+: gemini-3-pro.
+  const starterImageModel = (process.env.GEMINI_INFOGRAFIKA_IMAGE_MODEL_STARTER || 'gemini-2.5-flash-image').trim();
+  const proImageModel = (process.env.GEMINI_INFOGRAFIKA_IMAGE_MODEL_PRO || 'nano-banana-pro-preview').trim();
+  const businessImageModel = (process.env.GEMINI_INFOGRAFIKA_IMAGE_MODEL_BUSINESS || 'gemini-3-pro-image-preview').trim();
 
   // Infografika: conversion-oriented variants. Free plan is not allowed.
   if (plan === 'starter') {
@@ -633,8 +644,11 @@ export function getInfografikaPolicy(plan: SubscriptionPlan): InfografikaPolicy 
       costPerGenerate: 20,
       variantCount: 1,
       maxImages: 1,
-      maxAdditionalInfoChars: 500,
-      textModel: defaultTextModel,
+      maxProductNameChars: 40,
+      maxAdditionalInfoChars: 80,
+      textModel: starterTextModel,
+      imageModel: starterImageModel,
+      imageFallbackModels: [proImageModel, businessImageModel].filter(Boolean),
     };
   }
   if (plan === 'pro') {
@@ -642,8 +656,11 @@ export function getInfografikaPolicy(plan: SubscriptionPlan): InfografikaPolicy 
       costPerGenerate: 20,
       variantCount: 2,
       maxImages: 1,
-      maxAdditionalInfoChars: 1000,
-      textModel: defaultTextModel,
+      maxProductNameChars: 50,
+      maxAdditionalInfoChars: 120,
+      textModel: proTextModel,
+      imageModel: proImageModel,
+      imageFallbackModels: [starterImageModel, businessImageModel].filter(Boolean),
     };
   }
   if (plan === 'business_plus') {
@@ -651,8 +668,11 @@ export function getInfografikaPolicy(plan: SubscriptionPlan): InfografikaPolicy 
       costPerGenerate: 20,
       variantCount: 3,
       maxImages: 1,
-      maxAdditionalInfoChars: 2500,
-      textModel: defaultTextModel,
+      maxProductNameChars: 60,
+      maxAdditionalInfoChars: 150,
+      textModel: businessTextModel,
+      imageModel: businessImageModel,
+      imageFallbackModels: [proImageModel, starterImageModel].filter(Boolean),
     };
   }
 

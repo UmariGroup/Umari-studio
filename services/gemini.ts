@@ -341,6 +341,18 @@ function describeNoTextResponse(response: any): string {
   }
 }
 
+function sanitizeInfografikaText(value: unknown): string {
+  let s = String(value ?? '').trim();
+  if (!s) return '';
+
+  // Remove common markdown / formatting artifacts that degrade the final design.
+  s = s.replace(/\*\*([^*]+)\*\*/g, '$1');
+  s = s.replace(/__([^_]+)__/g, '$1');
+  s = s.replace(/[`#*_~]/g, '');
+  s = s.replace(/\s+/g, ' ').trim();
+  return s;
+}
+
 function extractFirstImageDataUrl(response: any): string | null {
   const parts = response?.candidates?.[0]?.content?.parts;
   if (!Array.isArray(parts)) return null;
@@ -570,6 +582,7 @@ export type InfografikaVariant = {
   title: string;
   headline: string;
   bullets: string[];
+  features?: Array<{ text: string; icon: InfografikaIcon }>;
   badge?: string | null;
   layout: 'hero' | 'detail' | 'angled';
   scores: {
@@ -579,6 +592,23 @@ export type InfografikaVariant = {
     marketplaceSafe: number;
   };
 };
+
+export type InfografikaIcon =
+  | 'wind'
+  | 'cotton'
+  | 'feather'
+  | 'shield'
+  | 'droplet'
+  | 'thermo'
+  | 'stretch'
+  | 'run'
+  | 'sparkles'
+  | 'check'
+  | 'tag'
+  | 'leaf'
+  | 'star'
+  | 'box'
+  | 'info';
 
 export async function generateInfografikaVariantsFromImage(
   productImage: string,
@@ -598,9 +628,11 @@ export async function generateInfografikaVariantsFromImage(
     'You are a conversion-first marketplace infographic strategist for ecommerce listings. ' +
     'You are NOT a beauty engine; you are a sales optimization engine. ' +
     'You MUST return ONLY valid JSON (no markdown). Language: Uzbek. ' +
+    'TEXT HYGIENE: Never use markdown symbols like **, #, _, ` or bullet characters inside strings. Plain text only. ' +
     'OUTPUT SCHEMA (strict): {"variants": Array<Variant>} where Variant has: ' +
     'id (string), strategy (CTR_BOOSTER|TRUST_OPTIMIZER|PREMIUM_PERCEPTION), title (short), ' +
-    'headline (Uzbek, 3–4 words, bold-impact), bullets (array of 3 short Uzbek benefit-USPs, each max 5 words), ' +
+    'headline (Uzbek, 3–4 words, bold-impact), ' +
+    'features (array of EXACTLY 3 objects: {text: short Uzbek USP, max 5 words; icon: one of [wind,cotton,feather,shield,droplet,thermo,stretch,run,sparkles,check,tag,leaf,star,box,info]}), ' +
     'badge (optional short Uzbek, max 2–3 words), layout (hero|detail|angled), ' +
     'scores {ctrImpact 1-10, trustSignal 1-10, premiumScore 1-10, marketplaceSafe 1-10}. ' +
     '\n\nEXACT PROMPT ARCHITECTURE (for your reasoning, but output JSON only): ' +
@@ -629,6 +661,7 @@ export async function generateInfografikaVariantsFromImage(
     `VARIANT STRATEGIES REQUIRED (use different ones): TRUST_OPTIMIZER, CTR_BOOSTER, PREMIUM_PERCEPTION.\n` +
     `RAKURS DIVERSIFIKATSIYASI: layouts must vary (hero vs detail zoom vs slight angled).\n` +
     `MARKETPLACE COMPLIANCE: keep text density low, whitespace 40%+, no paragraphs, safe claims.\n` +
+    `NO MARKDOWN: Do not wrap words in **. Plain Uzbek only.\n` +
     `USER PRODUCT INFO (optional but IMPORTANT if present):\n${additionalInfo || 'N/A'}\n` +
     `If user info exists, reflect it naturally in headline + USPs.\n` +
     `Return JSON only in the required schema.`;
@@ -672,6 +705,44 @@ export async function generateInfografikaVariantsFromImage(
     return Math.max(1, Math.min(10, Math.round(v)));
   };
 
+  const normalizeIcon = (raw: any): InfografikaIcon => {
+    const s = String(raw || '').trim().toLowerCase();
+    const allowed: InfografikaIcon[] = [
+      'wind',
+      'cotton',
+      'feather',
+      'shield',
+      'droplet',
+      'thermo',
+      'stretch',
+      'run',
+      'sparkles',
+      'check',
+      'tag',
+      'leaf',
+      'star',
+      'box',
+      'info',
+    ];
+    if ((allowed as string[]).includes(s)) return s as InfografikaIcon;
+    return 'info';
+  };
+
+  const inferIconFromText = (text: string): InfografikaIcon => {
+    const s = String(text || '').toLowerCase();
+    if (/(havo|nafas|vent|o'tkazuvchan)/i.test(s)) return 'wind';
+    if (/(paxta|cotton)/i.test(s)) return 'cotton';
+    if (/(mayin|yumshoq|soft)/i.test(s)) return 'feather';
+    if (/(mustahkam|bardosh|uzoq|xizmat|kafolat)/i.test(s)) return 'shield';
+    if (/(nam|ter|quruq|dry|namlik)/i.test(s)) return 'droplet';
+    if (/(issiq|sovuq|term|harorat)/i.test(s)) return 'thermo';
+    if (/(cho'z|stretch|elast|moslashuvchan)/i.test(s)) return 'stretch';
+    if (/(mashg'ulot|sport|run|fitness|yugur)/i.test(s)) return 'run';
+    if (/(qulay|komfort|yoqimli)/i.test(s)) return 'sparkles';
+    if (/(premium|yuqori|sifat)/i.test(s)) return 'star';
+    return 'info';
+  };
+
   const out: InfografikaVariant[] = variantsRaw
     .slice(0, variantCount)
     .map((v: any, idx: number) => {
@@ -683,17 +754,45 @@ export async function generateInfografikaVariantsFromImage(
       const allowedLayouts: InfografikaVariant['layout'][] = ['hero', 'detail', 'angled'];
       const finalLayout = allowedLayouts.includes(layout) ? layout : allowedLayouts[idx % allowedLayouts.length];
 
-      const bullets = Array.isArray(v?.bullets) ? v.bullets.map((x: any) => String(x || '').trim()).filter(Boolean) : [];
-      const fixedBullets = bullets.slice(0, 3);
-      while (fixedBullets.length < 3) fixedBullets.push('Yuqori sifat');
+      const featuresRaw = Array.isArray(v?.features) ? v.features : null;
+      const normalizedFeatures: Array<{ text: string; icon: InfografikaIcon }> = [];
+      if (featuresRaw) {
+        for (const item of featuresRaw) {
+          const text = sanitizeInfografikaText(item?.text);
+          if (!text) continue;
+          normalizedFeatures.push({ text, icon: normalizeIcon(item?.icon) });
+          if (normalizedFeatures.length >= 3) break;
+        }
+      }
+
+      const bulletsRaw = Array.isArray(v?.bullets)
+        ? v.bullets.map((x: any) => sanitizeInfografikaText(x)).filter(Boolean)
+        : [];
+
+      // If features missing, infer from bullets. If bullets missing, backfill defaults.
+      if (normalizedFeatures.length === 0) {
+        const from = bulletsRaw.length ? bulletsRaw : ['Yuqori sifat', 'Qulay', 'Ishonchli'];
+        for (const b of from) {
+          normalizedFeatures.push({ text: b, icon: inferIconFromText(b) });
+          if (normalizedFeatures.length >= 3) break;
+        }
+      }
+
+      while (normalizedFeatures.length < 3) {
+        const fallback = normalizedFeatures.length === 0 ? 'Yuqori sifat' : normalizedFeatures.length === 1 ? 'Qulay' : 'Ishonchli';
+        normalizedFeatures.push({ text: fallback, icon: inferIconFromText(fallback) });
+      }
+
+      const fixedBullets = normalizedFeatures.map((f) => f.text).slice(0, 3);
 
       return {
         id: String(v?.id || `${finalStrategy.toLowerCase()}_${idx + 1}`),
         strategy: finalStrategy,
-        title: String(v?.title || '').trim() || (finalStrategy === 'CTR_BOOSTER' ? 'CTR Booster' : finalStrategy === 'TRUST_OPTIMIZER' ? 'Trust' : 'Premium'),
-        headline: String(v?.headline || '').trim() || 'Marketplace uchun',
+        title: sanitizeInfografikaText(v?.title) || (finalStrategy === 'CTR_BOOSTER' ? 'CTR Booster' : finalStrategy === 'TRUST_OPTIMIZER' ? 'Trust' : 'Premium'),
+        headline: sanitizeInfografikaText(v?.headline) || 'Marketplace uchun',
         bullets: fixedBullets,
-        badge: v?.badge ? String(v.badge).trim() : null,
+        features: normalizedFeatures.slice(0, 3),
+        badge: v?.badge ? sanitizeInfografikaText(v.badge) : null,
         layout: finalLayout,
         scores: {
           ctrImpact: normalizeScore(v?.scores?.ctrImpact),
@@ -720,6 +819,166 @@ export async function generateInfografikaVariantsFromImage(
   }
 
   return out.slice(0, variantCount);
+}
+
+export async function generateInfografikaImageFromVariant(
+  productImage: string,
+  variant: InfografikaVariant,
+  options: { model?: string; fallbackModels?: string[]; aspectRatio?: string }
+): Promise<string> {
+  const aspectRatio = options?.aspectRatio || '3:4';
+  const primaryModel = String(options?.model || GEMINI_IMAGE_MODEL).trim();
+  const planFallbacks = Array.isArray(options?.fallbackModels)
+    ? options!.fallbackModels!.map((v) => String(v || '').trim()).filter(Boolean)
+    : [];
+
+  const modelCandidates = Array.from(new Set([primaryModel, ...planFallbacks, ...GEMINI_IMAGE_FALLBACK_MODELS].filter(Boolean)));
+  if (modelCandidates.length === 0) throw new Error('Gemini image model is empty.');
+
+  const headline = sanitizeInfografikaText(variant.headline).slice(0, 48);
+  const badge = sanitizeInfografikaText(variant.badge || '').slice(0, 24);
+  const bullets = (Array.isArray(variant.bullets) ? variant.bullets : [])
+    .map((b) => sanitizeInfografikaText(b))
+    .filter(Boolean)
+    .slice(0, 3);
+
+  const strategy = variant.strategy;
+  const layout = variant.layout;
+
+  const inferIconHint = (text: string): string => {
+    const s = String(text || '').toLowerCase();
+    if (/(havo|nafas|vent|o'tkazuvchan)/i.test(s)) return 'wind/airflow icon';
+    if (/(paxta|cotton)/i.test(s)) return 'cotton/flower icon';
+    if (/(mayin|yumshoq|soft)/i.test(s)) return 'feather/softness icon';
+    if (/(mustahkam|bardosh|uzoq|xizmat)/i.test(s)) return 'shield/durability icon';
+    if (/(yengil|engil|light)/i.test(s)) return 'feather/lightweight icon';
+    if (/(issiq|sovuq|term|harorat)/i.test(s)) return 'thermometer/temperature icon';
+    if (/(nam|ter|quruq|dry)/i.test(s)) return 'droplet/moisture icon';
+    if (/(cho'z|stretch|elast)/i.test(s)) return 'stretch/arrows icon';
+    if (/(oson|qulay|komfort|comfort)/i.test(s)) return 'sparkles/comfort icon';
+    if (/(mashg'ulot|sport|run|fitness)/i.test(s)) return 'running/fitness icon';
+    return 'simple minimal line icon';
+  };
+
+  const iconToHint = (icon: any, text: string): string => {
+    const s = String(icon || '').toLowerCase();
+    switch (s) {
+      case 'wind':
+        return 'wind/airflow icon';
+      case 'cotton':
+        return 'cotton/flower icon';
+      case 'feather':
+        return 'feather/softness icon';
+      case 'shield':
+        return 'shield/protection icon';
+      case 'droplet':
+        return 'droplet/moisture icon';
+      case 'thermo':
+        return 'thermometer/temperature icon';
+      case 'stretch':
+        return 'stretch/arrows icon';
+      case 'run':
+        return 'running/fitness icon';
+      case 'sparkles':
+        return 'sparkles/comfort icon';
+      case 'check':
+        return 'checkmark icon';
+      case 'tag':
+        return 'tag/label icon';
+      case 'leaf':
+        return 'leaf/natural icon';
+      case 'star':
+        return 'star/premium icon';
+      case 'box':
+        return 'box/package icon';
+      case 'info':
+        return 'info icon';
+      default:
+        return inferIconHint(text);
+    }
+  };
+
+  const styleHint =
+    strategy === 'CTR_BOOSTER'
+      ? 'Style: scroll-stopping, high contrast, modern ecommerce ad creative, strong hierarchy, clean icons, 1 main accent color derived from the product.'
+      : strategy === 'TRUST_OPTIMIZER'
+        ? 'Style: clean, minimal, trust-building, catalog-like, calm colors, glassmorphism header, lots of whitespace, no aggressive badges.'
+        : 'Style: premium luxury feel, elegant spacing, subtle gradient + vignette, refined typography, minimal elements, tasteful accent.';
+
+  const layoutHint =
+    layout === 'detail'
+      ? 'Composition: slightly zoomed-in detail crop to show texture, keep product recognizable and centered.'
+      : layout === 'angled'
+        ? 'Composition: a subtle dynamic angle (very small), keep it realistic and not distorted.'
+        : 'Composition: hero shot, centered product, crisp focus.';
+
+  const features = Array.isArray((variant as any)?.features) ? (variant as any).features : null;
+  const cardsSpec = (features && features.length ? features : bullets.map((b) => ({ text: b, icon: 'info' })))
+    .slice(0, 3)
+    .map((f: any, i: number) => {
+      const text = sanitizeInfografikaText(f?.text || '').slice(0, 28);
+      const iconHint = iconToHint(f?.icon, text);
+      return `CARD_${i + 1}: icon=${iconHint}; text="${text}"`;
+    })
+    .join('\n');
+
+  const prompt =
+    `Task: Create a premium marketplace infographic creative (single image) for an ecommerce listing.\n` +
+    `Output: EXACTLY 1080x1440 pixels (3:4).\n` +
+    `CRITICAL PRODUCT IDENTITY LOCK: Preserve the product EXACTLY as in the provided photo (shape, colors, logo, material). Do NOT redesign the product.\n` +
+    `CRITICAL DESIGN GOAL: looks like a senior designer made it (better than a template). Balanced spacing, modern typography, subtle depth, no clutter.\n` +
+    `CRITICAL COLOR RULE: Automatically pick a harmonious color palette based on the product photo. Use a main accent color derived from the product (or background) and apply it consistently to UI elements.\n` +
+    `BACKGROUND: create a clean premium background that matches the product (gradient + soft vignette). Avoid noisy textures.\n` +
+    `LAYOUT: The product is the hero (center/right). Add a TOP glassmorphism header panel (rounded rectangle, semi-transparent) with the headline text.\n` +
+    `FEATURE CARDS: Under the headline inside the same top panel, show 3 separate feature pills/cards in one row. Each card contains a small simple line icon + short text.\n` +
+    `CARD COLOR: Cards/pills must be tinted using the chosen accent color (same hue family as the product). Icons should be monochrome and match the accent.\n` +
+    `TYPOGRAPHY (strict): Use ONE font family (Inter/SF Pro style). Use only 2 weights: Headline 700-800, cards 500-600. Keep tracking slightly tight.\n` +
+    `TEXT FIT (strict): Headline must be <= 26 characters if possible; each card text must be <= 22 characters. If text is longer, shorten wording but keep meaning.\n` +
+    `TEXT RENDERING: Ensure all letters are crisp, no spelling mistakes, no random symbols. Uzbek apostrophes must render correctly (o‘, g‘).\n` +
+    `TEXT RULES: Uzbek text only. Use text EXACTLY as provided. No markdown symbols (*, **, #). Do NOT add prices, discounts, or exaggerated claims.\n` +
+    (badge ? `Optional subtle badge pill (small): text="${badge}". Must match palette; no aggressive promo styling.\n` : '') +
+    `${styleHint}\n` +
+    `${layoutHint}\n\n` +
+    `TEXT TO RENDER (Uzbek, exact):\n` +
+    `HEADLINE: ${headline}\n` +
+    `FEATURE CARDS (exact text + icon hint):\n` +
+    `${cardsSpec}\n`;
+
+  const inline = toInlineDataPart(productImage);
+  if (!inline) throw new Error('Invalid product image data URL.');
+
+  const body: any = {
+    contents: [{ role: 'user', parts: [{ text: prompt }, inline] }],
+    safetySettings: [
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+    ],
+    generationConfig: {
+      imageConfig: { aspectRatio: normalizeAspectRatio(aspectRatio) },
+    },
+  };
+
+  let lastError: unknown = null;
+  for (let index = 0; index < modelCandidates.length; index++) {
+    const model = modelCandidates[index];
+    try {
+      const response = await geminiGenerateContent(model, body);
+
+      const blockReason = response?.promptFeedback?.blockReason;
+      if (blockReason) throw new Error(`PROMPT_BLOCKED: ${blockReason}`);
+
+      const dataUrl = extractFirstImageDataUrl(response);
+      if (dataUrl) return dataUrl;
+
+      lastError = new Error(`NO_IMAGE: ${model}`);
+    } catch (error) {
+      lastError = error;
+      if (index < modelCandidates.length - 1 && shouldTryNextImageModel(error)) continue;
+      throw error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('No image returned.');
 }
 
 export async function generateMarketplaceImage(

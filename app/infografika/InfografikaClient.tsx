@@ -15,9 +15,12 @@ type InfografikaVariant = {
   title: string;
   headline: string;
   bullets: string[];
+  features?: Array<{ text: string; icon: string }>;
   badge?: string | null;
   layout: 'hero' | 'detail' | 'angled';
   scores: { ctrImpact: number; trustSignal: number; premiumScore: number; marketplaceSafe: number };
+  image?: string | null;
+  image_error?: string | null;
 };
 
 type UserData = {
@@ -321,10 +324,18 @@ export default function InfografikaClient() {
   }, [isAdmin, plan]);
 
   const descriptionCharLimit = useMemo(() => {
-    if (isAdmin) return 2500;
-    if (plan === 'starter') return 500;
-    if (plan === 'pro') return 1000;
-    if (plan === 'business_plus') return 2500;
+    if (isAdmin) return 150;
+    if (plan === 'starter') return 80;
+    if (plan === 'pro') return 120;
+    if (plan === 'business_plus') return 150;
+    return 0;
+  }, [isAdmin, plan]);
+
+  const productNameCharLimit = useMemo(() => {
+    if (isAdmin) return 60;
+    if (plan === 'starter') return 40;
+    if (plan === 'pro') return 50;
+    if (plan === 'business_plus') return 60;
     return 0;
   }, [isAdmin, plan]);
 
@@ -427,9 +438,22 @@ export default function InfografikaClient() {
   useEffect(() => {
     const doRender = async () => {
       if (!image || variants.length === 0) return;
+
+      // If server returned AI-rendered images for all variants, skip canvas rendering.
+      const allHaveServerImages = variants.every((v) => typeof v.image === 'string' && v.image.startsWith('data:image/'));
+      if (allHaveServerImages) {
+        const next: Record<string, string> = {};
+        for (const v of variants) {
+          next[v.id] = String(v.image);
+        }
+        lastRenderedForImageRef.current = image;
+        setRendered(next);
+        return;
+      }
+
       if (lastRenderedForImageRef.current === image) {
         // Re-render only if some variant missing
-        const missing = variants.some((v) => !rendered[v.id]);
+        const missing = variants.some((v) => !(v.image && String(v.image).startsWith('data:image/')) && !rendered[v.id]);
         if (!missing) return;
       }
 
@@ -437,7 +461,11 @@ export default function InfografikaClient() {
         const img = await loadImage(image);
         const next: Record<string, string> = {};
         for (const v of variants) {
-          next[v.id] = renderInfografika(img, v, { w: 1080, h: 1440 });
+          if (v.image && String(v.image).startsWith('data:image/')) {
+            next[v.id] = String(v.image);
+          } else {
+            next[v.id] = renderInfografika(img, v, { w: 1080, h: 1440 });
+          }
         }
         lastRenderedForImageRef.current = image;
         setRendered(next);
@@ -504,10 +532,16 @@ export default function InfografikaClient() {
               <p className="mt-1 text-xs text-slate-600">AI CTR/Trust/Premium matnlarini shunga qarab moslaydi.</p>
 
               <label className="mt-3 block">
-                <span className="text-xs font-semibold text-slate-700">Mahsulot nomi (ixtiyoriy)</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-700">Mahsulot nomi (ixtiyoriy)</span>
+                  <span className="text-xs text-slate-500">
+                    {productName.length}/{productNameCharLimit || 0}
+                  </span>
+                </div>
                 <input
                   value={productName}
-                  onChange={(e) => setProductName(e.target.value)}
+                  onChange={(e) => setProductName(e.target.value.slice(0, Math.max(0, productNameCharLimit)))}
+                  maxLength={productNameCharLimit || 0}
                   className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-900 outline-none focus:border-blue-400"
                   placeholder="Masalan: Erkaklar krossovkasi"
                 />
@@ -617,6 +651,12 @@ export default function InfografikaClient() {
                         >
                           PNG yuklab olish
                         </button>
+
+                        {v.image_error ? (
+                          <p className="mt-2 text-[11px] text-amber-700">
+                            AI dizayn yaratishda xatolik bo‘ldi, canvas fallback ishlatildi.
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                   );
