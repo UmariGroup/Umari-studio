@@ -179,7 +179,7 @@ export function toUzbekErrorMessage(err: ParsedApiError): { title: string; messa
   if (err.status >= 500) {
     return {
       title: 'Server xatosi',
-      message: "Serverda xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring.",
+      message: "Birozdan so'ng qayta urinib ko'ring.",
     };
   }
 
