@@ -314,6 +314,33 @@ function extractText(response: any): string {
     .join('');
 }
 
+function coerceTextOnlyModel(model: string | undefined, fallback: string): string {
+  const trimmed = String(model || '').trim();
+  if (!trimmed) return fallback;
+
+  const lower = trimmed.toLowerCase();
+  // Guard against misconfiguration: image-only models will often return inline images and no text.
+  if (lower.includes('flash-image') || lower.includes('-image') || lower.startsWith('imagen-')) {
+    return fallback;
+  }
+  return trimmed;
+}
+
+function describeNoTextResponse(response: any): string {
+  try {
+    const finishReason = response?.candidates?.[0]?.finishReason || response?.candidates?.[0]?.finish_reason;
+    const blockReason = response?.promptFeedback?.blockReason || response?.prompt_feedback?.block_reason;
+    const safetyRatings = response?.promptFeedback?.safetyRatings || response?.prompt_feedback?.safety_ratings;
+    const extras: string[] = [];
+    if (finishReason) extras.push(`finishReason=${String(finishReason)}`);
+    if (blockReason) extras.push(`blockReason=${String(blockReason)}`);
+    if (Array.isArray(safetyRatings) && safetyRatings.length > 0) extras.push(`safetyRatings=${JSON.stringify(safetyRatings).slice(0, 500)}`);
+    return extras.length ? ` (${extras.join(', ')})` : '';
+  } catch {
+    return '';
+  }
+}
+
 function extractFirstImageDataUrl(response: any): string | null {
   const parts = response?.candidates?.[0]?.content?.parts;
   if (!Array.isArray(parts)) return null;
@@ -562,7 +589,8 @@ export async function generateInfografikaVariantsFromImage(
     language?: 'uz';
   }
 ): Promise<InfografikaVariant[]> {
-  const model = (options.model || GEMINI_TEXT_MODEL).trim();
+  const safeFallbackModel = 'gemini-2.0-flash';
+  const model = coerceTextOnlyModel((options.model || GEMINI_TEXT_MODEL).trim(), safeFallbackModel);
   const variantCount = Math.max(1, Math.min(3, Number(options.variantCount || 1)));
   const additionalInfo = String(options.additionalInfo || '').slice(0, 2500);
 
@@ -620,9 +648,19 @@ export async function generateInfografikaVariantsFromImage(
     },
   };
 
-  const response = await geminiGenerateContent(model, body);
-  const raw = extractText(response).trim();
-  if (!raw) throw new Error('Model did not return text.');
+  // First attempt with requested model.
+  let response = await geminiGenerateContent(model, body);
+  let raw = extractText(response).trim();
+
+  // If the model returns no text (common with incompatible models or safety blocks), retry with a safe multimodal text model.
+  if (!raw && model !== safeFallbackModel) {
+    response = await geminiGenerateContent(safeFallbackModel, body);
+    raw = extractText(response).trim();
+  }
+
+  if (!raw) {
+    throw new Error(`Model did not return text.${describeNoTextResponse(response)}`);
+  }
 
   const jsonText = extractFirstJsonObject(raw) || raw;
   const parsed = safeJsonParse<{ variants?: any[] }>(jsonText);

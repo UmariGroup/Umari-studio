@@ -623,6 +623,10 @@ export interface InfografikaPolicy {
 }
 
 export function getInfografikaPolicy(plan: SubscriptionPlan): InfografikaPolicy {
+  // Infografika requires a multimodal TEXT model (it receives an image input and returns JSON text).
+  // Avoid accidentally using image-only models via GEMINI_TEXT_MODEL.
+  const defaultTextModel = (process.env.GEMINI_INFOGRAFIKA_TEXT_MODEL || 'gemini-2.0-flash').trim();
+
   // Infografika: conversion-oriented variants. Free plan is not allowed.
   if (plan === 'starter') {
     return {
@@ -630,7 +634,7 @@ export function getInfografikaPolicy(plan: SubscriptionPlan): InfografikaPolicy 
       variantCount: 1,
       maxImages: 1,
       maxAdditionalInfoChars: 500,
-      textModel: 'gemini-2.0-flash-lite-001',
+      textModel: defaultTextModel,
     };
   }
   if (plan === 'pro') {
@@ -639,7 +643,7 @@ export function getInfografikaPolicy(plan: SubscriptionPlan): InfografikaPolicy 
       variantCount: 2,
       maxImages: 1,
       maxAdditionalInfoChars: 1000,
-      textModel: 'gemini-2.5-flash-lite',
+      textModel: defaultTextModel,
     };
   }
   if (plan === 'business_plus') {
@@ -648,7 +652,7 @@ export function getInfografikaPolicy(plan: SubscriptionPlan): InfografikaPolicy 
       variantCount: 3,
       maxImages: 1,
       maxAdditionalInfoChars: 2500,
-      textModel: 'gemini-2.5-pro',
+      textModel: defaultTextModel,
     };
   }
 
