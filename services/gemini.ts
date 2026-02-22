@@ -907,7 +907,7 @@ export async function generateInfografikaImageFromVariant(
     strategy === 'CTR_BOOSTER'
       ? 'Style: structured marketplace infographic layout, slightly higher contrast for readability, but still catalog/UI-like. Use ONE accent color derived from the product.'
       : strategy === 'TRUST_OPTIMIZER'
-        ? 'Style: clean, minimal, trust-building, catalog-like, calm colors, glassmorphism header, lots of whitespace, no aggressive badges.'
+        ? 'Style: clean, minimal, trust-building, catalog-like, calm colors, subtle frosted UI container, lots of whitespace, no aggressive badges.'
         : 'Style: premium luxury feel, elegant spacing, subtle gradient + vignette, refined typography, minimal elements, tasteful accent.';
 
   const layoutHint =
