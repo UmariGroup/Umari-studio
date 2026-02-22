@@ -349,6 +349,7 @@ function sanitizeInfografikaText(value: unknown): string {
   s = s.replace(/\*\*([^*]+)\*\*/g, '$1');
   s = s.replace(/__([^_]+)__/g, '$1');
   s = s.replace(/[`#*_~]/g, '');
+  s = s.replace(/[!！]+/g, '');
   s = s.replace(/\s+/g, ' ').trim();
   return s;
 }
@@ -629,6 +630,8 @@ export async function generateInfografikaVariantsFromImage(
     'You are NOT a beauty engine; you are a sales optimization engine. ' +
     'You MUST return ONLY valid JSON (no markdown). Language: Uzbek. ' +
     'TEXT HYGIENE: Never use markdown symbols like **, #, _, ` or bullet characters inside strings. Plain text only. ' +
+    'NO AD LANGUAGE: Do NOT write CTA, imperatives, or hype (no "Zalda o\'zingni ko\'rsat", no "Buy now", no exclamation marks). ' +
+    'NO PROMO WORDS: avoid words that imply an advertisement/poster: tanlov, promo, aksiya, chegirma, sale, skidka. ' +
     'OUTPUT SCHEMA (strict): {"variants": Array<Variant>} where Variant has: ' +
     'id (string), strategy (CTR_BOOSTER|TRUST_OPTIMIZER|PREMIUM_PERCEPTION), title (short), ' +
     'headline (Uzbek, 3–4 words, bold-impact), ' +
@@ -662,6 +665,8 @@ export async function generateInfografikaVariantsFromImage(
     `RAKURS DIVERSIFIKATSIYASI: layouts must vary (hero vs detail zoom vs slight angled).\n` +
     `MARKETPLACE COMPLIANCE: keep text density low, whitespace 40%+, no paragraphs, safe claims.\n` +
     `NO MARKDOWN: Do not wrap words in **. Plain Uzbek only.\n` +
+    `NO POSTER TEXT: Headline must NOT be a slogan/CTA and must NOT include '!'.\n` +
+    `BADGE RULE: if you output a badge, keep it neutral (e.g., "Yuqori sifat", "100% paxta"), never promo words like "Tanlov".\n` +
     `USER PRODUCT INFO (optional but IMPORTANT if present):\n${additionalInfo || 'N/A'}\n` +
     `If user info exists, reflect it naturally in headline + USPs.\n` +
     `Return JSON only in the required schema.`;
@@ -900,7 +905,7 @@ export async function generateInfografikaImageFromVariant(
 
   const styleHint =
     strategy === 'CTR_BOOSTER'
-      ? 'Style: scroll-stopping, high contrast, modern ecommerce ad creative, strong hierarchy, clean icons, 1 main accent color derived from the product.'
+      ? 'Style: structured marketplace infographic layout, slightly higher contrast for readability, but still catalog/UI-like. Use ONE accent color derived from the product.'
       : strategy === 'TRUST_OPTIMIZER'
         ? 'Style: clean, minimal, trust-building, catalog-like, calm colors, glassmorphism header, lots of whitespace, no aggressive badges.'
         : 'Style: premium luxury feel, elegant spacing, subtle gradient + vignette, refined typography, minimal elements, tasteful accent.';
@@ -923,23 +928,40 @@ export async function generateInfografikaImageFromVariant(
     .join('\n');
 
   const prompt =
-    `Task: Create a premium marketplace infographic creative (single image) for an ecommerce listing.\n` +
-    `Output: EXACTLY 1080x1440 pixels (3:4).\n` +
-    `CRITICAL PRODUCT IDENTITY LOCK: Preserve the product EXACTLY as in the provided photo (shape, colors, logo, material). Do NOT redesign the product.\n` +
-    `CRITICAL DESIGN GOAL: looks like a senior designer made it (better than a template). Balanced spacing, modern typography, subtle depth, no clutter.\n` +
-    `CRITICAL COLOR RULE: Automatically pick a harmonious color palette based on the product photo. Use a main accent color derived from the product (or background) and apply it consistently to UI elements.\n` +
-    `BACKGROUND: create a clean premium background that matches the product (gradient + soft vignette). Avoid noisy textures.\n` +
-    `LAYOUT: The product is the hero (center/right). Add a TOP glassmorphism header panel (rounded rectangle, semi-transparent) with the headline text.\n` +
-    `FEATURE CARDS: Under the headline inside the same top panel, show 3 separate feature pills/cards in one row. Each card contains a small simple line icon + short text.\n` +
-    `CARD COLOR: Cards/pills must be tinted using the chosen accent color (same hue family as the product). Icons should be monochrome and match the accent.\n` +
-    `TYPOGRAPHY (strict): Use ONE font family (Inter/SF Pro style). Use only 2 weights: Headline 700-800, cards 500-600. Keep tracking slightly tight.\n` +
-    `TEXT FIT (strict): Headline must be <= 26 characters if possible; each card text must be <= 22 characters. If text is longer, shorten wording but keep meaning.\n` +
-    `TEXT RENDERING: Ensure all letters are crisp, no spelling mistakes, no random symbols. Uzbek apostrophes must render correctly (o‘, g‘).\n` +
-    `TEXT RULES: Uzbek text only. Use text EXACTLY as provided. No markdown symbols (*, **, #). Do NOT add prices, discounts, or exaggerated claims.\n` +
-    (badge ? `Optional subtle badge pill (small): text="${badge}". Must match palette; no aggressive promo styling.\n` : '') +
+    `Task: Create a marketplace-ready PRODUCT INFOGRAPHIC (single image).\n` +
+    `This MUST look like a structured marketplace infographic system layout (catalog/UI style).\n` +
+    `It MUST NOT look like a banner, poster, or advertisement.\n` +
+    `Output: EXACTLY 1080x1440 pixels (3:4).\n\n` +
+    `CRITICAL PRODUCT IDENTITY LOCK:\n` +
+    `- Preserve the product EXACTLY as in the provided photo (shape, colors, logo, material).\n` +
+    `- Do NOT redesign, stylize, or change the product.\n\n` +
+    `STRICT INFOGRAPHIC LAYOUT RULES (STRUCTURE LOCK):\n` +
+    `- Product must remain the dominant visual mass (at least ~65% of attention).\n` +
+    `- Text must be secondary and placed ONLY inside a structured UI-like container.\n` +
+    `- Use ONE information module container (rounded rectangle) with subtle shadow and clean spacing.\n` +
+    `- Inside the container: a small clean headline + 3 separate feature cards/pills with icons (UI components).\n` +
+    `- No ribbons, no full-width top bars, no big promotional slabs, no huge headline overlays.\n` +
+    `- No poster typography. No marketing hero poster vibe.\n\n` +
+    `CRITICAL COLOR RULE:\n` +
+    `- Automatically pick a harmonious palette from the product photo.\n` +
+    `- Use ONE accent color derived from the product (or background) and apply it consistently to the feature cards and icons.\n\n` +
+    `BACKGROUND:\n` +
+    `- Clean catalog background (soft gradient + subtle vignette). Must match product colors. Avoid noisy textures.\n\n` +
+    `TYPOGRAPHY (strict):\n` +
+    `- Use ONE font family (Inter/SF Pro style).\n` +
+    `- Use only 2 weights: Headline 700–800, cards 500–600.\n` +
+    `- Headline must be small/clean (NOT a slogan), max ~26 chars.\n` +
+    `- Each card text max ~22 chars.\n` +
+    `- Crisp letters, no spelling mistakes, no random symbols. Uzbek apostrophes must render correctly (o‘, g‘).\n\n` +
+    `ANTI-BANNER NEGATIVE CONSTRAINTS (must follow):\n` +
+    `- Do NOT generate a banner.\n` +
+    `- Do NOT generate a promotional poster.\n` +
+    `- Do NOT generate advertising-style layout.\n` +
+    `- Do NOT place large headline overlays outside the info container.\n\n` +
+    (badge ? `Optional: a very small neutral badge pill INSIDE the info container only, text="${badge}". No promo words.\n\n` : '') +
     `${styleHint}\n` +
     `${layoutHint}\n\n` +
-    `TEXT TO RENDER (Uzbek, exact):\n` +
+    `TEXT TO RENDER (Uzbek, exact; no markdown, no exclamation):\n` +
     `HEADLINE: ${headline}\n` +
     `FEATURE CARDS (exact text + icon hint):\n` +
     `${cardsSpec}\n`;
