@@ -27,16 +27,6 @@ type InfografikaVariant = {
   image_error?: string | null;
 };
 
-type InfografikaHistoryItem = {
-  id: string;
-  created_at: string;
-  language: InfografikaLanguage;
-  product_name: string | null;
-  product_description: string | null;
-  tokens_used?: number;
-  model_used?: string | null;
-};
-
 type UserData = {
   subscription_plan: SubscriptionPlan;
   tokens_remaining: number;
@@ -355,9 +345,6 @@ export default function InfografikaClient() {
   const [variants, setVariants] = useState<InfografikaVariant[]>([]);
   const [rendered, setRendered] = useState<Record<string, string>>({});
 
-  const [history, setHistory] = useState<InfografikaHistoryItem[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const lastRenderedForImageRef = useRef<string>('');
@@ -388,25 +375,6 @@ export default function InfografikaClient() {
     };
     fetchUser();
   }, []);
-
-  const refreshHistory = useCallback(async () => {
-    setHistoryLoading(true);
-    try {
-      const res = await fetch('/api/infografika/history');
-      if (!res.ok) return;
-      const data = await res.json();
-      const items = Array.isArray(data?.generations) ? (data.generations as InfografikaHistoryItem[]) : [];
-      setHistory(items);
-    } catch {
-      // ignore
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshHistory();
-  }, [refreshHistory]);
 
   const handlePickFile = useCallback(async (file: File | null) => {
     if (!file) return;
@@ -460,7 +428,6 @@ export default function InfografikaClient() {
 
       setVariants(v.slice(0, variantLimit));
       toast.success('Variantlar tayyor. Endi tanlang va yuklab oling.');
-      void refreshHistory();
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e);
       const m = raw.toLowerCase();
@@ -474,7 +441,7 @@ export default function InfografikaClient() {
     } finally {
       setGenerating(false);
     }
-  }, [image, productDescription, productName, toast, variantLimit, infografikaLanguage, refreshHistory]);
+  }, [image, productDescription, productName, toast, variantLimit, infografikaLanguage]);
 
   useEffect(() => {
     const doRender = async () => {
@@ -770,48 +737,6 @@ export default function InfografikaClient() {
               </div>
             )}
 
-            <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-900">Tarix</p>
-                <button
-                  onClick={() => void refreshHistory()}
-                  className="rounded-xl bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
-                >
-                  {historyLoading ? '...' : 'Yangilash'}
-                </button>
-              </div>
-
-              {history.length === 0 ? (
-                <p className="mt-3 text-xs text-slate-600">Hozircha tarix bo‘sh.</p>
-              ) : (
-                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {history.slice(0, 12).map((h) => (
-                    <div key={h.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      <div>
-                        <p className="text-xs font-bold text-slate-900">{h.product_name || 'Infografika'}</p>
-                        {h.product_description ? (
-                          <p className="mt-1 line-clamp-2 text-[11px] text-slate-600">{h.product_description}</p>
-                        ) : null}
-                        <p className="mt-2 text-[11px] text-slate-600">
-                          {new Date(h.created_at).toLocaleString()} • {h.language === 'ru' ? 'RU' : h.language === 'uz_cyrl' ? 'UZ(K)' : 'UZ(L)'}
-                        </p>
-
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 border border-slate-200">
-                            {typeof h.tokens_used === 'number' ? `${h.tokens_used} token` : '20 token'}
-                          </span>
-                          {h.model_used ? (
-                            <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 border border-slate-200">
-                              {h.model_used}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
         </div>
       </div>
