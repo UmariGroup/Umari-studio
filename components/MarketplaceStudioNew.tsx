@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import JSZip from 'jszip';
 import { useToast } from './ToastProvider';
 import { getTelegramSubscribeUrl } from '@/lib/telegram';
 import { parseApiErrorResponse, toUzbekErrorMessage } from '@/lib/uzbek-errors';
@@ -247,6 +248,39 @@ const MarketplaceStudio: React.FC = () => {
     // Same-origin public URL
     return await toDataUrl(src);
   }, []);
+
+  const dataUrlToBlob = (dataUrl: string): Blob => {
+    const parts = String(dataUrl || '').split(',');
+    if (parts.length < 2) throw new Error('Invalid data URL');
+
+    const meta = parts[0] || '';
+    const base64 = parts.slice(1).join(',');
+    const match = /^data:(.*?);base64$/i.exec(meta);
+    const mime = match?.[1] || 'image/png';
+
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  };
+
+  const srcToBlob = async (src: string): Promise<Blob> => {
+    if (src.startsWith('data:')) return dataUrlToBlob(src);
+    const res = await fetch(src);
+    if (!res.ok) throw new Error(t('marketplaceNew.errors.imageDownloadFailed', 'Rasmni yuklab bo‘lmadi'));
+    return await res.blob();
+  };
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
 
   // Derived values
   const plan = user?.subscription_plan || 'free';
@@ -795,17 +829,43 @@ const MarketplaceStudio: React.FC = () => {
   };
 
   // Download image
-  const downloadImage = async (base64: string, index: number) => {
-    let finalDataUrl = base64;
+  const downloadImage = async (src: string, index: number) => {
+    const filename = `marketplace-image-${index + 1}-1080x1440.png`;
     try {
-      finalDataUrl = await normalizeTo1080x1440(base64);
+      const normalized = await normalizeTo1080x1440(src);
+      const blob = await srcToBlob(normalized);
+      downloadBlob(blob, filename);
     } catch {
-      // ignore
+      // Fallback: download the original source.
+      const blob = await srcToBlob(src);
+      downloadBlob(blob, filename);
     }
-    const link = document.createElement('a');
-    link.href = finalDataUrl;
-    link.download = `marketplace-image-${index + 1}-1080x1440.png`;
-    link.click();
+  };
+
+  const downloadAllImagesZip = async () => {
+    if (generatedImages.length === 0) return;
+    try {
+      toast.info(t('common.preparing', 'Tayyorlanmoqda...'));
+      const zip = new JSZip();
+
+      for (let i = 0; i < generatedImages.length; i++) {
+        const src = generatedImages[i];
+        let blob: Blob;
+        try {
+          const normalized = await normalizeTo1080x1440(src);
+          blob = await srcToBlob(normalized);
+        } catch {
+          blob = await srcToBlob(src);
+        }
+        zip.file(`marketplace-image-${i + 1}-1080x1440.png`, blob);
+      }
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      downloadBlob(zipBlob, 'marketplace-images.zip');
+      toast.success(t('common.download', 'Yuklab olish'));
+    } catch (e) {
+      toast.error((e as Error).message || t('common.error', 'Xatolik'));
+    }
   };
 
   if (loading) {
@@ -1193,7 +1253,18 @@ const MarketplaceStudio: React.FC = () => {
 
         {/* Output Section */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-          <h3 className="font-bold text-gray-800 mb-4">{t('marketplaceNew.generatedImages', 'Yaratilgan rasmlar')}</h3>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h3 className="font-bold text-gray-800">{t('marketplaceNew.generatedImages', 'Yaratilgan rasmlar')}</h3>
+            {generatedImages.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void downloadAllImagesZip()}
+                className="px-4 py-2 rounded-xl font-semibold bg-gray-900 text-white hover:bg-black"
+              >
+                Hammasini yuklab olish
+              </button>
+            )}
+          </div>
 
           {batchItems.length > 0 && (
             <div className="mb-4">

@@ -8,6 +8,7 @@ import { getTelegramSubscribeUrl } from '@/lib/telegram';
 import { parseApiErrorResponse, toUzbekErrorMessage } from '@/lib/uzbek-errors';
 import { Plus } from 'lucide-react';
 import { FiArrowLeft } from 'react-icons/fi';
+import JSZip from 'jszip';
 
 type SubscriptionPlan = 'free' | 'starter' | 'pro' | 'business_plus';
 
@@ -65,8 +66,14 @@ function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([bytes], { type: mime });
 }
 
-function downloadDataUrl(dataUrl: string, filename: string) {
-  const blob = dataUrlToBlob(dataUrl);
+async function srcToBlob(src: string): Promise<Blob> {
+  if (src.startsWith('data:')) return dataUrlToBlob(src);
+  const res = await fetch(src);
+  if (!res.ok) throw new Error('Rasmni yuklab bo‘lmadi');
+  return await res.blob();
+}
+
+function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -75,6 +82,11 @@ function downloadDataUrl(dataUrl: string, filename: string) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function downloadImageSrc(src: string, filename: string) {
+  const blob = await srcToBlob(src);
+  downloadBlob(blob, filename);
 }
 
 async function fileToDataUrl(file: File): Promise<string> {
@@ -352,6 +364,32 @@ export default function InfografikaClient() {
   const openSubscribe = (targetPlan: SubscriptionPlan) => {
     window.open(getTelegramSubscribeUrl(targetPlan), '_blank');
   };
+
+  const downloadAllZip = useCallback(async () => {
+    if (variants.length === 0) return;
+    const ids = variants.map((v) => v.id);
+    const sources = ids.map((id) => rendered[id]).filter((v): v is string => Boolean(v));
+    if (sources.length === 0) return;
+
+    try {
+      toast.info('Tayyorlanmoqda...');
+      const zip = new JSZip();
+
+      for (let i = 0; i < variants.length; i++) {
+        const v = variants[i];
+        const src = rendered[v.id];
+        if (!src) continue;
+        const blob = await srcToBlob(src);
+        zip.file(`infografika_${v.id}.png`, blob);
+      }
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      downloadBlob(zipBlob, 'infografika-variants.zip');
+      toast.success('Yuklab olish');
+    } catch (e) {
+      toast.error((e as Error).message || 'Xatolik');
+    }
+  }, [rendered, toast, variants]);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -695,7 +733,18 @@ export default function InfografikaClient() {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div>
+                <div className="mb-3 flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => void downloadAllZip()}
+                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+                  >
+                    Hammasini yuklab olish
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {variants.map((v) => {
                   const imgOut = rendered[v.id];
                   return (
@@ -719,7 +768,7 @@ export default function InfografikaClient() {
                       <div className="p-4">
                         <button
                           disabled={!imgOut}
-                          onClick={() => imgOut && downloadDataUrl(imgOut, `infografika_${v.id}.png`)}
+                          onClick={() => void (imgOut ? downloadImageSrc(imgOut, `infografika_${v.id}.png`) : Promise.resolve())}
                           className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           PNG yuklab olish
@@ -734,6 +783,7 @@ export default function InfografikaClient() {
                     </div>
                   );
                 })}
+                </div>
               </div>
             )}
 
