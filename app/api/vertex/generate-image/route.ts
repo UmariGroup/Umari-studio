@@ -5,8 +5,8 @@ import {
   BillingError,
   getAuthenticatedUserAccount,
   getImagePolicy,
+  getNextPlan,
   recordTokenUsage,
-  refundTokens,
   reserveTokens,
 } from '@/lib/subscription';
 import { getClient, query } from '@/lib/db';
@@ -45,8 +45,6 @@ export async function POST(request: NextRequest) {
   let userId: string | null = null;
   let reservedTokens = 0;
   let reservedTokensRemaining = 0;
-  let billingSettled = false;
-  let reserveMeta: { debited?: { subscription: number; referral: number }; referralDebits?: Array<{ rewardId: string; tokens: number }> } | null = null;
 
   try {
     await ensureImageJobsTable();
@@ -379,12 +377,14 @@ export async function POST(request: NextRequest) {
 
     const costPerRequest = policy.costPerRequest;
     reservedTokens = Number(costPerRequest.toFixed(2));
-    if (user.role !== 'admin') {
-      const reserveResult = await reserveTokens({ userId: user.id, tokens: reservedTokens });
-      reservedTokensRemaining = reserveResult.tokensRemaining;
-      reserveMeta = { debited: reserveResult.debited, referralDebits: reserveResult.referralDebits };
-    } else {
-      reservedTokensRemaining = 999999;
+    reservedTokensRemaining = user.role === 'admin' ? 999999 : Number(user.tokens_remaining || 0);
+    if (user.role !== 'admin' && reservedTokensRemaining < reservedTokens) {
+      throw new BillingError({
+        status: 402,
+        code: 'INSUFFICIENT_TOKENS',
+        message: "Tokenlaringiz yetarli emas. Tarifni yangilang yoki yuqori tarifga o'ting.",
+        recommendedPlan: getNextPlan(plan),
+      });
     }
 
     const batchId = randomUUID();
@@ -476,28 +476,19 @@ export async function POST(request: NextRequest) {
     let tokensRefunded = 0;
     let tokensCharged = 0;
 
-    if (user.role !== 'admin') {
-      if (anySucceeded) {
-        await recordTokenUsage({
-          userId: user.id,
-          tokensUsed: reservedTokens,
-          serviceType: 'image_generate',
-          modelUsed: selectedModel || null,
-          prompt: safePrompt,
-        });
-        tokensCharged = reservedTokens;
-      } else {
-        await refundTokens({
-          userId: user.id,
-          tokens: reservedTokens,
-          debited: reserveMeta?.debited,
-          referralDebits: reserveMeta?.referralDebits,
-        });
-        reservedTokensRemaining += reservedTokens;
-        tokensRefunded = reservedTokens;
-      }
+    if (user.role !== 'admin' && anySucceeded) {
+      const reserveResult = await reserveTokens({ userId: user.id, tokens: reservedTokens });
+      reservedTokensRemaining = reserveResult.tokensRemaining;
+
+      await recordTokenUsage({
+        userId: user.id,
+        tokensUsed: reservedTokens,
+        serviceType: 'image_generate',
+        modelUsed: selectedModel || null,
+        prompt: safePrompt,
+      });
+      tokensCharged = reservedTokens;
     }
-    billingSettled = true;
 
     // Keep image_jobs table for limits/analytics, but skip queued/worker flow.
     try {
@@ -538,8 +529,8 @@ export async function POST(request: NextRequest) {
               item.status,
               item.imageUrl,
               item.error,
-              user.role === 'admin' ? 0 : item.index === 0 ? reservedTokens : 0,
-              user.role === 'admin' ? 0 : !anySucceeded && item.index === 0 ? reservedTokens : 0,
+              user.role === 'admin' ? 0 : anySucceeded && item.index === 0 ? reservedTokens : 0,
+              0,
               user.role === 'admin' ? true : anySucceeded && item.index === 0,
               item.startedAt,
               item.finishedAt,
@@ -638,19 +629,6 @@ export async function POST(request: NextRequest) {
         { error: error.message, code: error.code, recommended_plan: error.recommendedPlan ?? null },
         { status: error.status }
       );
-    }
-
-    if (!billingSettled && userId && reservedTokens) {
-      try {
-        await refundTokens({
-          userId,
-          tokens: reservedTokens,
-          debited: reserveMeta?.debited,
-          referralDebits: reserveMeta?.referralDebits,
-        });
-      } catch {
-        // ignore
-      }
     }
 
     const lower = message.toLowerCase();

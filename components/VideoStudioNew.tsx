@@ -196,6 +196,7 @@ const VideoStudio: React.FC = () => {
   const [upscaling, setUpscaling] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [promptGenerating, setPromptGenerating] = useState(false);
 
   // Derived
   const isAdmin = user?.role === 'admin';
@@ -203,6 +204,76 @@ const VideoStudio: React.FC = () => {
   const currentConfig = videoModes.find((m) => m.id === selectedMode);
   const tokenCost = currentConfig?.tokenCost || 0;
   const canGenerate = tokensRemaining >= tokenCost && currentConfig?.available;
+
+  const canUsePromptAssist = useMemo(() => {
+    if (isAdmin) return true;
+    if (plan === 'free') return false;
+    return tokensRemaining >= 1;
+  }, [isAdmin, plan, tokensRemaining]);
+
+  const handleGeneratePromptByImages = useCallback(async () => {
+    if (!currentConfig) return;
+
+    if (!isAdmin && plan === 'free') {
+      toast.error(t('videoNew.toasts.promptAssistPlan', 'Bu funksiya Starter va undan yuqori tariflarda mavjud.'));
+      return;
+    }
+
+    if (sourceImages.length === 0) {
+      toast.error(t('videoNew.toasts.uploadAtLeastOne', 'Kamida bitta rasm yuklang!'));
+      return;
+    }
+
+    if (!isAdmin && tokensRemaining < 1) {
+      toast.error(t('videoNew.toasts.needOneToken', 'Prompt yaratish uchun kamida 1 token kerak.'));
+      return;
+    }
+
+    setPromptGenerating(true);
+    try {
+      const response = await fetch('/api/generate-video-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          images: sourceImages.slice(0, currentConfig.id === 'premium' ? 4 : currentConfig.id === 'pro' ? 3 : 2),
+          mode: selectedMode,
+        }),
+      });
+
+      if (!response.ok) {
+        const parsed = await parseApiErrorResponse(response);
+        const { title, message } = toUzbekErrorMessage(parsed);
+        toast.error(message, title);
+        return;
+      }
+
+      const data = await response.json();
+      const generatedPrompt =
+        typeof data?.prompt_uz === 'string'
+          ? data.prompt_uz.trim()
+          : typeof data?.prompt === 'string'
+            ? data.prompt.trim()
+            : typeof data?.prompt_en === 'string'
+              ? data.prompt_en.trim()
+              : '';
+
+      if (!generatedPrompt) {
+        toast.error(t('videoNew.toasts.promptFailed', "Prompt yaratib bo'lmadi."));
+        return;
+      }
+
+      setPrompt(generatedPrompt);
+      if (typeof data?.tokens_remaining === 'number') {
+        setUser((prev) => (prev ? { ...prev, tokens_remaining: data.tokens_remaining } : prev));
+      }
+
+      toast.success(t('videoNew.toasts.promptReady', 'Rasmga mos prompt tayyorlandi (1 token).'));
+    } catch (error) {
+      toast.error((error as Error).message || t('common.error', 'Xatolik'));
+    } finally {
+      setPromptGenerating(false);
+    }
+  }, [currentConfig, isAdmin, plan, promptGenerating, selectedMode, sourceImages, t, toast, tokensRemaining]);
 
   // Fetch user data
   useEffect(() => {
@@ -596,12 +667,29 @@ const VideoStudio: React.FC = () => {
 
               {/* Prompt */}
               <div className="bg-gray-50 rounded-2xl p-6">
-                <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  <span className="p-1.5 bg-amber-100 rounded-lg">
-                    <FiEdit3 className="w-4 h-4 text-amber-600" aria-hidden />
-                  </span>
-                  {t('videoNew.motionDescription', 'Harakat tavsifi')}
-                </h3>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                    <span className="p-1.5 bg-amber-100 rounded-lg">
+                      <FiEdit3 className="w-4 h-4 text-amber-600" aria-hidden />
+                    </span>
+                    {t('videoNew.motionDescription', 'Harakat tavsifi')}
+                  </h3>
+
+                  <button
+                    type="button"
+                    onClick={handleGeneratePromptByImages}
+                    disabled={promptGenerating || !canUsePromptAssist || sourceImages.length === 0}
+                    title={canUsePromptAssist ? t('videoNew.promptAssistTitle', 'Rasmga qarab prompt yozish (1 token)') : t('videoNew.promptAssistLocked', 'Starter va undan yuqori tarif kerak')}
+                    className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                      promptGenerating || !canUsePromptAssist || sourceImages.length === 0
+                        ? 'bg-gray-200 text-gray-400 border-gray-200 cursor-not-allowed'
+                        : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'
+                    }`}
+                  >
+                    <FiStar className="w-4 h-4" aria-hidden />
+                    <span>{promptGenerating ? '...' : '1 token'}</span>
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={prompt}

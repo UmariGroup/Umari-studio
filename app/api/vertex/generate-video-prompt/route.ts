@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   BillingError,
   getAuthenticatedUserAccount,
-  getImagePolicy,
+  getVideoPolicy,
   recordTokenUsage,
   reserveTokens,
 } from '@/lib/subscription';
-import { generateMarketplacePromptBundleFromImages } from '@/services/gemini';
+import { generateVideoPromptBundleFromImages } from '@/services/vertex';
 
 export async function POST(request: NextRequest) {
   let reservedTokens = 0;
@@ -15,12 +15,17 @@ export async function POST(request: NextRequest) {
     const user = await getAuthenticatedUserAccount();
 
     const body = await request.json().catch(() => null);
-    const productImages = Array.isArray(body?.productImages) ? body.productImages.filter(Boolean) : [];
-    const requestedModeRaw = typeof body?.mode === 'string' ? body.mode.trim().toLowerCase() : '';
-    const requestedMode = requestedModeRaw === 'basic' || requestedModeRaw === 'ultra' ? requestedModeRaw : 'pro';
+    const images = Array.isArray(body?.images)
+      ? body.images.filter(Boolean)
+      : Array.isArray(body?.productImages)
+        ? body.productImages.filter(Boolean)
+        : [];
 
-    if (productImages.length === 0) {
-      return NextResponse.json({ error: "Kamida bitta mahsulot rasmi kerak." }, { status: 400 });
+    const requestedModeRaw = typeof body?.mode === 'string' ? body.mode.trim().toLowerCase() : '';
+    const requestedMode = requestedModeRaw === 'pro' || requestedModeRaw === 'premium' ? requestedModeRaw : 'basic';
+
+    if (images.length === 0) {
+      return NextResponse.json({ error: 'Kamida bitta rasm kerak.' }, { status: 400 });
     }
 
     const plan = user.role === 'admin' ? 'business_plus' : user.subscription_plan;
@@ -28,12 +33,12 @@ export async function POST(request: NextRequest) {
       throw new BillingError({
         status: 403,
         code: 'PLAN_RESTRICTED',
-        message: "Bu funksiya Starter va undan yuqori tariflarda mavjud.",
+        message: 'Bu funksiya Starter va undan yuqori tariflarda mavjud.',
         recommendedPlan: 'starter',
       });
     }
 
-    const imagePolicy = getImagePolicy(plan, requestedMode);
+    const policy = getVideoPolicy(plan, requestedMode as any);
 
     const promptTokenCost = 1;
     reservedTokens = promptTokenCost;
@@ -47,14 +52,11 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const isPremiumUltra = plan === 'business_plus' && requestedMode === 'ultra';
-    const { promptEn, promptUz } = await generateMarketplacePromptBundleFromImages(
-      productImages.slice(0, imagePolicy.maxProductImages),
+    const { promptUz, promptEn } = await generateVideoPromptBundleFromImages(
+      images.slice(0, policy.maxImages),
       {
-        mode: requestedMode,
-        outputCount: imagePolicy.outputCount,
-        premiumQuality: isPremiumUltra,
-        styleAllowed: imagePolicy.maxStyleImages > 0,
+        mode: requestedMode as any,
+        maxPromptChars: policy.maxPromptChars,
       }
     );
 
@@ -64,17 +66,17 @@ export async function POST(request: NextRequest) {
       await recordTokenUsage({
         userId: user.id,
         tokensUsed: promptTokenCost,
-        serviceType: 'image_prompt_assist',
+        serviceType: 'video_prompt_assist',
         modelUsed: null,
-        prompt: promptEn,
+        prompt: promptUz,
       });
     }
 
     return NextResponse.json({
       success: true,
-      prompt: promptEn,
-      prompt_en: promptEn,
+      prompt: promptUz,
       prompt_uz: promptUz,
+      prompt_en: promptEn,
       tokens_charged: user.role === 'admin' ? 0 : promptTokenCost,
       tokens_remaining: user.role === 'admin' ? 999999 : Number(tokensRemaining.toFixed(2)),
     });

@@ -1182,6 +1182,96 @@ export async function generateVideoScript(
   return generateText(DEFAULT_VERTEX_TEXT_MODEL, systemInstruction, userText);
 }
 
+function extractDualPrompt(text: string): { en: string; uz: string } | null {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+
+  const enMatch = raw.match(/\bEN\s*:\s*([\s\S]*?)(?=\n\s*UZ\s*:|$)/i);
+  const uzMatch = raw.match(/\bUZ\s*:\s*([\s\S]*?)(?=\n\s*EN\s*:|$)/i);
+  const en = (enMatch?.[1] || '').trim();
+  const uz = (uzMatch?.[1] || '').trim();
+  if (!en && !uz) return null;
+  return { en, uz };
+}
+
+function clampOneLine(text: string, maxChars: number): string {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!maxChars || maxChars <= 0) return normalized;
+  if (normalized.length <= maxChars) return normalized;
+  return normalized.slice(0, maxChars).trim();
+}
+
+export async function generateVideoPromptBundleFromImages(
+  images: string[],
+  options: {
+    mode: 'basic' | 'pro' | 'premium';
+    maxPromptChars: number;
+    model?: string;
+  }
+): Promise<{ promptUz: string; promptEn: string }>
+{
+  const safeImages = Array.isArray(images) ? images.filter(Boolean).slice(0, 4) : [];
+  if (safeImages.length === 0) {
+    throw new Error('Kamida bitta rasm kerak.');
+  }
+
+  const mode = (options?.mode || 'basic').toString().toLowerCase();
+  const maxPromptChars = Math.max(30, Math.min(300, Number(options?.maxPromptChars || 120)));
+  const model = (options?.model || DEFAULT_VERTEX_TEXT_MODEL).trim();
+
+  const modeRules =
+    mode === 'premium'
+      ? 'Premium: rich cinematic motion + subtle camera moves, ad-style pacing.'
+      : mode === 'pro'
+        ? 'Pro: smooth camera motion, premium lighting, clean ad look.'
+        : 'Basic: simple motion, stable camera, clean background.';
+
+  const systemInstruction =
+    'You are a video prompt engineer for ecommerce product videos. ' +
+    'Given reference product image(s), write a SINGLE short motion prompt for video generation. ' +
+    'Preserve the product identity exactly (shape, color, materials, branding). ' +
+    'Avoid surreal changes, hallucinated accessories, wrong colors. ' +
+    'Return EXACTLY two lines in this format:\n' +
+    'UZ: <very short motion prompt in Uzbek (Latin)>, max ' +
+    maxPromptChars +
+    ' characters\n' +
+    'EN: <same prompt in English>, max ' +
+    maxPromptChars +
+    ' characters\n' +
+    'No extra text.';
+
+  const parts: any[] = [];
+  for (const img of safeImages) {
+    const inline = toInlineDataPart(img);
+    if (inline) parts.push(inline);
+  }
+
+  parts.push({
+    text:
+      'Task: Generate a short motion/camera prompt for a product video based on the images. ' +
+      `Mode: ${mode}. ${modeRules}. ` +
+      'Constraints: no text overlays, no watermark, no logo changes, realistic lighting, clean ecommerce look.'
+  });
+
+  const body: any = {
+    contents: [{ role: 'user', parts }],
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: 350,
+      topP: 0.95,
+    },
+  };
+
+  const response = await vertexGenerateContent(model, body);
+  const rawText = extractText(response).trim();
+
+  const parsed = extractDualPrompt(rawText);
+  const promptUz = clampOneLine(parsed?.uz || rawText, maxPromptChars);
+  const promptEn = clampOneLine(parsed?.en || '', maxPromptChars);
+  return { promptUz, promptEn: promptEn || promptUz };
+}
+
 export async function generateCopywriterContent(
   contentType: string,
   topic: string,

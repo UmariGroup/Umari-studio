@@ -7,7 +7,6 @@ import {
   getNextPlan,
   getVideoPolicy,
   recordTokenUsage,
-  refundTokens,
   reserveTokens,
   VideoMode,
 } from '@/lib/subscription';
@@ -171,7 +170,6 @@ async function tryPersistVideoDataUrlToPublic(videoUrl: string): Promise<string 
 export async function POST(req: NextRequest) {
   let userId: string | null = null;
   let reservedTokens = 0;
-  let reserveMeta: { debited?: { subscription: number; referral: number }; referralDebits?: Array<{ rewardId: string; tokens: number }> } | null = null;
 
   try {
     const user = await getAuthenticatedUserAccount();
@@ -256,11 +254,14 @@ export async function POST(req: NextRequest) {
     }
 
     reservedTokens = Number(policy.costPerVideo.toFixed(2));
-    let tokensRemaining = 999999;
-    if (user.role !== 'admin') {
-      const reserveRes = await reserveTokens({ userId: user.id, tokens: reservedTokens });
-      tokensRemaining = reserveRes.tokensRemaining;
-      reserveMeta = { debited: reserveRes.debited, referralDebits: reserveRes.referralDebits };
+    let tokensRemaining = user.role === 'admin' ? 999999 : Number(user.tokens_remaining || 0);
+    if (user.role !== 'admin' && tokensRemaining < reservedTokens) {
+      throw new BillingError({
+        status: 402,
+        code: 'INSUFFICIENT_TOKENS',
+        message: "Tokenlaringiz yetarli emas. Tarifni yangilang yoki yuqori tarifga o'ting.",
+        recommendedPlan: getNextPlan(plan),
+      });
     }
 
     console.log(`[GenerateVideo] Plan=${plan}, Mode=${mode}, Model=${selectedModel}`);
@@ -311,6 +312,22 @@ export async function POST(req: NextRequest) {
       persisted = null;
     }
     const videoUrl = persisted || rawVideoUrl;
+
+    if (user.role !== 'admin') {
+      const reserveRes = await reserveTokens({ userId: user.id, tokens: reservedTokens });
+      tokensRemaining = reserveRes.tokensRemaining;
+
+      await recordTokenUsage({
+        userId: user.id,
+        tokensUsed: reservedTokens,
+        serviceType: getVideoServiceType(mode),
+        modelUsed:
+          plan === 'business_plus' && mode === 'premium' && policy.upsamplerModel
+            ? `${selectedModel} + ${policy.upsamplerModel}`
+            : selectedModel,
+        prompt: safePrompt,
+      });
+    }
 
     let upscaleJobId: string | null = null;
     if (plan === 'business_plus' && mode === 'premium' && policy.upsamplerModel) {
@@ -379,26 +396,13 @@ export async function POST(req: NextRequest) {
       })();
     }
 
-    if (user.role !== 'admin') {
-      await recordTokenUsage({
-        userId: user.id,
-        tokensUsed: reservedTokens,
-        serviceType: getVideoServiceType(mode),
-        modelUsed:
-          plan === 'business_plus' && mode === 'premium' && policy.upsamplerModel
-            ? `${selectedModel} + ${policy.upsamplerModel}`
-            : selectedModel,
-        prompt: safePrompt,
-      });
-    }
-
     return NextResponse.json({
       success: true,
       videoUrl,
       upscaleJobId,
       requested_duration_seconds: targetDurationSeconds,
       duration_seconds: effectiveDurationSeconds,
-      tokens_charged: reservedTokens,
+      tokens_charged: user.role === 'admin' ? 0 : reservedTokens,
       tokens_remaining: user.role === 'admin' ? 999999 : Number(tokensRemaining.toFixed(2)),
     });
   } catch (error: any) {
@@ -409,19 +413,6 @@ export async function POST(req: NextRequest) {
         { error: error.message, code: error.code, recommended_plan: error.recommendedPlan ?? null },
         { status: error.status }
       );
-    }
-
-    if (userId && reservedTokens) {
-      try {
-        await refundTokens({
-          userId,
-          tokens: reservedTokens,
-          debited: reserveMeta?.debited,
-          referralDebits: reserveMeta?.referralDebits,
-        });
-      } catch {
-        // ignore
-      }
     }
 
     const message = error?.message || 'Internal Server Error';

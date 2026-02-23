@@ -3,8 +3,8 @@ import {
   BillingError,
   getAuthenticatedUserAccount,
   getInfografikaPolicy,
+  getNextPlan,
   recordTokenUsage,
-  refundTokens,
   reserveTokens,
 } from '@/lib/subscription';
 import { generateInfografikaImageFromVariant, generateInfografikaVariantsFromImage } from '@/services/gemini';
@@ -18,13 +18,6 @@ type InfografikaLanguage = 'uz_latn' | 'uz_cyrl' | 'ru';
 export async function POST(request: NextRequest) {
   let userId: string | null = null;
   let reservedTokens = 0;
-  let billingSettled = false;
-  let reserveMeta:
-    | {
-        debited?: { subscription: number; referral: number };
-        referralDebits?: Array<{ rewardId: string; tokens: number }>;
-      }
-    | null = null;
 
   try {
     const user = await getAuthenticatedUserAccount();
@@ -56,9 +49,14 @@ export async function POST(request: NextRequest) {
     const combinedInfo = JSON.stringify(usagePayload);
 
     reservedTokens = Number(policy.costPerGenerate.toFixed(2));
-    if (user.role !== 'admin') {
-      const reserveRes = await reserveTokens({ userId: user.id, tokens: reservedTokens });
-      reserveMeta = { debited: reserveRes.debited, referralDebits: reserveRes.referralDebits };
+    let tokensRemaining = user.role === 'admin' ? 999999 : Number(user.tokens_remaining || 0);
+    if (user.role !== 'admin' && tokensRemaining < reservedTokens) {
+      throw new BillingError({
+        status: 402,
+        code: 'INSUFFICIENT_TOKENS',
+        message: "Tokenlaringiz yetarli emas. Tarifni yangilang yoki yuqori tarifga o'ting.",
+        recommendedPlan: getNextPlan(plan),
+      });
     }
 
     const variants = await generateInfografikaVariantsFromImage(image, {
@@ -95,6 +93,8 @@ export async function POST(request: NextRequest) {
     });
 
     if (user.role !== 'admin') {
+      const reserveRes = await reserveTokens({ userId: user.id, tokens: reservedTokens });
+      tokensRemaining = reserveRes.tokensRemaining;
       await recordTokenUsage({
         userId: user.id,
         tokensUsed: reservedTokens,
@@ -104,28 +104,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    billingSettled = true;
-
     return NextResponse.json({
       success: true,
       variants: variantsWithImages,
       variant_count: policy.variantCount,
       tokens_charged: user.role === 'admin' ? 0 : reservedTokens,
+      tokens_remaining: user.role === 'admin' ? 999999 : Number(tokensRemaining.toFixed(2)),
     });
   } catch (error) {
-    if (!billingSettled && userId && reservedTokens > 0) {
-      try {
-        await refundTokens({
-          userId,
-          tokens: reservedTokens,
-          debited: reserveMeta?.debited,
-          referralDebits: reserveMeta?.referralDebits,
-        });
-      } catch {
-        // ignore
-      }
-    }
-
     if (error instanceof BillingError) {
       return NextResponse.json(
         { error: error.message, code: error.code, recommended_plan: error.recommendedPlan ?? null },

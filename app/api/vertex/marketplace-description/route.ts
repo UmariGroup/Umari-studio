@@ -6,7 +6,6 @@ import {
   getCopywriterPolicy,
   getNextPlan,
   recordTokenUsage,
-  refundTokens,
   reserveTokens,
 } from '@/lib/subscription';
 import { query } from '@/lib/db';
@@ -14,10 +13,6 @@ import { query } from '@/lib/db';
 export async function POST(request: NextRequest) {
   let userId: string | null = null;
   let reservedTokens = 0;
-  let reserveMeta: {
-    debited?: { subscription: number; referral: number };
-    referralDebits?: Array<{ rewardId: string; tokens: number }>;
-  } | null = null;
 
   try {
     const user = await getAuthenticatedUserAccount();
@@ -66,9 +61,13 @@ export async function POST(request: NextRequest) {
     }
 
     reservedTokens = Number(policy.costPerCard.toFixed(2));
-    if (user.role !== 'admin') {
-      const reserveRes = await reserveTokens({ userId: user.id, tokens: reservedTokens });
-      reserveMeta = { debited: reserveRes.debited, referralDebits: reserveRes.referralDebits };
+    if (user.role !== 'admin' && Number(user.tokens_remaining || 0) < reservedTokens) {
+      throw new BillingError({
+        status: 402,
+        code: 'INSUFFICIENT_TOKENS',
+        message: "Tokenlaringiz yetarli emas. Tarifni yangilang yoki yuqori tarifga o'ting.",
+        recommendedPlan: getNextPlan(plan),
+      });
     }
 
     const generator = generateMarketplaceDescriptionStream(safeImages, marketplace, safeAdditionalInfo, {
@@ -82,6 +81,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (user.role !== 'admin') {
+      await reserveTokens({ userId: user.id, tokens: reservedTokens });
       await recordTokenUsage({
         userId: user.id,
         tokensUsed: reservedTokens,
@@ -104,19 +104,6 @@ export async function POST(request: NextRequest) {
         { error: error.message, code: error.code, recommended_plan: error.recommendedPlan ?? null },
         { status: error.status }
       );
-    }
-
-    if (userId && reservedTokens) {
-      try {
-        await refundTokens({
-          userId,
-          tokens: reservedTokens,
-          debited: reserveMeta?.debited,
-          referralDebits: reserveMeta?.referralDebits,
-        });
-      } catch {
-        // ignore
-      }
     }
 
     const message = error instanceof Error ? error.message : String(error);
