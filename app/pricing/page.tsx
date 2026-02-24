@@ -162,7 +162,7 @@ export default function PricingPage() {
   const handleSubscribe = (planId: string) => {
     // Open Telegram user chat with a ready message
     import('@/lib/telegram').then(({ getTelegramSubscribeUrl }) => {
-      window.open(getTelegramSubscribeUrl(planId), '_blank');
+      window.open(getTelegramSubscribeUrl(planId, durationMonths), '_blank');
     });
   };
 

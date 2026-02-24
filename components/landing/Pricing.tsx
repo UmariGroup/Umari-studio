@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Container } from '@/components/ui/Container';
 import { Badge } from '@/components/ui/Badge';
@@ -41,6 +41,10 @@ export function Pricing() {
 
   const [dbPlans, setDbPlans] = useState<DbSubscriptionPlanRow[]>([]);
   const [durationMonths, setDurationMonths] = useState<number>(1);
+
+  const durationToggleRef = useRef<HTMLDivElement | null>(null);
+  const durationButtonRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+  const [highlight, setHighlight] = useState<{ x: number; width: number }>({ x: 0, width: 0 });
 
   const plans: LandingPlan[] = [
     {
@@ -106,7 +110,7 @@ export function Pricing() {
   ];
 
   const onSelectPlan = (plan: SubscriptionPlan) => {
-    const url = getTelegramSubscribeUrl(plan);
+    const url = getTelegramSubscribeUrl(plan, durationMonths);
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -131,11 +135,47 @@ export function Pricing() {
 
   const durationOptions = useMemo(() => availableDurations(dbPlans), [dbPlans]);
 
+  const updateHighlight = useCallback(() => {
+    const container = durationToggleRef.current;
+    if (!container) return;
+
+    const btn = durationButtonRefs.current[durationMonths];
+    if (!btn) return;
+
+    setHighlight({
+      x: btn.offsetLeft,
+      width: btn.offsetWidth,
+    });
+  }, [durationMonths]);
+
   useEffect(() => {
     if (!durationOptions.includes(durationMonths)) {
       setDurationMonths(durationOptions[0] || 1);
     }
   }, [durationOptions, durationMonths]);
+
+  useLayoutEffect(() => {
+    updateHighlight();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [durationMonths, durationOptions.length]);
+
+  useEffect(() => {
+    const container = durationToggleRef.current;
+    if (!container) return;
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => updateHighlight());
+      ro.observe(container);
+    }
+
+    const onResize = () => updateHighlight();
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      ro?.disconnect();
+    };
+  }, [updateHighlight]);
 
   const planRowsById = useMemo(() => {
     const out = new Map<SubscriptionPlan, DbSubscriptionPlanRow | null>();
@@ -162,13 +202,16 @@ export function Pricing() {
 
         {durationOptions.length > 1 && (
           <div className="mx-auto mb-10 flex max-w-md items-center justify-center">
-            <div className="relative inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+            <div
+              ref={durationToggleRef}
+              className="relative inline-flex w-full rounded-2xl border border-slate-200 bg-white p-1 shadow-sm"
+            >
               <motion.div
                 className="absolute inset-y-1 rounded-xl bg-slate-900"
                 initial={false}
                 animate={{
-                  x: `${durationOptions.indexOf(durationMonths) * (100 / durationOptions.length)}%`,
-                  width: `${100 / durationOptions.length}%`,
+                  x: highlight.x,
+                  width: highlight.width,
                 }}
                 transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                 style={{ left: 0 }}
@@ -178,11 +221,13 @@ export function Pricing() {
                   key={m}
                   type="button"
                   onClick={() => setDurationMonths(m)}
+                  ref={(el) => {
+                    durationButtonRefs.current[m] = el;
+                  }}
                   className={clsx(
                     'relative z-10 flex-1 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition',
                     m === durationMonths ? 'text-white' : 'text-slate-700 hover:bg-slate-50'
                   )}
-                  style={{ width: `${100 / durationOptions.length}%` }}
                 >
                   {durationLabelUz(m)}
                 </button>
