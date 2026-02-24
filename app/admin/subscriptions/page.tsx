@@ -18,6 +18,7 @@ type Plan = {
   name: string;
   duration_months: number;
   price: number;
+  discount_percent?: number | null;
   tokens_included: number;
   features: unknown;
   description: string | null;
@@ -56,6 +57,7 @@ export default function SubscriptionPlansAdminPage() {
   const [formName, setFormName] = useState('');
   const [formDuration, setFormDuration] = useState(1);
   const [formPrice, setFormPrice] = useState(9);
+  const [formDiscountPercent, setFormDiscountPercent] = useState(0);
   const [formTokens, setFormTokens] = useState(140);
   const [formDescription, setFormDescription] = useState('');
   const [formFeaturesText, setFormFeaturesText] = useState('');
@@ -84,6 +86,7 @@ export default function SubscriptionPlansAdminPage() {
     setFormName('');
     setFormDuration(1);
     setFormPrice(9);
+    setFormDiscountPercent(0);
     setFormTokens(140);
     setFormDescription('');
     setFormFeaturesText('');
@@ -95,6 +98,7 @@ export default function SubscriptionPlansAdminPage() {
     setFormName(plan.name || '');
     setFormDuration(Number(plan.duration_months) || 1);
     setFormPrice(Number(plan.price) || 0);
+    setFormDiscountPercent(Number(plan.discount_percent) || 0);
     setFormTokens(Number(plan.tokens_included) || 0);
     setFormDescription(plan.description || '');
     setFormFeaturesText(featuresToText(plan.features));
@@ -107,12 +111,14 @@ export default function SubscriptionPlansAdminPage() {
       if (!formName.trim()) throw new Error('Nomi kiritilishi shart');
       if (!formDuration || formDuration < 0) throw new Error('Muddat noto‘g‘ri');
       if (formPrice < 0) throw new Error('Narx noto‘g‘ri');
+      if (formDiscountPercent < 0 || formDiscountPercent > 100) throw new Error('Chegirma foizi 0..100 bo‘lishi kerak');
       if (!formTokens || formTokens < 0) throw new Error('Token soni noto‘g‘ri');
 
       const payload = {
         name: formName.trim(),
         duration_months: Number(formDuration),
         price: Number(formPrice),
+        discount_percent: Number(formDiscountPercent),
         tokens_included: Number(formTokens),
         description: formDescription.trim(),
         features: textToFeatures(formFeaturesText),
@@ -209,6 +215,7 @@ export default function SubscriptionPlansAdminPage() {
                   <tr className="border-t border-white/10 bg-black/10">
                     <th className="text-left px-6 py-3">Nomi</th>
                     <th className="text-left px-6 py-3">Narx</th>
+                    <th className="text-left px-6 py-3">Chegirma</th>
                     <th className="text-left px-6 py-3">Token</th>
                     <th className="text-left px-6 py-3">Muddat</th>
                     <th className="text-left px-6 py-3">Holat</th>
@@ -225,6 +232,7 @@ export default function SubscriptionPlansAdminPage() {
                           <div className="text-white/50 text-xs">{plan.description || '—'}</div>
                         </td>
                         <td className="px-6 py-4">${Number(plan.price).toFixed(2)}</td>
+                        <td className="px-6 py-4">{Number(plan.discount_percent || 0) > 0 ? `${Number(plan.discount_percent)}%` : '—'}</td>
                         <td className="px-6 py-4">{plan.tokens_included}</td>
                         <td className="px-6 py-4">{plan.duration_months} oy</td>
                         <td className="px-6 py-4">
@@ -319,6 +327,19 @@ export default function SubscriptionPlansAdminPage() {
                       value={formPrice}
                       onChange={(e) => setFormPrice(Number(e.target.value))}
                       className="mt-1 w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-white/60">Chegirma (%)</label>
+                    <input
+                      type="number"
+                      step="1"
+                      min={0}
+                      max={100}
+                      value={formDiscountPercent}
+                      onChange={(e) => setFormDiscountPercent(Number(e.target.value))}
+                      className="mt-1 w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder="0"
                     />
                   </div>
                   <div>

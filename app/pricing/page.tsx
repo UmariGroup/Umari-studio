@@ -8,6 +8,15 @@ import {
   VIDEO_TOKEN_COSTS,
   normalizeSubscriptionPlan,
 } from '@/lib/subscription-plans';
+import {
+  availableDurations,
+  computeOldPrice,
+  durationLabelUz,
+  featuresToList,
+  pickPlanForDuration,
+  safeDiscountPercent,
+  type DbSubscriptionPlanRow,
+} from '@/lib/subscription-plan-catalog';
 import { FiCheck, FiChevronDown, FiStar } from 'react-icons/fi';
 import { FaCoins, FaTelegramPlane } from 'react-icons/fa';
 
@@ -22,7 +31,10 @@ interface PlanConfig {
   name: string;
   nameUz: string;
   price: number;
+  oldPrice?: number | null;
+  discountPercent?: number;
   tokens: number;
+  durationMonths: number;
   description: string;
   popular?: boolean;
   features: {
@@ -38,41 +50,13 @@ interface PlanConfig {
   benefits: string[];
 }
 
-type ApiPlan = {
-  id: string;
-  name: string;
-  duration_months: number;
-  price: number;
-  tokens_included: number;
-  features: unknown;
-  description: string | null;
-  is_active?: boolean;
-};
-
 const COPYWRITER_TOKEN_COST: Record<string, number> = {
   starter: 3,
   pro: 2,
   business_plus: 1,
 };
 
-function featuresToList(features: unknown): string[] {
-  if (!features) return [];
-  if (Array.isArray(features)) return features.map(String);
-  if (typeof features === 'string') {
-    try {
-      const parsed = JSON.parse(features);
-      if (Array.isArray(parsed)) return parsed.map(String);
-    } catch {
-      return features
-        .split('\n')
-        .map((s) => s.trim())
-        .filter(Boolean);
-    }
-  }
-  return [];
-}
-
-function buildPlanConfig(slug: string, dbPlan?: ApiPlan): PlanConfig | null {
+function buildPlanConfig(slug: string, durationMonths: number, dbPlan?: DbSubscriptionPlanRow): PlanConfig | null {
   if (slug !== 'starter' && slug !== 'pro' && slug !== 'business_plus') return null;
   const meta = SUBSCRIPTION_PLANS[slug as keyof typeof SUBSCRIPTION_PLANS];
   if (!meta) return null;
@@ -91,12 +75,19 @@ function buildPlanConfig(slug: string, dbPlan?: ApiPlan): PlanConfig | null {
   const benefitsFromDb = dbPlan ? featuresToList(dbPlan.features) : [];
   const benefits = benefitsFromDb.length > 0 ? benefitsFromDb : meta.highlights;
 
+  const price = dbPlan?.price ?? meta.monthlyPriceUsd;
+  const discountPercent = safeDiscountPercent(dbPlan?.discount_percent);
+  const oldPrice = computeOldPrice(price, discountPercent);
+
   return {
     id: slug,
     name: meta.label,
     nameUz: meta.labelUz,
-    price: dbPlan?.price ?? meta.monthlyPriceUsd,
+    price,
+    oldPrice,
+    discountPercent,
     tokens: dbPlan?.tokens_included ?? meta.monthlyTokens,
+    durationMonths,
     description: dbPlan?.description || 'Tarif',
     popular: slug === 'pro',
     features: {
@@ -117,6 +108,8 @@ export default function PricingPage() {
   const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<PlanConfig[]>([]);
+  const [dbPlans, setDbPlans] = useState<DbSubscriptionPlanRow[]>([]);
+  const [durationMonths, setDurationMonths] = useState<number>(1);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [showComparison, setShowComparison] = useState(false);
 
@@ -139,18 +132,8 @@ export default function PricingPage() {
     try {
       const res = await fetch('/api/subscriptions/plans');
       const data = await res.json();
-      const dbPlans: ApiPlan[] = data?.plans || [];
-      const mapped: PlanConfig[] = [];
-      for (const p of dbPlans) {
-        const slug = normalizeSubscriptionPlan(p.name);
-        const cfg = slug ? buildPlanConfig(slug, p) : null;
-        if (cfg) mapped.push(cfg);
-      }
-
-      // Ensure stable order
-      const order = ['starter', 'pro', 'business_plus'];
-      mapped.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
-      if (mapped.length > 0) setPlans(mapped);
+      const rows: DbSubscriptionPlanRow[] = Array.isArray(data?.plans) ? (data.plans as DbSubscriptionPlanRow[]) : [];
+      setDbPlans(rows);
     } catch {
       // ignore; fall back to metadata
     }
@@ -184,12 +167,34 @@ export default function PricingPage() {
   };
 
   const currentPlan = user?.subscription_plan || 'free';
+  const durationOptions = availableDurations(dbPlans);
+  useEffect(() => {
+    if (!durationOptions.includes(durationMonths)) {
+      setDurationMonths(durationOptions[0] || 1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [durationOptions.join(','), durationMonths]);
+
+  useEffect(() => {
+    if (!dbPlans || dbPlans.length === 0) return;
+    const order = ['starter', 'pro', 'business_plus'];
+    const mapped: PlanConfig[] = [];
+    for (const slug of order) {
+      const row = pickPlanForDuration(dbPlans, slug as any, durationMonths);
+      const cfg = buildPlanConfig(slug, durationMonths, row || undefined);
+      if (cfg) mapped.push(cfg);
+    }
+    if (mapped.length > 0) setPlans(mapped);
+  }, [dbPlans, durationMonths]);
+
   const displayPlans =
     plans.length > 0
       ? plans
       : (['starter', 'pro', 'business_plus']
-          .map((slug) => buildPlanConfig(slug))
+          .map((slug) => buildPlanConfig(slug, durationMonths))
           .filter(Boolean) as PlanConfig[]);
+
+  const durationText = durationLabelUz(durationMonths);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50/30 to-pink-50/30">
@@ -216,6 +221,25 @@ export default function PricingPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-12 -mt-8">
+        {durationOptions.length > 1 && (
+          <div className="mb-8 flex items-center justify-center">
+            <div className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white p-2 shadow-sm">
+              {durationOptions.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setDurationMonths(m)}
+                  className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+                    m === durationMonths ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {durationLabelUz(m)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Pricing Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {displayPlans.map((plan) => {
@@ -256,9 +280,18 @@ export default function PricingPage() {
                   <p className="text-gray-600 text-sm mb-4">{plan.description}</p>
                   
                   <div className="flex items-baseline gap-1">
-                    <span className="text-5xl font-black text-gray-900">${plan.price}</span>
-                    <span className="text-gray-500 font-medium">/oy</span>
+                    {plan.oldPrice ? (
+                      <span className="text-sm font-bold text-gray-400 line-through">${Number(plan.oldPrice).toFixed(2)}</span>
+                    ) : null}
+                    <span className="text-5xl font-black text-gray-900">${Number(plan.price).toFixed(2)}</span>
+                    <span className="text-gray-500 font-medium">/{durationText}</span>
                   </div>
+
+                  {Number(plan.discountPercent || 0) > 0 ? (
+                    <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-rose-50 px-4 py-2 text-xs font-black text-rose-700">
+                      -{plan.discountPercent}% chegirma
+                    </div>
+                  ) : null}
                   
                   <div className={`mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold ${
                     plan.id === 'starter' 
@@ -268,7 +301,7 @@ export default function PricingPage() {
                         : 'bg-amber-100 text-amber-700'
                   }`}>
                     <FaCoins className="w-5 h-5" />
-                    {plan.tokens} token / oy
+                    {plan.tokens} token / {durationText}
                   </div>
                 </div>
 
@@ -363,14 +396,20 @@ export default function PricingPage() {
                 <thead>
                   <tr className="bg-gradient-to-r from-purple-50 to-pink-50">
                     <th className="text-left px-6 py-4 font-bold text-gray-700">Xususiyat</th>
-                    <th className="px-6 py-4 font-bold text-emerald-700 text-center">Starter ($9)</th>
-                    <th className="px-6 py-4 font-bold text-purple-700 text-center">Pro ($19)</th>
-                    <th className="px-6 py-4 font-bold text-amber-700 text-center">Business+ ($29)</th>
+                    <th className="px-6 py-4 font-bold text-emerald-700 text-center">
+                      Starter (${Number(displayPlans.find((p) => p.id === 'starter')?.price ?? 0).toFixed(2)})
+                    </th>
+                    <th className="px-6 py-4 font-bold text-purple-700 text-center">
+                      Pro (${Number(displayPlans.find((p) => p.id === 'pro')?.price ?? 0).toFixed(2)})
+                    </th>
+                    <th className="px-6 py-4 font-bold text-amber-700 text-center">
+                      Business+ (${Number(displayPlans.find((p) => p.id === 'business_plus')?.price ?? 0).toFixed(2)})
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   <tr>
-                    <td className="px-6 py-4 text-gray-600">Oylik token</td>
+                    <td className="px-6 py-4 text-gray-600">Token ({durationText})</td>
                     <td className="px-6 py-4 text-center font-bold">{displayPlans.find((p) => p.id === 'starter')?.tokens ?? '—'}</td>
                     <td className="px-6 py-4 text-center font-bold">{displayPlans.find((p) => p.id === 'pro')?.tokens ?? '—'}</td>
                     <td className="px-6 py-4 text-center font-bold">{displayPlans.find((p) => p.id === 'business_plus')?.tokens ?? '—'}</td>

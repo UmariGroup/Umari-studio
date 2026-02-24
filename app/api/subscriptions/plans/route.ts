@@ -13,6 +13,12 @@ export async function GET(req: NextRequest) {
        ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`
     );
 
+    // Discount percent for marketing (0..100). Price column remains the actual charged price.
+    await query(
+      `ALTER TABLE subscription_plans
+       ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0`
+    );
+
     const wantsAll = req.nextUrl.searchParams.get('all') === '1';
     if (wantsAll) {
       const user = await getCurrentUser();
@@ -22,7 +28,7 @@ export async function GET(req: NextRequest) {
     }
 
     const result = await query(
-      `SELECT id, name, duration_months, price, tokens_included, features, description, is_active
+      `SELECT id, name, duration_months, price, discount_percent, tokens_included, features, description, is_active
        FROM subscription_plans
        ${wantsAll ? '' : 'WHERE COALESCE(is_active, true) = true'}
        ORDER BY price ASC, duration_months ASC, name ASC`
@@ -55,7 +61,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { name, duration_months, price, tokens_included, features, description } = await req.json();
+    const { name, duration_months, price, discount_percent, tokens_included, features, description } = await req.json();
 
     if (!name || !duration_months || !price || !tokens_included) {
       return NextResponse.json(
@@ -70,11 +76,19 @@ export async function POST(req: NextRequest) {
        ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`
     );
 
+    await query(
+      `ALTER TABLE subscription_plans
+       ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0`
+    );
+
+    const discount = Number(discount_percent ?? 0);
+    const safeDiscount = Number.isFinite(discount) ? Math.max(0, Math.min(100, discount)) : 0;
+
     const result = await query(
-      `INSERT INTO subscription_plans (name, duration_months, price, tokens_included, features, description, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, true)
+      `INSERT INTO subscription_plans (name, duration_months, price, discount_percent, tokens_included, features, description, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true)
        RETURNING *`,
-      [name, duration_months, price, tokens_included, features ?? [], description || '']
+      [name, duration_months, price, safeDiscount, tokens_included, features ?? [], description || '']
     );
 
     return NextResponse.json(
@@ -111,6 +125,11 @@ export async function PATCH(req: NextRequest) {
        ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`
     );
 
+    await query(
+      `ALTER TABLE subscription_plans
+       ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0`
+    );
+
     const body = await req.json();
     const id = typeof body?.id === 'string' ? body.id.trim() : '';
     if (!id) {
@@ -128,6 +147,10 @@ export async function PATCH(req: NextRequest) {
     if (typeof body?.name === 'string') set('name', body.name);
     if (typeof body?.duration_months === 'number') set('duration_months', body.duration_months);
     if (typeof body?.price === 'number') set('price', body.price);
+    if (typeof body?.discount_percent === 'number') {
+      const d = Number(body.discount_percent);
+      set('discount_percent', Number.isFinite(d) ? Math.max(0, Math.min(100, d)) : 0);
+    }
     if (typeof body?.tokens_included === 'number') set('tokens_included', body.tokens_included);
     if (typeof body?.description === 'string') set('description', body.description);
     if (body?.features !== undefined) set('features', body.features);

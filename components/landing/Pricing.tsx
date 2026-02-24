@@ -1,5 +1,6 @@
 ﻿'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Container } from '@/components/ui/Container';
 import { Badge } from '@/components/ui/Badge';
@@ -9,6 +10,15 @@ import { clsx } from 'clsx';
 import { getTelegramSubscribeUrl } from '@/lib/telegram';
 import type { SubscriptionPlan } from '@/lib/subscription-plans';
 import { useLanguage } from '@/lib/LanguageContext';
+import {
+  availableDurations,
+  computeOldPrice,
+  durationLabelUz,
+  featuresToList,
+  pickPlanForDuration,
+  safeDiscountPercent,
+  type DbSubscriptionPlanRow,
+} from '@/lib/subscription-plan-catalog';
 
 type LandingPlan = {
   id: SubscriptionPlan;
@@ -28,6 +38,9 @@ type LandingPlan = {
 
 export function Pricing() {
   const { t } = useLanguage();
+
+  const [dbPlans, setDbPlans] = useState<DbSubscriptionPlanRow[]>([]);
+  const [durationMonths, setDurationMonths] = useState<number>(1);
 
   const plans: LandingPlan[] = [
     {
@@ -97,6 +110,41 @@ export function Pricing() {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch('/api/subscriptions/plans');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return;
+        const rows = Array.isArray(data?.plans) ? (data.plans as DbSubscriptionPlanRow[]) : [];
+        if (!cancelled) setDbPlans(rows);
+      } catch {
+        // ignore
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const durationOptions = useMemo(() => availableDurations(dbPlans), [dbPlans]);
+
+  useEffect(() => {
+    if (!durationOptions.includes(durationMonths)) {
+      setDurationMonths(durationOptions[0] || 1);
+    }
+  }, [durationOptions, durationMonths]);
+
+  const planRowsById = useMemo(() => {
+    const out = new Map<SubscriptionPlan, DbSubscriptionPlanRow | null>();
+    out.set('starter', pickPlanForDuration(dbPlans, 'starter', durationMonths));
+    out.set('pro', pickPlanForDuration(dbPlans, 'pro', durationMonths));
+    out.set('business_plus', pickPlanForDuration(dbPlans, 'business_plus', durationMonths));
+    return out;
+  }, [dbPlans, durationMonths]);
+
   return (
     <section id="pricing" className="bg-slate-50 py-20">
       <Container>
@@ -112,8 +160,52 @@ export function Pricing() {
           </p>
         </div>
 
+        {durationOptions.length > 1 && (
+          <div className="mx-auto mb-10 flex max-w-md items-center justify-center">
+            <div className="relative inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+              <motion.div
+                className="absolute inset-y-1 rounded-xl bg-slate-900"
+                initial={false}
+                animate={{
+                  x: `${durationOptions.indexOf(durationMonths) * (100 / durationOptions.length)}%`,
+                  width: `${100 / durationOptions.length}%`,
+                }}
+                transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                style={{ left: 0 }}
+              />
+              {durationOptions.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setDurationMonths(m)}
+                  className={clsx(
+                    'relative z-10 flex-1 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition',
+                    m === durationMonths ? 'text-white' : 'text-slate-700 hover:bg-slate-50'
+                  )}
+                  style={{ width: `${100 / durationOptions.length}%` }}
+                >
+                  {durationLabelUz(m)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-8 md:grid-cols-3 lg:gap-10">
           {plans.map((plan, index) => (
+            (() => {
+              const dbPlan = planRowsById.get(plan.id) || null;
+              const tokens = dbPlan?.tokens_included ?? plan.monthlyTokens;
+              const price = dbPlan?.price ?? plan.priceMonthly;
+              const discountPercent = safeDiscountPercent(dbPlan?.discount_percent);
+              const oldPrice = computeOldPrice(price, discountPercent);
+              const isMulti = durationMonths > 1;
+              const tokenPerMonth = isMulti ? Math.round(tokens / durationMonths) : tokens;
+              const pricePerMonth = isMulti ? price / durationMonths : price;
+              const featuresFromDb = dbPlan ? featuresToList(dbPlan.features) : [];
+              const showDbFeatures = featuresFromDb.length > 0;
+
+              return (
             <motion.article
               key={plan.id}
               initial={{ opacity: 0, y: 18 }}
@@ -133,21 +225,39 @@ export function Pricing() {
 
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{plan.name}</p>
               <h3 className="mt-1 text-2xl font-black text-slate-900">{plan.name}</h3>
-              <p className="mt-2 text-sm text-slate-600">{t(plan.subtitleKey)}</p>
+              <p className="mt-2 text-sm text-slate-600">{dbPlan?.description || t(plan.subtitleKey)}</p>
 
               <div className="mt-5 flex items-end gap-1">
-                <span className="text-4xl font-black text-slate-900">${plan.priceMonthly.toFixed(2)}</span>
-                <span className="pb-1 text-slate-500">{t('pricing.perMonth')}</span>
+                <div className="flex items-end gap-2">
+                  {oldPrice ? (
+                    <span className="pb-1 text-sm font-semibold text-slate-400 line-through">${oldPrice.toFixed(2)}</span>
+                  ) : null}
+                  <span className="text-4xl font-black text-slate-900">${Number(price).toFixed(2)}</span>
+                </div>
+                <span className="pb-1 text-slate-500">/{durationLabelUz(durationMonths)}</span>
               </div>
-              <p className="mt-2 text-sm font-semibold text-blue-700">{plan.monthlyTokens} {t('pricing.tokens')} / {t('pricing.perMonth')}</p>
+
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {discountPercent > 0 ? (
+                  <span className="inline-flex items-center rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-rose-700">
+                    -{discountPercent}%
+                  </span>
+                ) : null}
+                <p className="text-sm font-semibold text-blue-700">
+                  {tokens} {t('pricing.tokens')} / {durationLabelUz(durationMonths)}
+                </p>
+                {durationMonths > 1 ? (
+                  <p className="text-xs font-semibold text-slate-500">≈ {tokenPerMonth} {t('pricing.tokens')} / {t('pricing.perMonth')}</p>
+                ) : null}
+              </div>
 
               <div className="mt-6">
                 <h4 className="mb-3 text-sm font-bold text-slate-900">{t('pricing.features')}</h4>
                 <ul className="space-y-2">
-                  {plan.featureKeys.map((featureKey) => (
-                    <li key={featureKey} className="flex items-start gap-2 text-sm text-slate-600">
+                  {(showDbFeatures ? featuresFromDb : plan.featureKeys.map((k) => t(k))).map((feature) => (
+                    <li key={feature} className="flex items-start gap-2 text-sm text-slate-600">
                       <Check className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
-                      <span>{t(featureKey)}</span>
+                      <span>{feature}</span>
                     </li>
                   ))}
                 </ul>
@@ -183,6 +293,8 @@ export function Pricing() {
                 {t('pricing.selectPlan')} {'>'}
               </Button>
             </motion.article>
+              );
+            })()
           ))}
         </div>
       </Container>

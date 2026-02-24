@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useToast } from '@/components/ToastProvider';
 import { FREE_TRIAL_TOKENS, SUBSCRIPTION_PLANS } from '@/lib/subscription-plans';
+import { durationLabelUz, planSlugFromDbName, type DbSubscriptionPlanRow } from '@/lib/subscription-plan-catalog';
 import type { IconType } from 'react-icons';
 import {
   FiAlertTriangle,
@@ -100,11 +101,31 @@ export default function AdminUsersPage() {
   const [filterRole, setFilterRole] = useState('');
   const [filterSubscription, setFilterSubscription] = useState('');
   const [selectedPlans, setSelectedPlans] = useState<Record<string, string>>({});
+  const [planVariants, setPlanVariants] = useState<DbSubscriptionPlanRow[]>([]);
   const [activatingUser, setActivatingUser] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUsers();
   }, [search, filterRole, filterSubscription]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPlanVariants = async () => {
+      try {
+        const res = await fetch('/api/subscriptions/plans?all=1');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return;
+        const rows = Array.isArray(data?.plans) ? (data.plans as DbSubscriptionPlanRow[]) : [];
+        if (!cancelled) setPlanVariants(rows);
+      } catch {
+        // ignore
+      }
+    };
+    void loadPlanVariants();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const fetchUsers = async () => {
     try {
@@ -136,11 +157,13 @@ export default function AdminUsersPage() {
   const activatePlan = async (userId: string) => {
     try {
       setActivatingUser(userId);
-      const plan = selectedPlans[userId] || 'starter';
+      const selection = selectedPlans[userId] || 'starter';
+      const isDbPlanId = planVariants.some((p) => p.id === selection);
+
       const response = await fetch('/api/admin/subscriptions/activate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, plan }),
+        body: JSON.stringify(isDbPlanId ? { user_id: userId, plan_id: selection } : { user_id: userId, plan: selection }),
       });
 
       const data = await response.json();
@@ -150,13 +173,58 @@ export default function AdminUsersPage() {
 
       setUsers(users.map((u) => (u.id === userId ? { ...u, ...data.user } : u)));
       await fetchUsers();
-      toast.success(`${plan.toUpperCase()} tarif faollashtirildi (1 oy)`);
+
+      let toastLabel = String(selection).toUpperCase();
+      const chosenRow = planVariants.find((p) => p.id === selection);
+      if (chosenRow) {
+        const slug = planSlugFromDbName(chosenRow.name);
+        toastLabel = `${(slug || chosenRow.name).toString().toUpperCase()} (${durationLabelUz(chosenRow.duration_months)})`;
+      }
+      toast.success(`${toastLabel} tarif faollashtirildi`);
     } catch (error) {
       toast.error((error as Error).message || 'Xatolik yuz berdi.');
     } finally {
       setActivatingUser(null);
     }
   };
+
+  const selectableVariants = React.useMemo(() => {
+    const paid = planVariants
+      .filter((p) => {
+        const slug = planSlugFromDbName(p.name);
+        return slug === 'starter' || slug === 'pro' || slug === 'business_plus';
+      })
+      .sort((a, b) => {
+        const aSlug = planSlugFromDbName(a.name) || 'starter';
+        const bSlug = planSlugFromDbName(b.name) || 'starter';
+        const order = ['starter', 'pro', 'business_plus'];
+        const byTier = order.indexOf(aSlug) - order.indexOf(bSlug);
+        if (byTier !== 0) return byTier;
+        return Number(a.duration_months) - Number(b.duration_months);
+      });
+    return paid;
+  }, [planVariants]);
+
+  useEffect(() => {
+    if (selectableVariants.length === 0) return;
+
+    setSelectedPlans((prev) => {
+      const next: Record<string, string> = { ...prev };
+      for (const userId of Object.keys(next)) {
+        const current = next[userId];
+        if (selectableVariants.some((p) => p.id === current)) continue;
+
+        const slug = normalizePlan(current);
+        const exactMonthly = selectableVariants.find(
+          (p) => planSlugFromDbName(p.name) === slug && Number(p.duration_months) === 1
+        );
+        const anyForTier = selectableVariants.find((p) => planSlugFromDbName(p.name) === slug);
+        const chosen = exactMonthly || anyForTier;
+        if (chosen?.id) next[userId] = chosen.id;
+      }
+      return next;
+    });
+  }, [selectableVariants]);
 
   const expireUser = async (userId: string) => {
     try {
@@ -261,7 +329,10 @@ export default function AdminUsersPage() {
               const planColor = getPlanColor(user.subscription_plan);
               const statusColor = getStatusColor(user.subscription_status);
               const isProcessing = activatingUser === user.id;
-              const currentPlanOption = PLAN_OPTIONS.find((p) => p.id === selectedPlans[user.id]);
+              const selectedValue = selectedPlans[user.id] || 'starter';
+              const selectedVariant = selectableVariants.find((p) => p.id === selectedValue) || null;
+              const selectedSlug = selectedVariant ? planSlugFromDbName(selectedVariant.name) : (selectedValue as any);
+              const currentPlanOption = PLAN_OPTIONS.find((p) => p.id === selectedSlug);
 
               return (
                 <div
@@ -348,11 +419,21 @@ export default function AdminUsersPage() {
                             onChange={(e) => setSelectedPlans((prev) => ({ ...prev, [user.id]: e.target.value }))}
                             className="appearance-none pl-10 pr-8 py-3 bg-white/10 border border-white/20 rounded-xl text-white font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
                           >
-                            {PLAN_OPTIONS.map((p) => (
-                              <option key={p.id} value={p.id} className="bg-slate-800">
-                                {p.label} — ${p.price} • {p.tokens} token
-                              </option>
-                            ))}
+                            {selectableVariants.length > 0
+                              ? selectableVariants.map((p) => {
+                                  const slug = planSlugFromDbName(p.name);
+                                  const label = slug === 'business_plus' ? 'Business+' : slug === 'pro' ? 'Pro' : 'Starter';
+                                  return (
+                                    <option key={p.id} value={p.id} className="bg-slate-800">
+                                      {label} — {durationLabelUz(p.duration_months)} • ${Number(p.price).toFixed(2)} • {p.tokens_included} token
+                                    </option>
+                                  );
+                                })
+                              : PLAN_OPTIONS.map((p) => (
+                                  <option key={p.id} value={p.id} className="bg-slate-800">
+                                    {p.label} — ${p.price} • {p.tokens} token
+                                  </option>
+                                ))}
                           </select>
                           {(() => {
                             const CurrentIcon = currentPlanOption?.Icon ?? FiPackage;
@@ -411,7 +492,7 @@ export default function AdminUsersPage() {
               </p>
               <p className="flex gap-2">
                 <FiCheckCircle className="w-5 h-5 text-emerald-300 mt-0.5 flex-shrink-0" aria-hidden />
-                <span>Tarif 1 oyga faollashadi va tokenlar yangilanadi</span>
+                <span>Tarif tanlangan muddatga faollashadi va tokenlar yangilanadi</span>
               </p>
               <p className="flex gap-2">
                 <FiCheckCircle className="w-5 h-5 text-emerald-300 mt-0.5 flex-shrink-0" aria-hidden />

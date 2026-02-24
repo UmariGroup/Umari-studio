@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BillingError, getAuthenticatedUserAccount, getNextPlan, SUBSCRIPTION_PLANS } from '@/lib/subscription';
+import { query } from '@/lib/db';
 import {
   AUTH_COOKIE_NAMES,
   setAuthCookies,
@@ -21,8 +22,28 @@ export async function GET(req: NextRequest) {
     const user = await getAuthenticatedUserAccount();
     const planMeta = SUBSCRIPTION_PLANS[user.subscription_plan] || SUBSCRIPTION_PLANS.free;
 
-    const tokensTotal = user.role === 'admin' ? 999999 : planMeta.monthlyTokens;
-    const tokensUsed = Math.max(0, Number(tokensTotal) - Number(user.tokens_remaining));
+    let tokensTotal = user.role === 'admin' ? 999999 : planMeta.monthlyTokens;
+    if (user.role !== 'admin') {
+      try {
+        const subRes = await query(
+          `SELECT tokens_allocated
+           FROM subscriptions_history
+           WHERE user_id = $1 AND status = 'active'
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [user.id]
+        );
+        const allocated = Number(subRes.rows?.[0]?.tokens_allocated);
+        if (Number.isFinite(allocated) && allocated > 0) {
+          tokensTotal = allocated;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const subscriptionRemaining = Number(user.tokens_subscription_remaining ?? user.tokens_remaining);
+    const tokensUsed = Math.max(0, Number(tokensTotal) - subscriptionRemaining);
 
     const isExpired =
       user.subscription_status === 'expired' ||

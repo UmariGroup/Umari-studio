@@ -25,19 +25,21 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = typeof body?.user_id === 'string' ? body.user_id : '';
-  const plan = normalizeSubscriptionPlan(body?.plan);
+  const planIdInput = typeof body?.plan_id === 'string' ? body.plan_id.trim() : '';
+  const requestedDurationMonths = typeof body?.duration_months === 'number' ? Number(body.duration_months) : null;
+  const planFromBody = normalizeSubscriptionPlan(body?.plan);
 
   if (!userId) {
     return NextResponse.json({ error: 'User ID required' }, { status: 400 });
   }
-  if (plan === 'free') {
+
+  if (!planIdInput && planFromBody === 'free') {
     return NextResponse.json({ error: 'Paid plan required' }, { status: 400 });
   }
 
-  const meta = SUBSCRIPTION_PLANS[plan];
-  if (!meta) {
-    return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
-  }
+  const planForFallback: SubscriptionPlan = planFromBody === 'free' ? 'starter' : planFromBody;
+  const meta = SUBSCRIPTION_PLANS[planForFallback];
+  if (!meta) return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
 
   const client = await getClient();
   try {
@@ -49,6 +51,11 @@ export async function POST(req: NextRequest) {
     await client.query(
       `ALTER TABLE subscription_plans
        ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`
+    );
+
+    await client.query(
+      `ALTER TABLE subscription_plans
+       ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0`
     );
 
     const userRes = await client.query(`SELECT id, email FROM users WHERE id = $1 FOR UPDATE`, [userId]);
@@ -65,39 +72,66 @@ export async function POST(req: NextRequest) {
       [userId]
     );
 
-    const planName = PLAN_DB_NAME[plan];
-    let planId: string | null = null;
+    let chosenPlanRow:
+      | { id: string; name: string; duration_months: number; price: number; tokens_included: number }
+      | null = null;
 
-    // Prefer DB as source of truth (price/tokens) to avoid stale constants.
-    const dbPlanRes = await client.query(
-      `SELECT id, duration_months, price, tokens_included
-       FROM subscription_plans
-       WHERE lower(name) = lower($1)
-         AND COALESCE(is_active, true) = true
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [planName]
-    );
-
-    let durationMonths = 1;
-    let pricePaid = meta.monthlyPriceUsd;
-    let tokensAllocated = meta.monthlyTokens;
-
-    if (dbPlanRes.rows.length > 0) {
-      const row = dbPlanRes.rows[0];
-      planId = row.id || null;
-      durationMonths = Number(row.duration_months) || 1;
-      pricePaid = Number(row.price) || pricePaid;
-      tokensAllocated = Number(row.tokens_included) || tokensAllocated;
-    } else {
-      const insertPlanRes = await client.query(
-        `INSERT INTO subscription_plans (name, duration_months, price, tokens_included, features, description, is_active)
-         VALUES ($1, 1, $2, $3, $4, $5, true)
-         RETURNING id`,
-        [planName, meta.monthlyPriceUsd, meta.monthlyTokens, JSON.stringify([]), '']
+    if (planIdInput) {
+      const byId = await client.query(
+        `SELECT id, name, duration_months, price, tokens_included
+         FROM subscription_plans
+         WHERE id = $1
+         LIMIT 1`,
+        [planIdInput]
       );
-      planId = insertPlanRes.rows[0]?.id || null;
+      chosenPlanRow = byId.rows?.[0] || null;
+      if (!chosenPlanRow) {
+        await client.query('ROLLBACK');
+        return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+      }
+    } else {
+      const planName = PLAN_DB_NAME[planForFallback];
+      const durationFilter = requestedDurationMonths && requestedDurationMonths > 0 ? requestedDurationMonths : 1;
+
+      // Prefer DB as source of truth (price/tokens) to avoid stale constants.
+      const dbPlanRes = await client.query(
+        `SELECT id, name, duration_months, price, tokens_included
+         FROM subscription_plans
+         WHERE lower(name) = lower($1)
+           AND duration_months = $2
+           AND COALESCE(is_active, true) = true
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [planName, durationFilter]
+      );
+      if (dbPlanRes.rows.length > 0) {
+        chosenPlanRow = dbPlanRes.rows[0];
+      } else {
+        const insertPlanRes = await client.query(
+          `INSERT INTO subscription_plans (name, duration_months, price, discount_percent, tokens_included, features, description, is_active)
+           VALUES ($1, $2, $3, 0, $4, $5, $6, true)
+           RETURNING id, name, duration_months, price, tokens_included`,
+          [planName, durationFilter, meta.monthlyPriceUsd, meta.monthlyTokens, JSON.stringify([]), '']
+        );
+        chosenPlanRow = insertPlanRes.rows?.[0] || null;
+      }
     }
+
+    if (!chosenPlanRow?.id) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+    }
+
+    const chosenSlug = normalizeSubscriptionPlan(chosenPlanRow.name);
+    if (chosenSlug === 'free') {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: 'Paid plan required' }, { status: 400 });
+    }
+
+    const planId = chosenPlanRow.id;
+    const durationMonths = Number(chosenPlanRow.duration_months) || 1;
+    const pricePaid = Number(chosenPlanRow.price) || meta.monthlyPriceUsd;
+    const tokensAllocated = Number(chosenPlanRow.tokens_included) || meta.monthlyTokens;
 
     if (!planId) {
       await client.query('ROLLBACK');
@@ -114,11 +148,11 @@ export async function POST(req: NextRequest) {
            updated_at = NOW()
        WHERE id = $4
        RETURNING id, email, role, subscription_status, subscription_plan, subscription_expires_at, tokens_remaining`,
-      [plan, durationMonths, tokensAllocated, userId]
+      [chosenSlug, durationMonths, tokensAllocated, userId]
     );
 
     // Referral reward (one-time per referred user)
-    const referralReward = await applyReferralRewardForPurchase(client, userId, plan);
+    const referralReward = await applyReferralRewardForPurchase(client, userId, chosenSlug);
 
     const historyRes = await client.query(
       `INSERT INTO subscriptions_history (user_id, plan_id, started_at, expires_at, price_paid, tokens_allocated, status)
@@ -134,7 +168,7 @@ export async function POST(req: NextRequest) {
         admin.id,
         userId,
         JSON.stringify({
-          plan,
+          plan: chosenSlug,
           plan_id: planId,
           expires_at: updateUserRes.rows[0]?.subscription_expires_at,
           duration_months: durationMonths,

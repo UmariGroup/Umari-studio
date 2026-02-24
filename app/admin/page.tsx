@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { FREE_TRIAL_TOKENS, SUBSCRIPTION_PLANS } from '@/lib/subscription-plans';
+import { pickPlanForDuration, planSlugFromDbName, type DbSubscriptionPlanRow } from '@/lib/subscription-plan-catalog';
 import {
   FiBarChart2,
   FiCheck,
@@ -120,6 +121,7 @@ export default function AdminDashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [referralStats, setReferralStats] = useState<AdminReferralStats | null>(null);
+  const [dbPlans, setDbPlans] = useState<DbSubscriptionPlanRow[]>([]);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -150,6 +152,31 @@ export default function AdminDashboard() {
 
     void fetchStats();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPlans = async () => {
+      try {
+        const res = await fetch('/api/subscriptions/plans?all=1');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return;
+        const rows = Array.isArray(data?.plans) ? (data.plans as DbSubscriptionPlanRow[]) : [];
+        if (!cancelled) setDbPlans(rows);
+      } catch {
+        // ignore
+      }
+    };
+    void loadPlans();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const dbMonthly = {
+    starter: pickPlanForDuration(dbPlans, 'starter', 1),
+    pro: pickPlanForDuration(dbPlans, 'pro', 1),
+    business_plus: pickPlanForDuration(dbPlans, 'business_plus', 1),
+  };
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -206,9 +233,24 @@ export default function AdminDashboard() {
           </h2>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
             <PlanMiniCard title="Bepul" users={stats.freeUsers} meta={`${FREE_TRIAL_TOKENS} token sinov`} tone="text-slate-700 border-slate-200 bg-slate-50" />
-            <PlanMiniCard title="Starter" users={stats.starterUsers || 0} meta={`$9/oy • ${SUBSCRIPTION_PLANS.starter.monthlyTokens} token`} tone="text-emerald-700 border-emerald-200 bg-emerald-50" />
-            <PlanMiniCard title="Pro" users={stats.proUsers || 0} meta={`$19/oy • ${SUBSCRIPTION_PLANS.pro.monthlyTokens} token`} tone="text-blue-700 border-blue-200 bg-blue-50" />
-            <PlanMiniCard title="Business+" users={stats.businessUsers || 0} meta={`$29/oy • ${SUBSCRIPTION_PLANS.business_plus.monthlyTokens} token`} tone="text-violet-700 border-violet-200 bg-violet-50" />
+            <PlanMiniCard
+              title="Starter"
+              users={stats.starterUsers || 0}
+              meta={`$${Number(dbMonthly.starter?.price ?? SUBSCRIPTION_PLANS.starter.monthlyPriceUsd).toFixed(2)}/oy • ${Number(dbMonthly.starter?.tokens_included ?? SUBSCRIPTION_PLANS.starter.monthlyTokens)} token`}
+              tone="text-emerald-700 border-emerald-200 bg-emerald-50"
+            />
+            <PlanMiniCard
+              title="Pro"
+              users={stats.proUsers || 0}
+              meta={`$${Number(dbMonthly.pro?.price ?? SUBSCRIPTION_PLANS.pro.monthlyPriceUsd).toFixed(2)}/oy • ${Number(dbMonthly.pro?.tokens_included ?? SUBSCRIPTION_PLANS.pro.monthlyTokens)} token`}
+              tone="text-blue-700 border-blue-200 bg-blue-50"
+            />
+            <PlanMiniCard
+              title="Business+"
+              users={stats.businessUsers || 0}
+              meta={`$${Number(dbMonthly.business_plus?.price ?? SUBSCRIPTION_PLANS.business_plus.monthlyPriceUsd).toFixed(2)}/oy • ${Number(dbMonthly.business_plus?.tokens_included ?? SUBSCRIPTION_PLANS.business_plus.monthlyTokens)} token`}
+              tone="text-violet-700 border-violet-200 bg-violet-50"
+            />
             <PlanMiniCard title="Tugagan" users={stats.expiredUsers || 0} meta="Muddati tugagan" tone="text-rose-700 border-rose-200 bg-rose-50" />
           </div>
         </section>
@@ -322,9 +364,9 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <PlanSummary
               title="Starter"
-              subtitle="$9/oy"
+              subtitle={`$${Number(dbMonthly.starter?.price ?? SUBSCRIPTION_PLANS.starter.monthlyPriceUsd).toFixed(2)}/oy`}
               bullets={[
-                `${SUBSCRIPTION_PLANS.starter.monthlyTokens} token / oy`,
+                `${Number(dbMonthly.starter?.tokens_included ?? SUBSCRIPTION_PLANS.starter.monthlyTokens)} token / oy`,
                 'Rasm: Oddiy + Pro',
                 'Video: Umari Flash',
                 'Copywriter: 18 blok',
@@ -332,9 +374,9 @@ export default function AdminDashboard() {
             />
             <PlanSummary
               title="Pro"
-              subtitle="$19/oy"
+              subtitle={`$${Number(dbMonthly.pro?.price ?? SUBSCRIPTION_PLANS.pro.monthlyPriceUsd).toFixed(2)}/oy`}
               bullets={[
-                `${SUBSCRIPTION_PLANS.pro.monthlyTokens} token / oy`,
+                `${Number(dbMonthly.pro?.tokens_included ?? SUBSCRIPTION_PLANS.pro.monthlyTokens)} token / oy`,
                 'Rasm: Oddiy + Pro',
                 'Video: Flash + Pro',
                 'Katalog ish jarayoni',
@@ -342,9 +384,9 @@ export default function AdminDashboard() {
             />
             <PlanSummary
               title="Business+"
-              subtitle="$29/oy"
+              subtitle={`$${Number(dbMonthly.business_plus?.price ?? SUBSCRIPTION_PLANS.business_plus.monthlyPriceUsd).toFixed(2)}/oy`}
               bullets={[
-                `${SUBSCRIPTION_PLANS.business_plus.monthlyTokens} token / oy`,
+                `${Number(dbMonthly.business_plus?.tokens_included ?? SUBSCRIPTION_PLANS.business_plus.monthlyTokens)} token / oy`,
                 'Eng kuchli rasm rejimi',
                 "Ko'p video va rakurs",
                 'Yuqori throughput',
