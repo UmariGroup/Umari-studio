@@ -20,6 +20,14 @@ import {
 import { FiCheck, FiChevronDown, FiStar } from 'react-icons/fi';
 import { FaCoins, FaTelegramPlane } from 'react-icons/fa';
 
+function discountPercentForDuration(months: number): number {
+  const m = Number(months) || 1;
+  if (m === 3) return 5;
+  if (m === 6) return 10;
+  if (m === 12) return 20;
+  return 0;
+}
+
 interface UserData {
   subscription_plan: string;
   tokens_remaining: number;
@@ -76,7 +84,8 @@ function buildPlanConfig(slug: string, durationMonths: number, dbPlan?: DbSubscr
   const benefits = benefitsFromDb.length > 0 ? benefitsFromDb : meta.highlights;
 
   const price = dbPlan?.price ?? meta.monthlyPriceUsd;
-  const discountPercent = safeDiscountPercent(dbPlan?.discount_percent);
+  const mappedDiscount = discountPercentForDuration(durationMonths);
+  const discountPercent = mappedDiscount > 0 ? mappedDiscount : safeDiscountPercent(dbPlan?.discount_percent);
   const oldPrice = computeOldPrice(price, discountPercent);
 
   return {
@@ -89,7 +98,7 @@ function buildPlanConfig(slug: string, durationMonths: number, dbPlan?: DbSubscr
     tokens: dbPlan?.tokens_included ?? meta.monthlyTokens,
     durationMonths,
     description: dbPlan?.description || 'Tarif',
-    popular: slug === 'pro',
+    popular: slug === 'business_plus',
     features: {
       imageBasic: { model: 'gemini-2.5-flash-image', tokenCost: imageCosts.basic },
       imagePro: proImage,
@@ -229,11 +238,33 @@ export default function PricingPage() {
                   key={m}
                   type="button"
                   onClick={() => setDurationMonths(m)}
-                  className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+                  className={`rounded-xl px-5 py-3 text-base font-bold transition ${
                     m === durationMonths ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
-                  {durationLabelUz(m)}
+                  <span className="inline-flex items-center gap-2">
+                    <span>{durationLabelUz(m)}</span>
+
+                    {m === 12 ? (
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-black ${
+                          m === durationMonths ? 'bg-white/15 text-white' : 'bg-purple-600 text-white'
+                        }`}
+                      >
+                        ENG MASHHUR
+                      </span>
+                    ) : null}
+                  </span>
+
+                  {discountPercentForDuration(m) > 0 ? (
+                    <span
+                      className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-black ${
+                        m === durationMonths ? 'bg-white/15 text-white' : 'bg-rose-50 text-rose-700'
+                      }`}
+                    >
+                      -{discountPercentForDuration(m)}%
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>
@@ -278,20 +309,24 @@ export default function PricingPage() {
                   </h3>
                   <h2 className="text-3xl font-black text-gray-900 mb-2">{plan.name}</h2>
                   <p className="text-gray-600 text-sm mb-4">{plan.description}</p>
-                  
-                  <div className="flex items-baseline gap-1">
-                    {plan.oldPrice ? (
-                      <span className="text-sm font-bold text-gray-400 line-through">${Number(plan.oldPrice).toFixed(2)}</span>
-                    ) : null}
-                    <span className="text-5xl font-black text-gray-900">${Number(plan.price).toFixed(2)}</span>
-                    <span className="text-gray-500 font-medium">/{durationText}</span>
-                  </div>
 
-                  {Number(plan.discountPercent || 0) > 0 ? (
-                    <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-rose-50 px-4 py-2 text-xs font-black text-rose-700">
-                      -{plan.discountPercent}% chegirma
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      {plan.oldPrice ? (
+                        <span className="text-sm font-bold text-gray-400 line-through">${Number(plan.oldPrice).toFixed(2)}</span>
+                      ) : null}
+                      {Number(plan.discountPercent || 0) > 0 ? (
+                        <span className="inline-flex items-center rounded-full bg-rose-50 px-3 py-1 text-xs font-black text-rose-700">
+                          -{plan.discountPercent}%
+                        </span>
+                      ) : null}
                     </div>
-                  ) : null}
+
+                    <div className="flex items-end gap-1">
+                      <span className="text-5xl font-black text-gray-900">${Number(plan.price).toFixed(2)}</span>
+                      <span className="pb-1 text-gray-500 font-medium">/{durationText}</span>
+                    </div>
+                  </div>
                   
                   <div className={`mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold ${
                     plan.id === 'starter' 

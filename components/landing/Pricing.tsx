@@ -16,7 +16,6 @@ import {
   durationLabelUz,
   featuresToList,
   pickPlanForDuration,
-  safeDiscountPercent,
   type DbSubscriptionPlanRow,
 } from '@/lib/subscription-plan-catalog';
 
@@ -85,7 +84,7 @@ export function Pricing() {
         video: '25',
         text: '2',
       },
-      popular: true,
+      popular: false,
     },
     {
       id: 'business_plus',
@@ -105,9 +104,17 @@ export function Pricing() {
         video: '20',
         text: '1',
       },
-      popular: false,
+      popular: true,
     },
   ];
+
+  const discountPercentForDuration = useCallback((months: number): number => {
+    const m = Number(months) || 1;
+    if (m === 3) return 5;
+    if (m === 6) return 10;
+    if (m === 12) return 20;
+    return 0;
+  }, []);
 
   const onSelectPlan = (plan: SubscriptionPlan) => {
     const url = getTelegramSubscribeUrl(plan, durationMonths);
@@ -225,11 +232,33 @@ export function Pricing() {
                     durationButtonRefs.current[m] = el;
                   }}
                   className={clsx(
-                    'relative z-10 flex-1 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition',
+                    'relative z-10 flex-1 whitespace-nowrap rounded-xl px-5 py-3 text-base font-semibold transition',
                     m === durationMonths ? 'text-white' : 'text-slate-700 hover:bg-slate-50'
                   )}
                 >
-                  {durationLabelUz(m)}
+                  <span className="inline-flex items-center gap-2">
+                    <span>{durationLabelUz(m)}</span>
+
+                    {m === 12 ? (
+                      <span
+                        className={clsx(
+                          'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold',
+                          m === durationMonths ? 'bg-white/15 text-white' : 'bg-blue-600 text-white'
+                        )}
+                      >
+                        ENG MASHHUR
+                      </span>
+                    ) : null}
+                  </span>
+
+                  {discountPercentForDuration(m) > 0 ? (
+                    <span className={clsx(
+                      'ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold',
+                      m === durationMonths ? 'bg-white/15 text-white' : 'bg-rose-50 text-rose-700'
+                    )}>
+                      -{discountPercentForDuration(m)}%
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>
@@ -242,11 +271,8 @@ export function Pricing() {
               const dbPlan = planRowsById.get(plan.id) || null;
               const tokens = dbPlan?.tokens_included ?? plan.monthlyTokens;
               const price = dbPlan?.price ?? plan.priceMonthly;
-              const discountPercent = safeDiscountPercent(dbPlan?.discount_percent);
-              const oldPrice = computeOldPrice(price, discountPercent);
               const isMulti = durationMonths > 1;
               const tokenPerMonth = isMulti ? Math.round(tokens / durationMonths) : tokens;
-              const pricePerMonth = isMulti ? price / durationMonths : price;
               const featuresFromDb = dbPlan ? featuresToList(dbPlan.features) : [];
               const showDbFeatures = featuresFromDb.length > 0;
 
@@ -272,22 +298,31 @@ export function Pricing() {
               <h3 className="mt-1 text-2xl font-black text-slate-900">{plan.name}</h3>
               <p className="mt-2 text-sm text-slate-600">{dbPlan?.description || t(plan.subtitleKey)}</p>
 
-              <div className="mt-5 flex items-end gap-1">
-                <div className="flex items-end gap-2">
-                  {oldPrice ? (
-                    <span className="pb-1 text-sm font-semibold text-slate-400 line-through">${oldPrice.toFixed(2)}</span>
-                  ) : null}
-                  <span className="text-4xl font-black text-slate-900">${Number(price).toFixed(2)}</span>
-                </div>
-                <span className="pb-1 text-slate-500">/{durationLabelUz(durationMonths)}</span>
-              </div>
+              {(() => {
+                const discount = discountPercentForDuration(durationMonths);
+                const old = computeOldPrice(price, discount);
+                return (
+                  <div className="mt-5 flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      {old ? (
+                        <span className="text-sm font-semibold text-slate-400 line-through">${old.toFixed(2)}</span>
+                      ) : null}
+                      {discount > 0 ? (
+                        <span className="inline-flex items-center rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-rose-700">
+                          -{discount}%
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="flex items-end gap-1">
+                      <span className="text-4xl font-black text-slate-900">${Number(price).toFixed(2)}</span>
+                      <span className="pb-1 text-slate-500">/{durationLabelUz(durationMonths)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                {discountPercent > 0 ? (
-                  <span className="inline-flex items-center rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-rose-700">
-                    -{discountPercent}%
-                  </span>
-                ) : null}
                 <p className="text-sm font-semibold text-blue-700">
                   {tokens} {t('pricing.tokens')} / {durationLabelUz(durationMonths)}
                 </p>
