@@ -137,6 +137,15 @@ AMOCRM_REDIRECT_URI=https://YOUR_APP_DOMAIN/api/admin/amocrm/oauth/callback
 AMOCRM_NEW_STATUS_ID=123
 AMOCRM_RESALE_STATUS_ID=456
 
+# Eslatma: amoCRM’da pipeline (voronka) ko‘p bo‘lishi mumkin.
+# Bizga aynan stage/status’ning `id` raqami kerak bo‘ladi.
+# Lead qaysi pipeline’ga tushishi `status_id` orqali avtomatik aniqlanadi.
+# Status ID topish tartibi:
+# 1) Admin → /admin/amocrm → “Pipelines'ni olish”
+# 2) Chiqqan JSON’dan kerakli pipeline’ni toping (masalan "id": 10567594)
+# 3) O‘sha pipeline ichidagi statuses/stages ro‘yxatidan "name" bo‘yicha
+#    “Yangi mijoz (AI)” va “Qayta sotuv” stage’larini topib, ularning "id" sini oling.
+
 # Low-token trigger
 AMOCRM_LOW_TOKEN_THRESHOLD=10
 AMOCRM_LOW_TOKEN_BATCH=50

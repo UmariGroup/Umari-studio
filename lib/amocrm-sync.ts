@@ -2,11 +2,16 @@ import { query } from '@/lib/db';
 import {
   createComplexLead,
   getAmoCrmLowTokenThreshold,
+  getAmoCrmNewPipelineId,
+  getAmoCrmNewStageName,
   getAmoCrmNewStatusId,
+  getAmoCrmResalePipelineId,
+  getAmoCrmResaleStageName,
   getAmoCrmResaleStatusId,
   getLatestTokens,
   getUserSync,
   isAmoCrmEnabled,
+  resolveStatusIdByPipelineAndStageName,
   upsertUserSync,
 } from '@/lib/amocrm';
 
@@ -40,8 +45,13 @@ export async function syncNewUserToAmoCrm(userId: string): Promise<{ ok: boolean
   try {
     if (!(await canSync())) return { ok: false, reason: 'not_configured_or_connected' };
 
-    const statusId = getAmoCrmNewStatusId();
-    if (!statusId) return { ok: false, reason: 'missing_new_status_id' };
+    const explicitStatusId = getAmoCrmNewStatusId();
+    const statusId = explicitStatusId ||
+      (await resolveStatusIdByPipelineAndStageName({
+        pipelineId: getAmoCrmNewPipelineId(),
+        stageName: getAmoCrmNewStageName(),
+      }));
+    if (!statusId) return { ok: false, reason: 'missing_new_status_or_pipeline_stage' };
 
     const existing = await getUserSync(userId);
     if (existing?.new_synced_at) return { ok: true, reason: 'already_synced' };
@@ -116,8 +126,13 @@ export async function syncLowTokenUserToAmoCrm(userId: string): Promise<{ ok: bo
   try {
     if (!(await canSync())) return { ok: false, reason: 'not_configured_or_connected' };
 
-    const statusId = getAmoCrmResaleStatusId();
-    if (!statusId) return { ok: false, reason: 'missing_resale_status_id' };
+    const explicitStatusId = getAmoCrmResaleStatusId();
+    const statusId = explicitStatusId ||
+      (await resolveStatusIdByPipelineAndStageName({
+        pipelineId: getAmoCrmResalePipelineId(),
+        stageName: getAmoCrmResaleStageName(),
+      }));
+    if (!statusId) return { ok: false, reason: 'missing_resale_status_or_pipeline_stage' };
 
     const threshold = getAmoCrmLowTokenThreshold();
 

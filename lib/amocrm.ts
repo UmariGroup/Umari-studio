@@ -60,8 +60,24 @@ export function getAmoCrmNewStatusId(): number {
   return Number(process.env.AMOCRM_NEW_STATUS_ID || '0');
 }
 
+export function getAmoCrmNewPipelineId(): number {
+  return Number(process.env.AMOCRM_NEW_PIPELINE_ID || '0');
+}
+
+export function getAmoCrmNewStageName(): string {
+  return String(process.env.AMOCRM_NEW_STAGE_NAME || 'Yangi mijoz (AI)').trim();
+}
+
 export function getAmoCrmResaleStatusId(): number {
   return Number(process.env.AMOCRM_RESALE_STATUS_ID || '0');
+}
+
+export function getAmoCrmResalePipelineId(): number {
+  return Number(process.env.AMOCRM_RESALE_PIPELINE_ID || '0');
+}
+
+export function getAmoCrmResaleStageName(): string {
+  return String(process.env.AMOCRM_RESALE_STAGE_NAME || 'Qayta sotuv').trim();
 }
 
 export function getAmoCrmLowTokenThreshold(): number {
@@ -290,6 +306,39 @@ export async function createComplexLead(payload: AmoComplexLeadPayload) {
 
 export async function listPipelines() {
   return amoFetch('/api/v4/leads/pipelines', { method: 'GET' });
+}
+
+export async function listPipelineStatuses(pipelineId: number) {
+  return amoFetch(`/api/v4/leads/pipelines/${pipelineId}/statuses`, { method: 'GET' });
+}
+
+function extractStatuses(payload: any): Array<{ id: number; name: string }> {
+  const statuses = payload?._embedded?.statuses;
+  if (!Array.isArray(statuses)) return [];
+  return statuses
+    .map((s: any) => ({ id: Number(s?.id || 0), name: String(s?.name || '').trim() }))
+    .filter((s: any) => Number.isFinite(s.id) && s.id > 0 && s.name);
+}
+
+export async function resolveStatusIdByPipelineAndStageName(opts: {
+  pipelineId: number;
+  stageName: string;
+}): Promise<number | null> {
+  const pipelineId = Number(opts.pipelineId || 0);
+  const stageName = String(opts.stageName || '').trim();
+  if (!pipelineId || !stageName) return null;
+
+  const resp = await listPipelineStatuses(pipelineId);
+  if (!resp.ok || !resp.json) return null;
+
+  const statuses = extractStatuses(resp.json);
+
+  const exact = statuses.find((s) => s.name === stageName);
+  if (exact) return exact.id;
+
+  const lower = stageName.toLowerCase();
+  const ci = statuses.find((s) => s.name.toLowerCase() === lower);
+  return ci ? ci.id : null;
 }
 
 export async function upsertUserSync(values: {
