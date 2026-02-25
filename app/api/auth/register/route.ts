@@ -122,9 +122,12 @@ export async function POST(req: NextRequest) {
 
     // amoCRM sync (best-effort; never block registration)
     try {
-      await withTimeout(syncNewUserToAmoCrm(user.id), 1500);
-    } catch {
-      // ignore
+      const amoRes = await withTimeout(syncNewUserToAmoCrm(user.id), 1500);
+      if (!amoRes?.ok) {
+        console.warn('amoCRM sync skipped/failed on register:', { userId: user.id, reason: amoRes?.reason });
+      }
+    } catch (err) {
+      console.warn('amoCRM sync exception on register:', { userId: user.id, err });
     }
 
     if (referralAttached) {

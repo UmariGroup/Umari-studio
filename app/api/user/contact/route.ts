@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { syncNewUserToAmoCrm } from '@/lib/amocrm-sync';
+
+const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> => {
+  let timeoutId: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('timeout')), ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
 
 function normalizeTelegramUsername(input: string): string {
   const trimmed = input.trim();
@@ -84,6 +97,16 @@ export async function POST(req: NextRequest) {
 
     if (result.rows.length === 0) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // amoCRM sync (best-effort; never block contact update)
+    try {
+      const amoRes = await withTimeout(syncNewUserToAmoCrm(session.id), 1200);
+      if (!amoRes?.ok) {
+        console.warn('amoCRM sync skipped/failed after contact update:', { userId: session.id, reason: amoRes?.reason });
+      }
+    } catch (err) {
+      console.warn('amoCRM sync exception after contact update:', { userId: session.id, err });
     }
 
     return NextResponse.json({ success: true, user: result.rows[0] });
