@@ -89,7 +89,23 @@ type AdminUserDetail = {
   };
   referrals: {
     invited_users: InvitedUserRow[];
+    invited_pagination?: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+      has_prev: boolean;
+      has_next: boolean;
+    };
     rewards: ReferralRewardRow[];
+    rewards_pagination?: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+      has_prev: boolean;
+      has_next: boolean;
+    };
   };
 };
 
@@ -126,6 +142,10 @@ export default function AdminUserDetailPage() {
   const [data, setData] = useState<AdminUserDetail | null>(null);
   const [usagePage, setUsagePage] = useState(1);
   const [usageLimit, setUsageLimit] = useState(50);
+  const [invitedPage, setInvitedPage] = useState(1);
+  const [rewardsPage, setRewardsPage] = useState(1);
+  const invitedLimit = 20;
+  const rewardsLimit = 20;
 
   useEffect(() => {
     if (!id) return;
@@ -138,6 +158,10 @@ export default function AdminUserDetailPage() {
         const params = new URLSearchParams();
         params.set('usage_page', String(usagePage));
         params.set('usage_limit', String(usageLimit));
+        params.set('invited_page', String(invitedPage));
+        params.set('invited_limit', String(invitedLimit));
+        params.set('rewards_page', String(rewardsPage));
+        params.set('rewards_limit', String(rewardsLimit));
         const res = await fetch(`/api/admin/users/${id}?${params.toString()}`);
         const json = await res.json();
         if (!res.ok) throw new Error(json?.error || 'Failed to load user detail');
@@ -152,10 +176,12 @@ export default function AdminUserDetailPage() {
     return () => {
       isMounted = false;
     };
-  }, [id, usagePage, usageLimit]);
+  }, [id, usagePage, usageLimit, invitedPage, rewardsPage]);
 
   useEffect(() => {
     setUsagePage(1);
+    setInvitedPage(1);
+    setRewardsPage(1);
   }, [id]);
 
   const user = data?.user;
@@ -331,7 +357,9 @@ export default function AdminUserDetailPage() {
                   <FiUsers className="text-white/70" aria-hidden />
                   Taklif qilgan foydalanuvchilar
                 </h3>
-                <p className="text-white/50 text-sm mt-1">Jami: {(data?.referrals?.invited_users || []).length}</p>
+                <p className="text-white/50 text-sm mt-1">
+                  Jami: {data?.referrals?.invited_pagination?.total ?? (data?.referrals?.invited_users || []).length}
+                </p>
 
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full text-left text-sm">
@@ -367,6 +395,32 @@ export default function AdminUserDetailPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {(data?.referrals?.invited_pagination?.pages || 1) > 1 && (
+                  <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4 text-sm">
+                    <span className="text-white/60">
+                      {data?.referrals?.invited_pagination?.page || invitedPage} / {data?.referrals?.invited_pagination?.pages || 1}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setInvitedPage((prev) => Math.max(1, prev - 1))}
+                        disabled={!data?.referrals?.invited_pagination?.has_prev || loading}
+                        className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Oldingi
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setInvitedPage((prev) => prev + 1)}
+                        disabled={!data?.referrals?.invited_pagination?.has_next || loading}
+                        className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Keyingi
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
@@ -374,7 +428,9 @@ export default function AdminUserDetailPage() {
                   <FiGift className="text-white/70" aria-hidden />
                   Referral reward tarixi
                 </h3>
-                <p className="text-white/50 text-sm mt-1">Jami: {(data?.referrals?.rewards || []).length}</p>
+                <p className="text-white/50 text-sm mt-1">
+                  Jami: {data?.referrals?.rewards_pagination?.total ?? (data?.referrals?.rewards || []).length}
+                </p>
 
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full text-left text-sm">
@@ -412,6 +468,32 @@ export default function AdminUserDetailPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {(data?.referrals?.rewards_pagination?.pages || 1) > 1 && (
+                  <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4 text-sm">
+                    <span className="text-white/60">
+                      {data?.referrals?.rewards_pagination?.page || rewardsPage} / {data?.referrals?.rewards_pagination?.pages || 1}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setRewardsPage((prev) => Math.max(1, prev - 1))}
+                        disabled={!data?.referrals?.rewards_pagination?.has_prev || loading}
+                        className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Oldingi
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRewardsPage((prev) => prev + 1)}
+                        disabled={!data?.referrals?.rewards_pagination?.has_next || loading}
+                        className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Keyingi
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

@@ -32,6 +32,14 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
     const usageLimit = parsePositiveInt(searchParams.get('usage_limit'), 50, 10, 200);
     const usageOffset = (usagePage - 1) * usageLimit;
 
+    const invitedPage = parsePositiveInt(searchParams.get('invited_page'), 1, 1, 10_000);
+    const invitedLimit = parsePositiveInt(searchParams.get('invited_limit'), 20, 5, 100);
+    const invitedOffset = (invitedPage - 1) * invitedLimit;
+
+    const rewardsPage = parsePositiveInt(searchParams.get('rewards_page'), 1, 1, 10_000);
+    const rewardsLimit = parsePositiveInt(searchParams.get('rewards_limit'), 20, 5, 100);
+    const rewardsOffset = (rewardsPage - 1) * rewardsLimit;
+
     // Ensure referral schema exists for older DBs.
     const client = await getClient();
     try {
@@ -154,15 +162,26 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
     // Referral: invited users + rewards history for this referrer
     let invitedUsers: Array<any> = [];
     let rewards: Array<any> = [];
+    let invitedTotal = 0;
+    let rewardsTotal = 0;
     try {
+      const invitedCountRes = await query(
+        `SELECT COUNT(*)::int AS total
+         FROM users
+         WHERE referred_by_user_id = $1`,
+        [userId]
+      );
+      invitedTotal = Number(invitedCountRes.rows?.[0]?.total || 0);
+
       const invitedRes = await query(
         `SELECT id, email, first_name, last_name, subscription_status, subscription_plan,
                 referred_at, created_at
          FROM users
          WHERE referred_by_user_id = $1
          ORDER BY COALESCE(referred_at, created_at) DESC
-         LIMIT 200`,
-        [userId]
+         LIMIT $2
+         OFFSET $3`,
+        [userId, invitedLimit, invitedOffset]
       );
       invitedUsers = (invitedRes.rows || []).map((r: any) => ({
         id: String(r.id),
@@ -174,6 +193,14 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
         referred_at: r.referred_at ? new Date(r.referred_at).toISOString() : null,
         created_at: r.created_at ? new Date(r.created_at).toISOString() : null,
       }));
+
+      const rewardsCountRes = await query(
+        `SELECT COUNT(*)::int AS total
+         FROM referral_rewards
+         WHERE referrer_user_id = $1`,
+        [userId]
+      );
+      rewardsTotal = Number(rewardsCountRes.rows?.[0]?.total || 0);
 
       const rewardsRes = await query(
         `SELECT rr.id,
@@ -188,8 +215,9 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
          LEFT JOIN users u ON u.id = rr.referred_user_id
          WHERE rr.referrer_user_id = $1
          ORDER BY rr.created_at DESC
-         LIMIT 200`,
-        [userId]
+         LIMIT $2
+         OFFSET $3`,
+        [userId, rewardsLimit, rewardsOffset]
       );
 
       rewards = (rewardsRes.rows || []).map((r: any) => ({
@@ -242,7 +270,23 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
       },
       referrals: {
         invited_users: invitedUsers,
+        invited_pagination: {
+          page: invitedPage,
+          limit: invitedLimit,
+          total: invitedTotal,
+          pages: Math.max(1, Math.ceil(invitedTotal / invitedLimit)),
+          has_prev: invitedPage > 1,
+          has_next: invitedPage * invitedLimit < invitedTotal,
+        },
         rewards,
+        rewards_pagination: {
+          page: rewardsPage,
+          limit: rewardsLimit,
+          total: rewardsTotal,
+          pages: Math.max(1, Math.ceil(rewardsTotal / rewardsLimit)),
+          has_prev: rewardsPage > 1,
+          has_next: rewardsPage * rewardsLimit < rewardsTotal,
+        },
       },
     });
   } catch (error) {
