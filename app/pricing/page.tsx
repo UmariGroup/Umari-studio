@@ -232,39 +232,43 @@ export default function PricingPage() {
       <div className="max-w-7xl mx-auto px-4 py-12 -mt-8">
         {durationOptions.length > 1 && (
           <div className="mb-8 flex items-center justify-center">
-            <div className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white p-2 shadow-sm">
+            <div className="inline-flex w-full max-w-xl items-center gap-2 overflow-hidden rounded-2xl border border-gray-200 bg-white p-2 shadow-sm">
               {durationOptions.map((m) => (
                 <button
                   key={m}
                   type="button"
                   onClick={() => setDurationMonths(m)}
-                  className={`rounded-xl px-5 py-3 text-base font-bold transition ${
+                  className={`relative flex-1 rounded-xl px-5 pb-3 pt-8 text-base font-bold transition ${
                     m === durationMonths ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
-                  <span className="inline-flex items-center gap-2">
-                    <span>{durationLabelUz(m)}</span>
+                  <span className="pointer-events-none absolute left-3 right-3 top-2 flex items-center justify-between gap-2">
+                    <span>
+                      {m === 12 ? (
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-black ${
+                            m === durationMonths ? 'bg-white/15 text-white' : 'bg-purple-600 text-white'
+                          }`}
+                        >
+                          ENG MASHHUR
+                        </span>
+                      ) : null}
+                    </span>
 
-                    {m === 12 ? (
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-black ${
-                          m === durationMonths ? 'bg-white/15 text-white' : 'bg-purple-600 text-white'
-                        }`}
-                      >
-                        ENG MASHHUR
-                      </span>
-                    ) : null}
+                    <span>
+                      {discountPercentForDuration(m) > 0 ? (
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-black ${
+                            m === durationMonths ? 'bg-white/15 text-white' : 'bg-rose-50 text-rose-700'
+                          }`}
+                        >
+                          -{discountPercentForDuration(m)}%
+                        </span>
+                      ) : null}
+                    </span>
                   </span>
 
-                  {discountPercentForDuration(m) > 0 ? (
-                    <span
-                      className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-black ${
-                        m === durationMonths ? 'bg-white/15 text-white' : 'bg-rose-50 text-rose-700'
-                      }`}
-                    >
-                      -{discountPercentForDuration(m)}%
-                    </span>
-                  ) : null}
+                  <span className="block text-center leading-none">{durationLabelUz(m)}</span>
                 </button>
               ))}
             </div>

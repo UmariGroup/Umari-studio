@@ -208,10 +208,10 @@ export function Pricing() {
         </div>
 
         {durationOptions.length > 1 && (
-          <div className="mx-auto mb-10 flex max-w-md items-center justify-center">
+          <div className="mx-auto mb-10 flex max-w-xl items-center justify-center">
             <div
               ref={durationToggleRef}
-              className="relative inline-flex w-full rounded-2xl border border-slate-200 bg-white p-1 shadow-sm"
+              className="relative inline-flex w-full overflow-hidden rounded-2xl border border-slate-200 bg-white p-1 shadow-sm"
             >
               <motion.div
                 className="absolute inset-y-1 rounded-xl bg-slate-900"
@@ -232,33 +232,39 @@ export function Pricing() {
                     durationButtonRefs.current[m] = el;
                   }}
                   className={clsx(
-                    'relative z-10 flex-1 whitespace-nowrap rounded-xl px-5 py-3 text-base font-semibold transition',
+                    'relative z-10 flex-1 rounded-xl px-5 pb-3 pt-8 text-base font-semibold transition',
                     m === durationMonths ? 'text-white' : 'text-slate-700 hover:bg-slate-50'
                   )}
                 >
-                  <span className="inline-flex items-center gap-2">
-                    <span>{durationLabelUz(m)}</span>
+                  <span className="pointer-events-none absolute left-3 right-3 top-2 flex items-center justify-between gap-2">
+                    <span>
+                      {m === 12 ? (
+                        <span
+                          className={clsx(
+                            'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold',
+                            m === durationMonths ? 'bg-white/15 text-white' : 'bg-blue-600 text-white'
+                          )}
+                        >
+                          ENG MASHHUR
+                        </span>
+                      ) : null}
+                    </span>
 
-                    {m === 12 ? (
-                      <span
-                        className={clsx(
-                          'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold',
-                          m === durationMonths ? 'bg-white/15 text-white' : 'bg-blue-600 text-white'
-                        )}
-                      >
-                        ENG MASHHUR
-                      </span>
-                    ) : null}
+                    <span>
+                      {discountPercentForDuration(m) > 0 ? (
+                        <span
+                          className={clsx(
+                            'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold',
+                            m === durationMonths ? 'bg-white/15 text-white' : 'bg-rose-50 text-rose-700'
+                          )}
+                        >
+                          -{discountPercentForDuration(m)}%
+                        </span>
+                      ) : null}
+                    </span>
                   </span>
 
-                  {discountPercentForDuration(m) > 0 ? (
-                    <span className={clsx(
-                      'ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold',
-                      m === durationMonths ? 'bg-white/15 text-white' : 'bg-rose-50 text-rose-700'
-                    )}>
-                      -{discountPercentForDuration(m)}%
-                    </span>
-                  ) : null}
+                  <span className="block text-center leading-none">{durationLabelUz(m)}</span>
                 </button>
               ))}
             </div>
