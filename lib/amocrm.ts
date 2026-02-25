@@ -225,17 +225,11 @@ async function refreshTokens(baseUrl: string, refreshToken: string): Promise<{
   };
 }
 
-async function getValidAccessToken(): Promise<{ baseUrl: string; accessToken: string } | null> {
+let refreshInFlight: Promise<{ baseUrl: string; accessToken: string } | null> | null = null;
+
+async function forceRefreshAccessToken(): Promise<{ baseUrl: string; accessToken: string } | null> {
   const latest = await getLatestTokens();
   if (!latest) return null;
-
-  const now = Date.now();
-  const expiresAtMs = latest.expiresAt.getTime();
-  const needsRefresh = expiresAtMs - now < 60_000;
-
-  if (!needsRefresh) {
-    return { baseUrl: latest.baseUrl, accessToken: latest.accessToken };
-  }
 
   const refreshed = await refreshTokens(latest.baseUrl, latest.refreshToken);
   await saveTokens({
@@ -248,38 +242,83 @@ async function getValidAccessToken(): Promise<{ baseUrl: string; accessToken: st
   return { baseUrl: latest.baseUrl, accessToken: refreshed.accessToken };
 }
 
+async function getValidAccessToken(): Promise<{ baseUrl: string; accessToken: string } | null> {
+  const latest = await getLatestTokens();
+  if (!latest) return null;
+
+  const now = Date.now();
+  const expiresAtMs = latest.expiresAt.getTime();
+  const needsRefresh = expiresAtMs - now < 60_000;
+
+  if (!needsRefresh) {
+    return { baseUrl: latest.baseUrl, accessToken: latest.accessToken };
+  }
+
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        return await forceRefreshAccessToken();
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+  }
+
+  return await refreshInFlight;
+}
+
 export async function amoFetch<T = unknown>(
   path: string,
   init?: RequestInit & { skipAuth?: boolean }
 ): Promise<{ status: number; ok: boolean; json: T | null; text: string }>
 {
-  const access = init?.skipAuth ? null : await getValidAccessToken();
-  if (!init?.skipAuth && !access) {
+  const makeUrl = (baseUrl: string) =>
+    `${normalizeBaseUrl(baseUrl)}${path.startsWith('/') ? path : `/${path}`}`;
+
+  const doRequest = async (accessToken: string | null, baseUrl: string) => {
+    const url = makeUrl(baseUrl);
+    const headers = new Headers(init?.headers);
+    if (!headers.has('content-type') && init?.body) headers.set('content-type', 'application/json');
+    if (accessToken) headers.set('authorization', `Bearer ${accessToken}`);
+
+    const resp = await fetch(url, {
+      ...init,
+      headers,
+    });
+
+    const text = await resp.text();
+    const json = (() => {
+      try {
+        return text ? (JSON.parse(text) as T) : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    return { status: resp.status, ok: resp.ok, json, text };
+  };
+
+  if (init?.skipAuth) {
+    const baseUrl = getAmoCrmBaseUrl();
+    return doRequest(null, baseUrl);
+  }
+
+  const access = await getValidAccessToken();
+  if (!access) {
     return { status: 401, ok: false, json: null, text: 'amoCRM is not connected' };
   }
 
-  const baseUrl = access?.baseUrl || getAmoCrmBaseUrl();
-  const url = `${normalizeBaseUrl(baseUrl)}${path.startsWith('/') ? path : `/${path}`}`;
+  const first = await doRequest(access.accessToken, access.baseUrl);
+  if (first.status !== 401) return first;
 
-  const headers = new Headers(init?.headers);
-  if (!headers.has('content-type') && init?.body) headers.set('content-type', 'application/json');
-  if (access) headers.set('authorization', `Bearer ${access.accessToken}`);
-
-  const resp = await fetch(url, {
-    ...init,
-    headers,
-  });
-
-  const text = await resp.text();
-  const json = (() => {
-    try {
-      return text ? (JSON.parse(text) as T) : null;
-    } catch {
-      return null;
-    }
-  })();
-
-  return { status: resp.status, ok: resp.ok, json, text };
+  // Token might be revoked/invalidated before expiry; force refresh once and retry.
+  try {
+    const refreshed = refreshInFlight ? await refreshInFlight : await forceRefreshAccessToken();
+    if (!refreshed) return first;
+    return await doRequest(refreshed.accessToken, refreshed.baseUrl);
+  } catch {
+    return first;
+  }
 }
 
 export type AmoComplexLeadPayload = {
