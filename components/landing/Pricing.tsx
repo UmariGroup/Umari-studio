@@ -44,6 +44,7 @@ export function Pricing() {
   const durationToggleRef = useRef<HTMLDivElement | null>(null);
   const durationButtonRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const [highlight, setHighlight] = useState<{ x: number; width: number }>({ x: 0, width: 0 });
+  const [popularBadge, setPopularBadge] = useState<{ x: number; width: number } | null>(null);
 
   const plans: LandingPlan[] = [
     {
@@ -153,6 +154,16 @@ export function Pricing() {
       x: btn.offsetLeft,
       width: btn.offsetWidth,
     });
+
+    const popularBtn = durationButtonRefs.current[12];
+    if (popularBtn) {
+      setPopularBadge({
+        x: popularBtn.offsetLeft,
+        width: popularBtn.offsetWidth,
+      });
+    } else {
+      setPopularBadge(null);
+    }
   }, [durationMonths]);
 
   useEffect(() => {
@@ -211,8 +222,19 @@ export function Pricing() {
           <div className="mx-auto mb-10 flex max-w-xl items-center justify-center">
             <div
               ref={durationToggleRef}
-              className="relative inline-flex w-full overflow-hidden rounded-2xl border border-slate-200 bg-white p-1 shadow-sm"
+              className="relative inline-flex w-full overflow-visible rounded-2xl border border-slate-200 bg-white p-1 shadow-sm"
             >
+              {popularBadge && durationOptions.includes(12) ? (
+                <div
+                  className="pointer-events-none absolute -top-4 z-20"
+                  style={{ left: popularBadge.x + popularBadge.width / 2, transform: 'translateX(-50%)' }}
+                >
+                  <span className="inline-flex items-center whitespace-nowrap rounded-full bg-blue-600 px-3 py-1 text-[11px] font-bold text-white">
+                    ENG MASHHUR
+                  </span>
+                </div>
+              ) : null}
+
               <motion.div
                 className="absolute inset-y-1 rounded-xl bg-slate-900"
                 initial={false}
@@ -238,16 +260,7 @@ export function Pricing() {
                 >
                   <span className="pointer-events-none absolute left-3 right-3 top-2 flex items-center justify-between gap-2">
                     <span>
-                      {m === 12 ? (
-                        <span
-                          className={clsx(
-                            'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold',
-                            m === durationMonths ? 'bg-white/15 text-white' : 'bg-blue-600 text-white'
-                          )}
-                        >
-                          ENG MASHHUR
-                        </span>
-                      ) : null}
+                      {/* reserved for future top-left badges */}
                     </span>
 
                     <span>

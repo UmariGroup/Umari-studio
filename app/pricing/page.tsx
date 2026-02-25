@@ -232,7 +232,7 @@ export default function PricingPage() {
       <div className="max-w-7xl mx-auto px-4 py-12 -mt-8">
         {durationOptions.length > 1 && (
           <div className="mb-8 flex items-center justify-center">
-            <div className="inline-flex w-full max-w-xl items-center gap-2 overflow-hidden rounded-2xl border border-gray-200 bg-white p-2 shadow-sm">
+            <div className="inline-flex w-full max-w-xl items-center gap-2 overflow-visible rounded-2xl border border-gray-200 bg-white p-2 shadow-sm">
               {durationOptions.map((m) => (
                 <button
                   key={m}
@@ -242,17 +242,17 @@ export default function PricingPage() {
                     m === durationMonths ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
+                  {m === 12 ? (
+                    <span className="pointer-events-none absolute -top-4 left-1/2 z-20 -translate-x-1/2">
+                      <span className="inline-flex items-center whitespace-nowrap rounded-full bg-purple-600 px-3 py-1 text-[11px] font-black text-white">
+                        ENG MASHHUR
+                      </span>
+                    </span>
+                  ) : null}
+
                   <span className="pointer-events-none absolute left-3 right-3 top-2 flex items-center justify-between gap-2">
                     <span>
-                      {m === 12 ? (
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-black ${
-                            m === durationMonths ? 'bg-white/15 text-white' : 'bg-purple-600 text-white'
-                          }`}
-                        >
-                          ENG MASHHUR
-                        </span>
-                      ) : null}
+                      {/* reserved for future top-left badges */}
                     </span>
 
                     <span>
