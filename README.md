@@ -113,6 +113,43 @@ Muqobil variant (query o'rniga header):
 
 Javobda nechta user/subscription `expired` bo'lganini qaytaradi.
 
+## 🤝 amoCRM (OAuth + lead sync)
+
+Admin panelda: `/admin/amocrm` (Auth • Setup • Debug)
+
+`.env.local` yoki production env ga qo'shing:
+
+```env
+AMOCRM_ENABLED=true
+
+# Variant A: to'liq base URL
+AMOCRM_BASE_URL=https://YOUR_SUBDOMAIN.amocrm.ru
+
+# yoki Variant B: subdomain + domain
+# AMOCRM_SUBDOMAIN=YOUR_SUBDOMAIN
+# AMOCRM_DOMAIN=amocrm.ru
+
+AMOCRM_CLIENT_ID=...
+AMOCRM_CLIENT_SECRET=...
+AMOCRM_REDIRECT_URI=https://YOUR_APP_DOMAIN/api/admin/amocrm/oauth/callback
+
+# amoCRM status_id lar (pipeline ichidagi stage ID)
+AMOCRM_NEW_STATUS_ID=123
+AMOCRM_RESALE_STATUS_ID=456
+
+# Low-token trigger
+AMOCRM_LOW_TOKEN_THRESHOLD=10
+AMOCRM_LOW_TOKEN_BATCH=50
+```
+
+Low-token cron endpoint:
+
+- `GET /api/cron/amocrm-low-tokens` (CRON_SECRET bilan)
+
+Misol:
+
+- `https://YOUR_DOMAIN/api/cron/amocrm-low-tokens?secret=CRON_SECRET`
+
 ## 🎯 Protected Routes
 
 ```

@@ -80,6 +80,38 @@ CREATE TABLE token_usage (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ============================================================
+-- amoCRM integration (OAuth tokens + per-user sync)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS amocrm_oauth_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  base_url TEXT NOT NULL,
+  access_token TEXT NOT NULL,
+  refresh_token TEXT NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  account_id BIGINT,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_amocrm_oauth_tokens_updated
+  ON amocrm_oauth_tokens(updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS amocrm_user_sync (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  amocrm_contact_id BIGINT,
+  amocrm_lead_id_new BIGINT,
+  amocrm_lead_id_resale BIGINT,
+  new_synced_at TIMESTAMP,
+  resale_synced_at TIMESTAMP,
+  last_tokens_remaining NUMERIC(10, 2),
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_amocrm_user_sync_updated
+  ON amocrm_user_sync(updated_at DESC);
+
 -- Admin logs
 CREATE TABLE admin_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
