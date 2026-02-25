@@ -10,6 +10,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
+  const redirectBaseUrl = (() => {
+    const raw = process.env.AMOCRM_REDIRECT_URI;
+    if (raw) {
+      try {
+        return new URL(raw).origin;
+      } catch {
+        // ignore
+      }
+    }
+    return req.nextUrl.origin;
+  })();
+
   const code = req.nextUrl.searchParams.get('code') || '';
   const state = req.nextUrl.searchParams.get('state') || '';
   const expectedState = req.cookies.get(STATE_COOKIE)?.value || '';
@@ -25,13 +37,13 @@ export async function GET(req: NextRequest) {
   try {
     await exchangeCodeForTokens(code);
 
-    const redirectUrl = new URL('/admin/amocrm?connected=1', req.url);
+    const redirectUrl = new URL('/admin/amocrm?connected=1', redirectBaseUrl);
     const res = NextResponse.redirect(redirectUrl);
     res.cookies.set(STATE_COOKIE, '', { path: '/', maxAge: 0 });
     return res;
   } catch (err) {
     console.error('amoCRM OAuth callback error:', err);
-    const redirectUrl = new URL('/admin/amocrm?connected=0', req.url);
+    const redirectUrl = new URL('/admin/amocrm?connected=0', redirectBaseUrl);
     const res = NextResponse.redirect(redirectUrl);
     res.cookies.set(STATE_COOKIE, '', { path: '/', maxAge: 0 });
     return res;

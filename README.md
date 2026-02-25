@@ -156,6 +156,14 @@ AMOCRM_LOW_TOKEN_THRESHOLD=10
 AMOCRM_LOW_TOKEN_BATCH=50
 ```
 
+Eslatma (local/dev):
+
+- `AMOCRM_REDIRECT_URI` amoCRM integratsiyadagi redirect URI bilan **1:1** (harfma-harf) mos bo'lishi shart.
+- Agar siz localda ishlayotgan bo'lsangiz, odatda admin sahifa `http://localhost:3000/admin/amocrm` bo'ladi.
+   - Local callback: `http://localhost:3000/api/admin/amocrm/oauth/callback`
+   - Ammo amoCRM serverlari `localhost`ga kira olmaydi. Shu sabab dev test uchun ko'pincha `ngrok/cloudflared` kabi tunnel kerak bo'ladi yoki bevosita production domenni ishlatasiz.
+- Brauzerda `d9d1b21bf035:3000` kabi container ID host ochilmaydi (DNS topolmaydi). Tashqaridan kirish uchun `localhost:3000` (yoki tunnel domeni) dan foydalaning.
+
 Low-token cron endpoint:
 
 - `GET /api/cron/amocrm-low-tokens` (CRON_SECRET bilan)
