@@ -351,6 +351,26 @@ export async function listPipelineStatuses(pipelineId: number) {
   return amoFetch(`/api/v4/leads/pipelines/${pipelineId}/statuses`, { method: 'GET' });
 }
 
+export type AmoContactUpdatePayload = {
+  name?: string;
+  custom_fields_values?: Array<{
+    field_code: 'EMAIL' | 'PHONE' | string;
+    values: Array<{ value: string; enum_code?: string }>;
+  }>;
+};
+
+export async function updateContact(contactId: number, payload: AmoContactUpdatePayload) {
+  const id = Number(contactId || 0);
+  if (!Number.isFinite(id) || id <= 0) {
+    return { status: 400, ok: false, json: null as any, text: 'invalid_contact_id' };
+  }
+
+  return amoFetch(`/api/v4/contacts/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
 function extractStatuses(payload: any): Array<{ id: number; name: string }> {
   const statuses = payload?._embedded?.statuses;
   if (!Array.isArray(statuses)) return [];

@@ -230,7 +230,7 @@ export function Pricing() {
                   style={{ left: popularBadge.x + popularBadge.width / 2, transform: 'translateX(-50%)' }}
                 >
                   <span className="inline-flex items-center whitespace-nowrap rounded-full bg-blue-600 px-3 py-1 text-[11px] font-bold text-white">
-                    {t('pricing.mostPopular')}
+                    {t('pricing.popular')}
                   </span>
                 </div>
               ) : null}

@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { getUserSync, isAmoCrmEnabled, updateContact } from '@/lib/amocrm';
+
+const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> => {
+  let timeoutId: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('timeout')), ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
 
 function normalizeTelegramUsername(input: string): string {
   const trimmed = input.trim();
@@ -84,6 +97,38 @@ export async function POST(req: NextRequest) {
 
     if (result.rows.length === 0) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // If user already synced to amoCRM, update contact fields so phone becomes visible on lead.
+    // (We intentionally do NOT create new leads here to avoid pushing old users.)
+    try {
+      if (isAmoCrmEnabled()) {
+        const sync = await withTimeout(getUserSync(session.id), 600);
+        const contactId = sync?.amocrm_contact_id ? Number(sync.amocrm_contact_id) : 0;
+        if (contactId > 0) {
+          const updatedUser = result.rows[0] as any;
+          const emailValue = typeof updatedUser.email === 'string' ? updatedUser.email : '';
+          const phoneValue = typeof updatedUser.phone === 'string' ? updatedUser.phone : '';
+
+          const customFields: Array<{ field_code: string; values: Array<{ value: string; enum_code?: string }> }> = [];
+          if (emailValue) customFields.push({ field_code: 'EMAIL', values: [{ value: emailValue, enum_code: 'WORK' }] });
+          if (phoneValue) customFields.push({ field_code: 'PHONE', values: [{ value: phoneValue, enum_code: 'WORK' }] });
+
+          if (customFields.length > 0) {
+            const resp = await withTimeout(updateContact(contactId, { custom_fields_values: customFields }), 1200);
+            if (!resp.ok) {
+              console.warn('amoCRM contact update failed after contact update:', {
+                userId: session.id,
+                contactId,
+                status: resp.status,
+                text: resp.text,
+              });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('amoCRM contact update exception after contact update:', { userId: session.id, err });
     }
 
     return NextResponse.json({ success: true, user: result.rows[0] });
