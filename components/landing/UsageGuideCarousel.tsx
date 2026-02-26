@@ -52,7 +52,7 @@ export function UsageGuideCarousel() {
             <div className="relative aspect-video w-full">
               <iframe
                 key={current.id}
-                src={`https://www.youtube.com/embed/${current.id}`}
+                src={`https://www.youtube.com/watch?v=${current.id}`}
                 title={t(current.titleKey)}
                 className="h-full w-full"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
