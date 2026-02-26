@@ -509,17 +509,22 @@ export async function POST(request: NextRequest) {
     let tokensCharged = 0;
 
     if (user.role !== 'admin' && anySucceeded) {
-      const reserveResult = await reserveTokens({ userId: user.id, tokens: reservedTokens });
-      reservedTokensRemaining = reserveResult.tokensRemaining;
+      const costPerImage = policy.costPerRequest / policy.outputCount;
+      const tokensToCharge = Math.max(0, costPerImage * succeeded.length);
+      tokensCharged = Number(tokensToCharge.toFixed(2));
 
-      await recordTokenUsage({
-        userId: user.id,
-        tokensUsed: reservedTokens,
-        serviceType: 'image_generate',
-        modelUsed: selectedModel || null,
-        prompt: safePrompt,
-      });
-      tokensCharged = reservedTokens;
+      if (tokensCharged > 0) {
+        const reserveResult = await reserveTokens({ userId: user.id, tokens: tokensCharged });
+        reservedTokensRemaining = reserveResult.tokensRemaining;
+
+        await recordTokenUsage({
+          userId: user.id,
+          tokensUsed: tokensCharged,
+          serviceType: 'image_generate',
+          modelUsed: selectedModel || null,
+          prompt: safePrompt,
+        });
+      }
     }
 
     // Keep image_jobs table for limits/analytics, but skip queued/worker flow.
@@ -561,9 +566,10 @@ export async function POST(request: NextRequest) {
               item.status,
               item.imageUrl,
               item.error,
-              user.role === 'admin' ? 0 : anySucceeded && item.index === 0 ? reservedTokens : 0,
+              // Only log the full charge on the first successful item for simplicity in analytics.
+              user.role === 'admin' ? 0 : item.status === 'succeeded' && item.index === succeeded[0]?.index ? tokensCharged : 0,
               0,
-              user.role === 'admin' ? true : anySucceeded && item.index === 0,
+              user.role === 'admin' ? true : item.status === 'succeeded' && item.index === succeeded[0]?.index,
               item.startedAt,
               item.finishedAt,
             ]
