@@ -13,8 +13,8 @@ type GuideVideo = {
 
 
 const videos: GuideVideo[] = [
-  { id: '4aDXb_qJu7OPGVJA', titleKey: 'guide.video1' },
-  { id: 'NK59gqEWwkbqRt60', titleKey: 'guide.video2' },
+  { id: 'https://www.youtube.com/embed/eqnuUjVKl90?si=A6W2cw5O1UlWOJ_P', titleKey: 'guide.video1' },
+  { id: 'https://www.youtube.com/embed/DWtmMHIj_oA?si=7RSJ_bhGGQKji8U0', titleKey: 'guide.video2' },
 ];
 
 export function UsageGuideCarousel() {
@@ -52,7 +52,7 @@ export function UsageGuideCarousel() {
             <div className="relative aspect-video w-full">
               <iframe
                 key={current.id}
-                src={`https://www.youtube.com/watch?v=${current.id}`}
+                src={`${current.id}`}
                 title={t(current.titleKey)}
                 className="h-full w-full"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
