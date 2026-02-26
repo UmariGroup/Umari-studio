@@ -80,6 +80,57 @@ export function getAmoCrmResaleStageName(): string {
   return String(process.env.AMOCRM_RESALE_STAGE_NAME || 'Qayta sotuv').trim();
 }
 
+export function getAmoCrmContactTelegramUsernameFieldId(): number {
+  // Optional: amoCRM contact custom field id to store Telegram username.
+  // Create a custom field in amoCRM Contacts (e.g. "Telegram username"), then set its numeric ID here.
+  return Number(process.env.AMOCRM_CONTACT_TELEGRAM_USERNAME_FIELD_ID || '0');
+}
+
+let cachedTelegramUsernameFieldId: number | null = null;
+
+export async function resolveAmoCrmContactTelegramUsernameFieldId(): Promise<number | null> {
+  const explicit = getAmoCrmContactTelegramUsernameFieldId();
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+
+  if (cachedTelegramUsernameFieldId !== null) {
+    return cachedTelegramUsernameFieldId > 0 ? cachedTelegramUsernameFieldId : null;
+  }
+
+  const resp = await amoFetch<any>('/api/v4/contacts/custom_fields', { method: 'GET' });
+  if (!resp.ok || !resp.json) {
+    cachedTelegramUsernameFieldId = 0;
+    return null;
+  }
+
+  const fields = resp.json?._embedded?.custom_fields;
+  if (!Array.isArray(fields) || fields.length === 0) {
+    cachedTelegramUsernameFieldId = 0;
+    return null;
+  }
+
+  const matches = fields
+    .map((f: any) => ({
+      id: Number(f?.id || 0),
+      name: String(f?.name || '').trim(),
+    }))
+    .filter((f: any) => Number.isFinite(f.id) && f.id > 0 && f.name)
+    .filter((f: any) => {
+      const n = f.name.toLowerCase();
+      const hasTelegram = n.includes('telegram') || n.includes('телеграм');
+      const hasUsername = n.includes('username') || n.includes('user name') || n.includes('юзер') || n.includes('имя пользователя');
+      return hasTelegram && hasUsername;
+    });
+
+  // Avoid guessing if multiple fields match.
+  if (matches.length === 1) {
+    cachedTelegramUsernameFieldId = matches[0].id;
+    return matches[0].id;
+  }
+
+  cachedTelegramUsernameFieldId = 0;
+  return null;
+}
+
 export function getAmoCrmLowTokenThreshold(): number {
   const raw = process.env.AMOCRM_LOW_TOKEN_THRESHOLD;
   const parsed = raw == null ? NaN : Number(raw);
@@ -329,7 +380,8 @@ export type AmoComplexLeadPayload = {
     contacts?: Array<{
       name?: string;
       custom_fields_values?: Array<{
-        field_code: 'EMAIL' | 'PHONE' | string;
+        field_code?: 'EMAIL' | 'PHONE' | string;
+        field_id?: number;
         values: Array<{ value: string; enum_code?: string }>;
       }>;
     }>;
@@ -347,6 +399,10 @@ export async function listPipelines() {
   return amoFetch('/api/v4/leads/pipelines', { method: 'GET' });
 }
 
+export async function listContactCustomFields() {
+  return amoFetch('/api/v4/contacts/custom_fields', { method: 'GET' });
+}
+
 export async function listPipelineStatuses(pipelineId: number) {
   return amoFetch(`/api/v4/leads/pipelines/${pipelineId}/statuses`, { method: 'GET' });
 }
@@ -354,10 +410,42 @@ export async function listPipelineStatuses(pipelineId: number) {
 export type AmoContactUpdatePayload = {
   name?: string;
   custom_fields_values?: Array<{
-    field_code: 'EMAIL' | 'PHONE' | string;
+    field_code?: 'EMAIL' | 'PHONE' | string;
+    field_id?: number;
     values: Array<{ value: string; enum_code?: string }>;
   }>;
 };
+
+function normalizeEmail(input: string): string {
+  return String(input || '').trim().toLowerCase();
+}
+
+function extractEmailValues(contact: any): string[] {
+  const cfs = contact?.custom_fields_values;
+  if (!Array.isArray(cfs)) return [];
+  const emailField = cfs.find((f: any) => String(f?.field_code || '').toUpperCase() === 'EMAIL');
+  const values = emailField?.values;
+  if (!Array.isArray(values)) return [];
+  return values.map((v: any) => String(v?.value || '')).filter(Boolean);
+}
+
+export async function findContactIdByEmail(email: string): Promise<number | null> {
+  const needle = normalizeEmail(email);
+  if (!needle) return null;
+
+  const resp = await amoFetch<any>(`/api/v4/contacts?query=${encodeURIComponent(email)}`, { method: 'GET' });
+  if (!resp.ok || !resp.json) return null;
+
+  const contacts = resp.json?._embedded?.contacts;
+  if (!Array.isArray(contacts) || contacts.length === 0) return null;
+
+  const exact = contacts.find((c: any) =>
+    extractEmailValues(c).some((e) => normalizeEmail(e) === needle)
+  );
+  const picked = exact || contacts[0];
+  const id = Number(picked?.id || 0);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
 
 export async function updateContact(contactId: number, payload: AmoContactUpdatePayload) {
   const id = Number(contactId || 0);

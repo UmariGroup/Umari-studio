@@ -1,6 +1,8 @@
 import { query } from '@/lib/db';
 import {
   createComplexLead,
+  findContactIdByEmail,
+  resolveAmoCrmContactTelegramUsernameFieldId,
   getAmoCrmLowTokenThreshold,
   getAmoCrmNewPipelineId,
   getAmoCrmNewStageName,
@@ -75,7 +77,11 @@ export async function syncNewUserToAmoCrm(userId: string): Promise<{ ok: boolean
       tokens_remaining: string | number | null;
     };
 
-    const contactFields: Array<{ field_code: string; values: Array<{ value: string; enum_code?: string }> }> = [
+    const contactFields: Array<{
+      field_code?: string;
+      field_id?: number;
+      values: Array<{ value: string; enum_code?: string }>;
+    }> = [
       {
         field_code: 'EMAIL',
         values: [{ value: user.email, enum_code: 'WORK' }],
@@ -84,6 +90,11 @@ export async function syncNewUserToAmoCrm(userId: string): Promise<{ ok: boolean
 
     if (user.phone) {
       contactFields.push({ field_code: 'PHONE', values: [{ value: user.phone, enum_code: 'WORK' }] });
+    }
+
+    const tgFieldId = await resolveAmoCrmContactTelegramUsernameFieldId();
+    if (user.telegram_username && tgFieldId && tgFieldId > 0) {
+      contactFields.push({ field_id: tgFieldId, values: [{ value: user.telegram_username }] });
     }
 
     const leadPayload = {
@@ -104,7 +115,10 @@ export async function syncNewUserToAmoCrm(userId: string): Promise<{ ok: boolean
 
     const lead = Array.isArray(resp.json) ? (resp.json[0] as any) : null;
     const leadId = pickId(lead?.id);
-    const contactId = pickId(lead?._embedded?.contacts?.[0]?.id);
+    let contactId = pickId(lead?._embedded?.contacts?.[0]?.id);
+    if (!contactId) {
+      contactId = await findContactIdByEmail(user.email);
+    }
 
     await upsertUserSync({
       userId,
@@ -176,7 +190,11 @@ export async function syncLowTokenUserToAmoCrm(userId: string): Promise<{ ok: bo
       }
     }
 
-    const contactFields: Array<{ field_code: string; values: Array<{ value: string; enum_code?: string }> }> = [
+    const contactFields: Array<{
+      field_code?: string;
+      field_id?: number;
+      values: Array<{ value: string; enum_code?: string }>;
+    }> = [
       {
         field_code: 'EMAIL',
         values: [{ value: user.email, enum_code: 'WORK' }],
@@ -185,6 +203,11 @@ export async function syncLowTokenUserToAmoCrm(userId: string): Promise<{ ok: bo
 
     if (user.phone) {
       contactFields.push({ field_code: 'PHONE', values: [{ value: user.phone, enum_code: 'WORK' }] });
+    }
+
+    const tgFieldId = await resolveAmoCrmContactTelegramUsernameFieldId();
+    if (user.telegram_username && tgFieldId && tgFieldId > 0) {
+      contactFields.push({ field_id: tgFieldId, values: [{ value: user.telegram_username }] });
     }
 
     const leadPayload = {
@@ -205,7 +228,10 @@ export async function syncLowTokenUserToAmoCrm(userId: string): Promise<{ ok: bo
 
     const lead = Array.isArray(resp.json) ? (resp.json[0] as any) : null;
     const leadId = pickId(lead?.id);
-    const contactId = pickId(lead?._embedded?.contacts?.[0]?.id);
+    let contactId = pickId(lead?._embedded?.contacts?.[0]?.id);
+    if (!contactId) {
+      contactId = await findContactIdByEmail(user.email);
+    }
 
     await upsertUserSync({
       userId,
