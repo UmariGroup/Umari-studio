@@ -75,7 +75,9 @@ export async function GET(req: NextRequest) {
     `SELECT u.id
      FROM users u
      LEFT JOIN amocrm_user_sync s ON s.user_id = u.id
-     WHERE u.tokens_remaining <= $1
+     WHERE u.subscription_status = 'active'
+       AND COALESCE(u.subscription_plan, 'free') <> 'free'
+       AND u.tokens_remaining < $1
        AND (
          s.user_id IS NULL
          OR s.resale_synced_at IS NULL

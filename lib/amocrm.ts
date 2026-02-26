@@ -83,7 +83,7 @@ export function getAmoCrmResaleStageName(): string {
 export function getAmoCrmLowTokenThreshold(): number {
   const raw = process.env.AMOCRM_LOW_TOKEN_THRESHOLD;
   const parsed = raw == null ? NaN : Number(raw);
-  if (!Number.isFinite(parsed)) return 10;
+  if (!Number.isFinite(parsed)) return 30;
   return parsed;
 }
 

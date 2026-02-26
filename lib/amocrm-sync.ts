@@ -137,7 +137,7 @@ export async function syncLowTokenUserToAmoCrm(userId: string): Promise<{ ok: bo
     const threshold = getAmoCrmLowTokenThreshold();
 
     const userRes = await query(
-      `SELECT id, email, first_name, last_name, phone, telegram_username, tokens_remaining
+      `SELECT id, email, first_name, last_name, phone, telegram_username, tokens_remaining, subscription_status, subscription_plan
        FROM users
        WHERE id = $1`,
       [userId]
@@ -153,10 +153,18 @@ export async function syncLowTokenUserToAmoCrm(userId: string): Promise<{ ok: bo
       phone: string | null;
       telegram_username: string | null;
       tokens_remaining: string | number | null;
+      subscription_status: string | null;
+      subscription_plan: string | null;
     };
 
+    const status = String(user.subscription_status || '').toLowerCase();
+    const plan = String(user.subscription_plan || 'free').toLowerCase();
+    if (status !== 'active' || plan === 'free') {
+      return { ok: true, reason: 'not_active_subscription' };
+    }
+
     const tokensRemaining = user.tokens_remaining == null ? 0 : Number(user.tokens_remaining);
-    if (Number.isFinite(tokensRemaining) && tokensRemaining > threshold) {
+    if (Number.isFinite(tokensRemaining) && tokensRemaining >= threshold) {
       return { ok: true, reason: 'not_low_token_anymore' };
     }
 

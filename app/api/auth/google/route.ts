@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
     );
 
     let user = result.rows[0];
+    let createdNewUser = false;
 
     if (!user) {
       // Check if email already exists (for linking Google to existing email account)
@@ -78,6 +79,7 @@ export async function POST(req: NextRequest) {
           [google_id, email, first_name || '', last_name || '', avatar_url || null, FREE_TRIAL_TOKENS]
         );
         user = createResult.rows[0];
+        createdNewUser = true;
       } else {
         // Link Google to existing email account
         const linkResult = await query(
@@ -137,14 +139,16 @@ export async function POST(req: NextRequest) {
 
     setAuthCookies(response, authPayload);
 
-    // amoCRM sync (best-effort; never block login)
-    try {
-      const amoRes = await withTimeout(syncNewUserToAmoCrm(user.id), 1200);
-      if (!amoRes?.ok) {
-        console.warn('amoCRM sync skipped/failed on google auth:', { userId: user.id, reason: amoRes?.reason });
+    // amoCRM sync faqat yangi yaratilgan user uchun (old user login/link bo'lsa yubormaymiz)
+    if (createdNewUser) {
+      try {
+        const amoRes = await withTimeout(syncNewUserToAmoCrm(user.id), 1200);
+        if (!amoRes?.ok) {
+          console.warn('amoCRM sync skipped/failed on google auth (new user):', { userId: user.id, reason: amoRes?.reason });
+        }
+      } catch (err) {
+        console.warn('amoCRM sync exception on google auth (new user):', { userId: user.id, err });
       }
-    } catch (err) {
-      console.warn('amoCRM sync exception on google auth:', { userId: user.id, err });
     }
 
     if (referralAttached) {
