@@ -2,6 +2,30 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
+function parseOptionalNumber(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
+}
+
+function toJsonbParam(value: unknown): string {
+  // `pg` treats JS arrays as Postgres arrays, not JSON.
+  // Always serialize for JSONB columns.
+  if (typeof value === 'string') {
+    try {
+      JSON.parse(value);
+      return value;
+    } catch {
+      return JSON.stringify(value);
+    }
+  }
+  return JSON.stringify(value);
+}
+
 /**
  * Get all available subscription plans
  */
@@ -81,14 +105,16 @@ export async function POST(req: NextRequest) {
        ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0`
     );
 
-    const discount = Number(discount_percent ?? 0);
-    const safeDiscount = Number.isFinite(discount) ? Math.max(0, Math.min(100, discount)) : 0;
+    const discount = parseOptionalNumber(discount_percent) ?? 0;
+    const safeDiscount = Math.max(0, Math.min(100, discount));
+
+    const jsonbFeatures = toJsonbParam(features ?? []);
 
     const result = await query(
       `INSERT INTO subscription_plans (name, duration_months, price, discount_percent, tokens_included, features, description, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, true)
        RETURNING *`,
-      [name, duration_months, price, safeDiscount, tokens_included, features ?? [], description || '']
+      [name, duration_months, price, safeDiscount, tokens_included, jsonbFeatures, description || '']
     );
 
     return NextResponse.json(
@@ -139,21 +165,25 @@ export async function PATCH(req: NextRequest) {
     const fields: string[] = [];
     const params: any[] = [];
 
-    const set = (col: string, value: any) => {
+    const set = (col: string, value: any, cast?: string) => {
       params.push(value);
-      fields.push(`${col} = $${params.length}`);
+      fields.push(`${col} = $${params.length}${cast ? `::${cast}` : ''}`);
     };
 
     if (typeof body?.name === 'string') set('name', body.name);
-    if (typeof body?.duration_months === 'number') set('duration_months', body.duration_months);
-    if (typeof body?.price === 'number') set('price', body.price);
-    if (typeof body?.discount_percent === 'number') {
-      const d = Number(body.discount_percent);
-      set('discount_percent', Number.isFinite(d) ? Math.max(0, Math.min(100, d)) : 0);
-    }
-    if (typeof body?.tokens_included === 'number') set('tokens_included', body.tokens_included);
+    const durationMonths = parseOptionalNumber(body?.duration_months);
+    if (durationMonths !== undefined) set('duration_months', durationMonths);
+
+    const price = parseOptionalNumber(body?.price);
+    if (price !== undefined) set('price', price);
+
+    const discount = parseOptionalNumber(body?.discount_percent);
+    if (discount !== undefined) set('discount_percent', Math.max(0, Math.min(100, discount)));
+
+    const tokens = parseOptionalNumber(body?.tokens_included);
+    if (tokens !== undefined) set('tokens_included', tokens);
     if (typeof body?.description === 'string') set('description', body.description);
-    if (body?.features !== undefined) set('features', body.features);
+    if (body?.features !== undefined) set('features', toJsonbParam(body.features), 'jsonb');
     if (typeof body?.is_active === 'boolean') set('is_active', body.is_active);
 
     if (fields.length === 0) {
