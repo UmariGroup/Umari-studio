@@ -1201,6 +1201,29 @@ function clampOneLine(text: string, maxChars: number): string {
   return normalized.slice(0, maxChars).trim();
 }
 
+function ensureIdentityLockPrefix(text: string, prefix: string, maxChars: number): string {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  const pfx = String(prefix || '').replace(/\s+/g, ' ').trim();
+  if (!pfx) return clampOneLine(normalized, maxChars);
+
+  // If it already clearly mentions identity preservation, don't duplicate.
+  const lc = normalized.toLowerCase();
+  const already =
+    lc.includes('identity') ||
+    lc.includes('same product') ||
+    lc.includes('no redesign') ||
+    lc.includes('no logo') ||
+    lc.includes('aynan') ||
+    lc.includes('o\u2018zgartirma') ||
+    lc.includes('logoni') ||
+    lc.includes('logo');
+
+  if (already) return clampOneLine(normalized, maxChars);
+
+  const combined = `${pfx} ${normalized}`.trim();
+  return clampOneLine(combined, maxChars);
+}
+
 export async function generateVideoPromptBundleFromImages(
   images: string[],
   options: {
@@ -1267,9 +1290,23 @@ export async function generateVideoPromptBundleFromImages(
   const rawText = extractText(response).trim();
 
   const parsed = extractDualPrompt(rawText);
-  const promptUz = clampOneLine(parsed?.uz || rawText, maxPromptChars);
-  const promptEn = clampOneLine(parsed?.en || '', maxPromptChars);
-  return { promptUz, promptEn: promptEn || promptUz };
+
+  const baseUz = clampOneLine(parsed?.uz || rawText, maxPromptChars);
+  const baseEn = clampOneLine(parsed?.en || '', maxPromptChars);
+
+  const identityUz =
+    maxPromptChars <= 80
+      ? "Aynan rasmdek mahsulot. Logo/rang o'zgarmasin."
+      : "Aynan rasmdek mahsulot: shakl/rang/material/logo o'zgarmasin; redesign bo'lmasin.";
+  const identityEn =
+    maxPromptChars <= 80
+      ? 'Same product as reference. No logo/color changes.'
+      : 'Same exact product as reference (shape/colors/material/logo). No redesign.';
+
+  const promptUz = ensureIdentityLockPrefix(baseUz, identityUz, maxPromptChars);
+  const promptEnFinal = ensureIdentityLockPrefix(baseEn || baseUz, identityEn, maxPromptChars);
+
+  return { promptUz, promptEn: promptEnFinal || promptUz };
 }
 
 export async function generateCopywriterContent(

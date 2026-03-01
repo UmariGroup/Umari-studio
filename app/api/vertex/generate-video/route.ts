@@ -16,6 +16,19 @@ import path from 'path';
 
 export const maxDuration = 60; // Allow longer timeout for video generation (Vercel/Next.js limit)
 
+function buildIdentityLock(maxPromptChars: number): string {
+  // Keep this compact: some plans allow only 60-80 chars for the user prompt.
+  const limit = Math.max(40, Math.min(200, Number(maxPromptChars || 0)));
+
+  const short = 'Same product as reference. No redesign. No logo/text changes.';
+  const medium =
+    'IDENTITY LOCK: same exact product as reference images (shape/colors/material/logo/label). No redesign. No text/watermarks. No morphing.';
+
+  const pick = limit <= 80 ? short : medium;
+  // Hard cap for safety
+  return pick.length > 160 ? pick.slice(0, 160).trim() : pick;
+}
+
 function normalizeVideoAspectRatio(value: unknown): '16:9' | '9:16' {
   return value === '9:16' ? '9:16' : '16:9';
 }
@@ -266,10 +279,13 @@ export async function POST(req: NextRequest) {
 
     console.log(`[GenerateVideo] Plan=${plan}, Mode=${mode}, Model=${selectedModel}`);
 
+    const identityLock = safeImages.length > 0 ? buildIdentityLock(policy.maxPromptChars) : '';
+    const baseWithIdentity = identityLock ? `${identityLock}\n${safePrompt}` : safePrompt;
+
     let durationPrompt =
       effectiveDurationSeconds && effectiveDurationSeconds > 0
-        ? `${safePrompt}\n\nCRITICAL: Final video duration must be exactly ${effectiveDurationSeconds} seconds.`
-        : safePrompt;
+        ? `${baseWithIdentity}\n\nCRITICAL: Final video duration must be exactly ${effectiveDurationSeconds} seconds.`
+        : baseWithIdentity;
 
     let rawVideoUrl: string;
     try {
@@ -294,7 +310,7 @@ export async function POST(req: NextRequest) {
       }
 
       effectiveDurationSeconds = fallbackDuration;
-      durationPrompt = `${safePrompt}\n\nCRITICAL: Final video duration must be exactly ${effectiveDurationSeconds} seconds.`;
+      durationPrompt = `${baseWithIdentity}\n\nCRITICAL: Final video duration must be exactly ${effectiveDurationSeconds} seconds.`;
 
       rawVideoUrl = await generateMarketplaceVideo(
         durationPrompt,
