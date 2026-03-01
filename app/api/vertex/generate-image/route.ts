@@ -119,6 +119,15 @@ export async function POST(request: NextRequest) {
 
     const safePrompt = basePrompt.slice(0, policy.maxPromptChars);
     const safeProductImages = productImages.slice(0, policy.maxProductImages);
+    if (styleImages.length > 0 && policy.maxStyleImages <= 0) {
+      throw new BillingError({
+        status: 403,
+        code: 'PLAN_RESTRICTED',
+        message: "Uslub rasmi faqat Business+ tarifida Pro/Ultra rejimlarda mavjud.",
+        recommendedPlan: user.role === 'admin' ? null : 'business_plus',
+      });
+    }
+
     const safeStyleImages = styleImages.slice(0, policy.maxStyleImages);
 
     const promptSafety = checkImagePromptSafety(safePrompt);

@@ -64,6 +64,20 @@ const MARKETPLACE_ANGLES = [
   "SIDE PROFILE: true side profile view (about 90°), silhouette and proportions, clean negative space.",
 ];
 
+function buildStrongStyleTransferRules(): string {
+  return `
+
+STYLE TRANSFER (VERY IMPORTANT — MUST MATCH):
+- Use the STYLE REFERENCE IMAGES as the target look.
+- Match as closely as possible: background type/color/gradient, surface/table, lighting direction and softness, shadow style, reflections, color palette, exposure, contrast, saturation, white balance, depth of field, lens look, and overall composition feel.
+- Keep the image commercially realistic (marketplace studio photo), sharp focus, crisp edges.
+
+STYLE SAFETY RULES:
+- Copy ONLY the visual style; do NOT copy the object/brand/logo from the style references.
+- If style and product identity conflict: PRODUCT IDENTITY wins.
+`;
+}
+
 function buildMarketplaceImagePrompt(userPrompt: string, angle: string) {
   return `
 Task: Generate a high-converting professional marketplace product image.
@@ -1285,26 +1299,30 @@ export async function generateMarketplaceImage(
   const imageIndex = Number(options?.imageIndex || 0);
   const angle = MARKETPLACE_ANGLES[imageIndex % MARKETPLACE_ANGLES.length];
 
-  const finalPrompt = buildMarketplaceImagePrompt(prompt, angle);
+  const finalPrompt =
+    buildMarketplaceImagePrompt(prompt, angle) +
+    (styleImages.length > 0 ? buildStrongStyleTransferRules() : '');
 
   parts.push({ text: finalPrompt });
 
-  if (productImages.length > 0) {
-    parts.push({ text: "\n[[MAIN PRODUCT IMAGES]]\n" });
+  // Important: put style references BEFORE product images to increase style adherence.
+  // Product identity is still enforced by the prompt + the product images.
+  if (styleImages.length > 0) {
+    parts.push({
+      text:
+        "\n[[STYLE REFERENCE IMAGES — match the STYLE strongly (lighting/background/color grading/composition). Ignore the object.]]\n",
+    });
 
-    for (const img of productImages) {
+    for (const img of styleImages) {
       const inlinePart = toInlineDataPart(img);
       if (inlinePart) parts.push(inlinePart);
     }
   }
 
-  if (styleImages.length > 0) {
-    parts.push({
-      text:
-        "\n[[STYLE REFERENCE IMAGES - Copy ONLY lighting/background/composition. Ignore the object.]]\n",
-    });
+  if (productImages.length > 0) {
+    parts.push({ text: "\n[[MAIN PRODUCT IMAGES — preserve identity EXACTLY]]\n" });
 
-    for (const img of styleImages) {
+    for (const img of productImages) {
       const inlinePart = toInlineDataPart(img);
       if (inlinePart) parts.push(inlinePart);
     }
@@ -1320,6 +1338,8 @@ export async function generateMarketplaceImage(
       imageConfig: {
         aspectRatio: normalizeAspectRatio(aspectRatio),
       },
+      // Lower temperature to reduce creative drift and better follow references.
+      temperature: styleImages.length > 0 ? 0.2 : 0.3,
     },
   };
 
