@@ -484,6 +484,7 @@ export async function POST(request: NextRequest) {
               fallbackModels: policy.allowedModels.filter((value) => value !== selectedModel),
               imageIndex: angleIndexForVariation,
               includeTokenBreakdown: true,
+              statsUserPromptText: safePrompt,
             }
           );
 

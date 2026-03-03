@@ -73,6 +73,8 @@ GLOBAL RULES:
 - Do not add any text overlays, watermarks, logos, borders, UI, or collage.
 - Keep it commercial, studio-like, and brand-safe. Avoid surreal/illustration looks and AI artifacts.`;
 
+let marketplaceSystemPromptTokensCache: number | null | undefined;
+
 function buildStrongStyleTransferRules(): string {
   return `
 
@@ -387,15 +389,29 @@ function extractTokenUsage(response: any): {
   totalTokens: number | null;
 } {
   const usage = response?.usageMetadata || response?.usage_metadata;
-  const promptTokens = Number(usage?.promptTokenCount ?? usage?.prompt_token_count);
-  const candidatesTokens = Number(usage?.candidatesTokenCount ?? usage?.candidates_token_count);
-  const totalTokens = Number(usage?.totalTokenCount ?? usage?.total_token_count);
+  const rawPrompt = Number(usage?.promptTokenCount ?? usage?.prompt_token_count);
+  const rawCandidates = Number(usage?.candidatesTokenCount ?? usage?.candidates_token_count);
+  const rawTotal = Number(usage?.totalTokenCount ?? usage?.total_token_count);
 
-  return {
-    promptTokens: Number.isFinite(promptTokens) ? promptTokens : null,
-    candidatesTokens: Number.isFinite(candidatesTokens) ? candidatesTokens : null,
-    totalTokens: Number.isFinite(totalTokens) ? totalTokens : null,
-  };
+  let promptTokens = Number.isFinite(rawPrompt) ? rawPrompt : null;
+  let candidatesTokens = Number.isFinite(rawCandidates) ? rawCandidates : null;
+  let totalTokens = Number.isFinite(rawTotal) ? rawTotal : null;
+
+  // Some responses omit prompt/candidates but include total.
+  if (totalTokens !== null) {
+    if (promptTokens === null && candidatesTokens !== null) {
+      promptTokens = Math.max(0, totalTokens - candidatesTokens);
+    } else if (candidatesTokens === null && promptTokens !== null) {
+      candidatesTokens = Math.max(0, totalTokens - promptTokens);
+    }
+  }
+
+  // If we have prompt+candidates but total is missing, reconstruct it.
+  if (totalTokens === null && promptTokens !== null && candidatesTokens !== null) {
+    totalTokens = promptTokens + candidatesTokens;
+  }
+
+  return { promptTokens, candidatesTokens, totalTokens };
 }
 
 function extractText(response: any): string {
@@ -490,6 +506,39 @@ async function safeCountTokensTotal(model: string, body: unknown): Promise<numbe
   } catch {
     return null;
   }
+}
+
+async function getMarketplaceSystemPromptTokens(): Promise<number | null> {
+  if (marketplaceSystemPromptTokensCache !== undefined) return marketplaceSystemPromptTokensCache;
+
+  // Compute as the difference between (empty user + system) and (empty user without system)
+  // using a TEXT model to avoid countTokens incompatibility on image models.
+  const empty = { contents: [{ role: 'user', parts: [{ text: '' }] }] };
+  const withSystem = {
+    contents: [{ role: 'user', parts: [{ text: '' }] }],
+    systemInstruction: { parts: [{ text: MARKETPLACE_SYSTEM_INSTRUCTION }] },
+  };
+
+  const [baseTokens, withSystemTokens] = await Promise.all([
+    safeCountTokensTotal(GEMINI_TEXT_MODEL, empty),
+    safeCountTokensTotal(GEMINI_TEXT_MODEL, withSystem),
+  ]);
+
+  if (baseTokens === null || withSystemTokens === null) {
+    marketplaceSystemPromptTokensCache = null;
+    return null;
+  }
+
+  marketplaceSystemPromptTokensCache = Math.max(0, withSystemTokens - baseTokens);
+  return marketplaceSystemPromptTokensCache;
+}
+
+async function countTokensForPlainText(text: string): Promise<number | null> {
+  const s = String(text || '').trim();
+  if (!s) return 0;
+  return safeCountTokensTotal(GEMINI_TEXT_MODEL, {
+    contents: [{ role: 'user', parts: [{ text: s }] }],
+  });
 }
 
 async function generateText(model: string, systemInstruction: string | null, userText: string): Promise<string> {
@@ -1482,7 +1531,13 @@ export async function generateMarketplaceImageDetailed(
   productImages: string[] = [],
   styleImages: string[] = [],
   aspectRatio: string = '3:4',
-  options?: { model?: string; fallbackModels?: string[]; imageIndex?: number; includeTokenBreakdown?: boolean }
+  options?: {
+    model?: string;
+    fallbackModels?: string[];
+    imageIndex?: number;
+    includeTokenBreakdown?: boolean;
+    statsUserPromptText?: string;
+  }
 ): Promise<{
   dataUrl: string;
   usage: { promptTokens: number | null; candidatesTokens: number | null; totalTokens: number | null };
@@ -1495,6 +1550,7 @@ export async function generateMarketplaceImageDetailed(
     outputTokensTotal: number | null;
     outputImageTokens: number | null;
     outputTextTokens: number | null;
+    inputTextTokensTotal: number | null;
   };
 }> {
   const promptSafety = checkImagePromptSafety(prompt);
@@ -1549,6 +1605,7 @@ export async function generateMarketplaceImageDetailed(
   }
 
   const includeTokenBreakdown = Boolean(options?.includeTokenBreakdown);
+  const statsUserPromptText = typeof options?.statsUserPromptText === 'string' ? options!.statsUserPromptText : '';
   const textOnlyParts = parts.filter((part) => typeof part?.text === 'string');
 
   const body: any = {
@@ -1592,54 +1649,49 @@ export async function generateMarketplaceImageDetailed(
               outputTokensTotal: number | null;
               outputImageTokens: number | null;
               outputTextTokens: number | null;
+              inputTextTokensTotal: number | null;
             }
           | undefined;
 
         if (includeTokenBreakdown) {
-          const textOnlyBodyNoSystem = {
-            contents: [{ role: 'user', parts: textOnlyParts }],
-          };
+          // Total input/output tokens from the *actual generation call*.
+          const inputTokensTotal = usage.promptTokens;
+          const outputTokensTotal = usage.candidatesTokens;
 
+          // Count system prompt tokens reliably with a text model (cached).
+          const inputSystemPromptTokens = await getMarketplaceSystemPromptTokens();
+
+          // Count user prompt tokens from the original short user prompt only (NOT the expanded template).
+          const inputUserPromptTokens = statsUserPromptText ? await countTokensForPlainText(statsUserPromptText) : null;
+
+          // Estimate total text tokens (system + all text parts) using a text model.
           const textOnlyBodyWithSystem = {
             contents: [{ role: 'user', parts: textOnlyParts }],
             systemInstruction: { parts: [{ text: MARKETPLACE_SYSTEM_INSTRUCTION }] },
           };
+          const inputTextTokensTotal = await safeCountTokensTotal(GEMINI_TEXT_MODEL, textOnlyBodyWithSystem);
 
-          const [inputTokensTotal, inputUserPromptTokens, textWithSystemTokens] = await Promise.all([
-            safeCountTokensTotal(model, body),
-            safeCountTokensTotal(model, textOnlyBodyNoSystem),
-            safeCountTokensTotal(model, textOnlyBodyWithSystem),
-          ]);
-
-          const outputTokensTotal = usage.candidatesTokens;
-
-          const outputTextTokens = outputText
-            ? await safeCountTokensTotal(model, { contents: [{ role: 'user', parts: [{ text: outputText }] }] })
-            : null;
-
-          const inputSystemPromptTokens =
-            inputUserPromptTokens !== null && textWithSystemTokens !== null
-              ? Math.max(0, textWithSystemTokens - inputUserPromptTokens)
-              : null;
-
+          // Derive image token cost as: promptTokens - textTokensTotal.
           const inputImageTokens =
-            inputTokensTotal !== null && textWithSystemTokens !== null
-              ? Math.max(0, inputTokensTotal - textWithSystemTokens)
+            inputTokensTotal !== null && inputTextTokensTotal !== null
+              ? Math.max(0, inputTokensTotal - inputTextTokensTotal)
               : null;
 
+          const outputTextTokens = outputText ? await countTokensForPlainText(outputText) : null;
           const outputImageTokens =
             typeof outputTokensTotal === 'number' && Number.isFinite(outputTokensTotal)
               ? Math.max(0, outputTokensTotal - (outputTextTokens ?? 0))
               : null;
 
           breakdown = {
-            inputTokensTotal,
+            inputTokensTotal: typeof inputTokensTotal === 'number' && Number.isFinite(inputTokensTotal) ? inputTokensTotal : null,
             inputUserPromptTokens,
             inputSystemPromptTokens,
             inputImageTokens,
             outputTokensTotal: typeof outputTokensTotal === 'number' && Number.isFinite(outputTokensTotal) ? outputTokensTotal : null,
             outputImageTokens,
             outputTextTokens,
+            inputTextTokensTotal,
           };
         }
 
