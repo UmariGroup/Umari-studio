@@ -16,8 +16,9 @@ import {
   getImageParallelLimit,
   getImageRateLimit,
 } from '@/lib/image-queue';
-import { generateMarketplaceImage } from '@/services/gemini';
+import { generateMarketplaceImageDetailed } from '@/services/gemini';
 import { checkImagePromptSafety } from '@/lib/content-safety';
+import { countWords, recordAiRequestStat } from '@/lib/ai-request-stats';
 
 function mergeImagesUpToLimit(groups: string[][], limit: number): string[] {
   const out: string[] = [];
@@ -428,6 +429,7 @@ export async function POST(request: NextRequest) {
       error: string | null;
       prompt: string;
       productImages: string[];
+      totalTokens: number | null;
       startedAt: Date;
       finishedAt: Date;
     };
@@ -463,7 +465,7 @@ export async function POST(request: NextRequest) {
         })();
 
         try {
-          const dataUrl = await generateMarketplaceImage(
+          const result = await generateMarketplaceImageDetailed(
             fullPrompt,
             productImagesForVariation,
             safeStyleImages,
@@ -480,10 +482,11 @@ export async function POST(request: NextRequest) {
             index,
             label: variation?.label || variation?.id || `Image ${index + 1}`,
             status: 'succeeded',
-            imageUrl: dataUrl,
+            imageUrl: result.dataUrl,
             error: null,
             prompt: fullPrompt,
             productImages: productImagesForVariation,
+            totalTokens: result.usage?.totalTokens ?? null,
             startedAt,
             finishedAt: new Date(),
           };
@@ -498,6 +501,7 @@ export async function POST(request: NextRequest) {
             error: msg.slice(0, 5000),
             prompt: fullPrompt,
             productImages: productImagesForVariation,
+            totalTokens: null,
             startedAt,
             finishedAt: new Date(),
           };
@@ -512,6 +516,48 @@ export async function POST(request: NextRequest) {
       .sort((a, b) => a.index - b.index);
     const succeeded = ordered.filter((item) => item.status === 'succeeded');
     const failed = ordered.filter((item) => item.status === 'failed');
+
+    // ===============================
+    // AI request stats logging (best-effort)
+    // ===============================
+    try {
+      const uniqueProductImages = new Set(
+        [...safeProductImages, ...safeFrontImages, ...safeBackImages, ...safeSideImages].filter(Boolean)
+      );
+
+      let totalTokensSum = 0;
+      let totalTokensKnown = 0;
+      for (const item of ordered) {
+        if (typeof item.totalTokens === 'number' && Number.isFinite(item.totalTokens)) {
+          totalTokensSum += item.totalTokens;
+          totalTokensKnown += 1;
+        }
+      }
+
+      await recordAiRequestStat({
+        userId: user.id,
+        batchId,
+        serviceType: 'image_generate',
+        provider: 'gemini',
+        model: selectedModel || null,
+        plan,
+        mode: inferredMode,
+        promptWords: countWords(safePrompt),
+        promptChars: safePrompt.length,
+        inputProductImages: uniqueProductImages.size,
+        inputStyleImages: safeStyleImages.length,
+        outputImages: succeeded.length,
+        totalTokens: totalTokensKnown > 0 ? totalTokensSum : null,
+        meta: {
+          outputs_total: ordered.length,
+          outputs_succeeded: succeeded.length,
+          outputs_failed: failed.length,
+          tokens_outputs_known: totalTokensKnown,
+        },
+      });
+    } catch {
+      // ignore analytics errors
+    }
 
     const anySucceeded = succeeded.length > 0;
     let tokensRefunded = 0;

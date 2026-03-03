@@ -80,6 +80,30 @@ CREATE TABLE token_usage (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- AI request analytics (tokens + inputs/outputs)
+CREATE TABLE IF NOT EXISTS ai_request_stats (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  batch_id UUID,
+  service_type VARCHAR(64) NOT NULL,
+  provider VARCHAR(32) NOT NULL,
+  model VARCHAR(128),
+  plan VARCHAR(50),
+  mode VARCHAR(16),
+  prompt_words INT NOT NULL DEFAULT 0,
+  prompt_chars INT NOT NULL DEFAULT 0,
+  input_product_images INT NOT NULL DEFAULT 0,
+  input_style_images INT NOT NULL DEFAULT 0,
+  output_images INT NOT NULL DEFAULT 0,
+  total_tokens INT,
+  meta JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_request_stats_created_at ON ai_request_stats(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_request_stats_user ON ai_request_stats(user_id);
+CREATE INDEX IF NOT EXISTS idx_ai_request_stats_service ON ai_request_stats(service_type);
+
 -- ============================================================
 -- amoCRM integration (OAuth tokens + per-user sync)
 -- ============================================================

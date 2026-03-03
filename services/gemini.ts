@@ -321,6 +321,74 @@ async function geminiGenerateContent(model: string, body: unknown): Promise<any>
   });
 }
 
+async function geminiCountTokens(model: string, body: unknown): Promise<any> {
+  requireApiKey();
+  assertGeminiModelName(model);
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    model
+  )}:countTokens`;
+
+  return geminiSemaphore.use(async () => {
+    let lastErr: unknown;
+
+    for (let attempt = 1; attempt <= GEMINI_RETRY_ATTEMPTS; attempt++) {
+      try {
+        const res = await axios.post(url, body, {
+          params: { key: GEMINI_API_KEY },
+          timeout: 120_000,
+        });
+
+        return res.data;
+      } catch (error: unknown) {
+        lastErr = error;
+
+        if (!axios.isAxiosError(error)) {
+          throw error;
+        }
+
+        const status = error.response?.status;
+        const retryable =
+          status === 429 ||
+          status === 500 ||
+          status === 502 ||
+          status === 503 ||
+          status === 504;
+
+        if (retryable && attempt < GEMINI_RETRY_ATTEMPTS) {
+          const retryAfterMs = parseRetryAfterMs((error.response?.headers as any)?.['retry-after']);
+          const expBackoffMs = Math.min(15_000, 750 * Math.pow(2, attempt - 1));
+          const jitterMs = Math.floor(Math.random() * 250);
+          const waitMs = Math.max(retryAfterMs || 0, expBackoffMs) + jitterMs;
+          await sleep(waitMs);
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    throw lastErr;
+  });
+}
+
+function extractTokenUsage(response: any): {
+  promptTokens: number | null;
+  candidatesTokens: number | null;
+  totalTokens: number | null;
+} {
+  const usage = response?.usageMetadata || response?.usage_metadata;
+  const promptTokens = Number(usage?.promptTokenCount ?? usage?.prompt_token_count);
+  const candidatesTokens = Number(usage?.candidatesTokenCount ?? usage?.candidates_token_count);
+  const totalTokens = Number(usage?.totalTokenCount ?? usage?.total_token_count);
+
+  return {
+    promptTokens: Number.isFinite(promptTokens) ? promptTokens : null,
+    candidatesTokens: Number.isFinite(candidatesTokens) ? candidatesTokens : null,
+    totalTokens: Number.isFinite(totalTokens) ? totalTokens : null,
+  };
+}
+
 function extractText(response: any): string {
   if (!response) return '';
   if (typeof response.text === 'string') return response.text;
@@ -1374,6 +1442,170 @@ export async function generateMarketplaceImage(
   }
 
   throw lastError instanceof Error ? lastError : new Error('No image returned.');
+}
+
+export async function generateMarketplaceImageDetailed(
+  prompt: string,
+  productImages: string[] = [],
+  styleImages: string[] = [],
+  aspectRatio: string = '3:4',
+  options?: { model?: string; fallbackModels?: string[]; imageIndex?: number }
+): Promise<{ dataUrl: string; usage: { promptTokens: number | null; candidatesTokens: number | null; totalTokens: number | null } }> {
+  const promptSafety = checkImagePromptSafety(prompt);
+  if (!promptSafety.allowed) {
+    throw new Error('PROMPT_POLICY_BLOCKED');
+  }
+
+  const primaryModel = (options?.model || GEMINI_IMAGE_MODEL).trim();
+
+  const planFallbacks = Array.isArray(options?.fallbackModels)
+    ? options!.fallbackModels!.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+
+  const modelCandidates = Array.from(
+    new Set([primaryModel, ...planFallbacks, ...GEMINI_IMAGE_FALLBACK_MODELS].filter(Boolean))
+  );
+
+  if (modelCandidates.length === 0) {
+    throw new Error('Gemini image model is empty.');
+  }
+
+  const parts: any[] = [];
+
+  const imageIndex = Number(options?.imageIndex || 0);
+  const angle = MARKETPLACE_ANGLES[imageIndex % MARKETPLACE_ANGLES.length];
+
+  const finalPrompt =
+    buildMarketplaceImagePrompt(prompt, angle) +
+    (styleImages.length > 0 ? buildStrongStyleTransferRules() : '');
+
+  parts.push({ text: finalPrompt });
+
+  if (styleImages.length > 0) {
+    parts.push({
+      text:
+        "\n[[STYLE REFERENCE IMAGES — match the STYLE strongly (lighting/background/color grading/composition). Ignore the object.]]\n",
+    });
+
+    for (const img of styleImages) {
+      const inlinePart = toInlineDataPart(img);
+      if (inlinePart) parts.push(inlinePart);
+    }
+  }
+
+  if (productImages.length > 0) {
+    parts.push({ text: "\n[[MAIN PRODUCT IMAGES — preserve identity EXACTLY]]\n" });
+
+    for (const img of productImages) {
+      const inlinePart = toInlineDataPart(img);
+      if (inlinePart) parts.push(inlinePart);
+    }
+  }
+
+  const body = {
+    contents: [{ role: 'user', parts }],
+    safetySettings: [
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+    ],
+    generationConfig: {
+      imageConfig: {
+        aspectRatio: normalizeAspectRatio(aspectRatio),
+      },
+      temperature: styleImages.length > 0 ? 0.2 : 0.3,
+    },
+  };
+
+  let lastError: unknown = null;
+  for (let index = 0; index < modelCandidates.length; index++) {
+    const model = modelCandidates[index];
+    try {
+      const response = await geminiGenerateContent(model, body);
+
+      const blockReason = response?.promptFeedback?.blockReason;
+      if (blockReason) {
+        throw new Error(`PROMPT_BLOCKED: ${blockReason}`);
+      }
+
+      const dataUrl = extractFirstImageDataUrl(response);
+      if (dataUrl) {
+        return { dataUrl, usage: extractTokenUsage(response) };
+      }
+
+      lastError = new Error(`NO_IMAGE: ${model}`);
+    } catch (error) {
+      lastError = error;
+      if (index < modelCandidates.length - 1 && shouldTryNextImageModel(error)) continue;
+      throw error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('No image returned.');
+}
+
+export async function countTokensForMarketplaceImage(
+  prompt: string,
+  productImages: string[] = [],
+  styleImages: string[] = [],
+  aspectRatio: string = '3:4',
+  options?: { model?: string; fallbackModels?: string[]; imageIndex?: number }
+): Promise<number | null> {
+  const primaryModel = (options?.model || GEMINI_IMAGE_MODEL).trim();
+
+  const planFallbacks = Array.isArray(options?.fallbackModels)
+    ? options!.fallbackModels!.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+
+  const modelCandidates = Array.from(
+    new Set([primaryModel, ...planFallbacks, ...GEMINI_IMAGE_FALLBACK_MODELS].filter(Boolean))
+  );
+
+  const model = modelCandidates[0];
+  if (!model) return null;
+
+  const parts: any[] = [];
+
+  const imageIndex = Number(options?.imageIndex || 0);
+  const angle = MARKETPLACE_ANGLES[imageIndex % MARKETPLACE_ANGLES.length];
+
+  const finalPrompt =
+    buildMarketplaceImagePrompt(prompt, angle) +
+    (styleImages.length > 0 ? buildStrongStyleTransferRules() : '');
+
+  parts.push({ text: finalPrompt });
+
+  if (styleImages.length > 0) {
+    parts.push({ text: "\n[[STYLE REFERENCE IMAGES]]\n" });
+    for (const img of styleImages) {
+      const inlinePart = toInlineDataPart(img);
+      if (inlinePart) parts.push(inlinePart);
+    }
+  }
+
+  if (productImages.length > 0) {
+    parts.push({ text: "\n[[MAIN PRODUCT IMAGES]]\n" });
+    for (const img of productImages) {
+      const inlinePart = toInlineDataPart(img);
+      if (inlinePart) parts.push(inlinePart);
+    }
+  }
+
+  const body = {
+    contents: [{ role: 'user', parts }],
+    generationConfig: {
+      imageConfig: {
+        aspectRatio: normalizeAspectRatio(aspectRatio),
+      },
+    },
+  };
+
+  try {
+    const res = await geminiCountTokens(model, body);
+    const tokens = Number(res?.totalTokens ?? res?.total_tokens);
+    return Number.isFinite(tokens) ? tokens : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function* generateMarketplaceDescriptionStream(

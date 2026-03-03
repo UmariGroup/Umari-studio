@@ -92,6 +92,13 @@ const QUICK_ACTIONS = [
     tone: 'from-indigo-500 to-violet-600',
   },
   {
+    href: "/admin/ai-requests",
+    icon: <FiZap className="h-6 w-6" />,
+    title: "AI so'rovlar (token)",
+    description: "Model, input rasmlar, prompt so'zlari, output va tokenlar hisoboti.",
+    tone: 'from-fuchsia-500 to-purple-600',
+  },
+  {
     href: '/admin/tokens',
     icon: <FiGift className="h-6 w-6" />,
     title: "Token qo'shish",
