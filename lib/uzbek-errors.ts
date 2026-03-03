@@ -178,7 +178,7 @@ export function toUzbekErrorMessage(err: ParsedApiError): { title: string; messa
 
   if (err.status >= 500) {
     return {
-      title: 'Server xatosi',
+      title: 'Ko`p so`rov',
       message: "Birozdan so'ng qayta urinib ko'ring.",
     };
   }
