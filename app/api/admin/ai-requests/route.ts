@@ -41,10 +41,13 @@ export async function GET(req: NextRequest) {
     const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
 
     const res = await query(
-      `SELECT s.id, s.created_at, s.service_type, s.provider, s.model, s.plan, s.mode,
-              s.prompt_words, s.prompt_chars,
-              s.input_product_images, s.input_style_images,
-              s.output_images, s.total_tokens,
+          `SELECT s.id, s.created_at, s.service_type, s.provider, s.model, s.plan, s.mode,
+            s.prompt_words, s.prompt_chars,
+            s.input_product_images, s.input_style_images,
+            s.output_images,
+            s.input_tokens_total, s.input_user_prompt_tokens, s.input_system_prompt_tokens, s.input_image_tokens,
+            s.output_tokens_total, s.output_image_tokens, s.output_text_tokens,
+            s.total_tokens,
               u.email AS user_email,
               s.batch_id,
               s.meta

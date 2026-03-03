@@ -430,6 +430,15 @@ export async function POST(request: NextRequest) {
       prompt: string;
       productImages: string[];
       totalTokens: number | null;
+      tokenBreakdown?: {
+        inputTokensTotal: number | null;
+        inputUserPromptTokens: number | null;
+        inputSystemPromptTokens: number | null;
+        inputImageTokens: number | null;
+        outputTokensTotal: number | null;
+        outputImageTokens: number | null;
+        outputTextTokens: number | null;
+      };
       startedAt: Date;
       finishedAt: Date;
     };
@@ -474,6 +483,7 @@ export async function POST(request: NextRequest) {
               model: selectedModel || undefined,
               fallbackModels: policy.allowedModels.filter((value) => value !== selectedModel),
               imageIndex: angleIndexForVariation,
+              includeTokenBreakdown: true,
             }
           );
 
@@ -487,6 +497,7 @@ export async function POST(request: NextRequest) {
             prompt: fullPrompt,
             productImages: productImagesForVariation,
             totalTokens: result.usage?.totalTokens ?? null,
+            tokenBreakdown: result.breakdown,
             startedAt,
             finishedAt: new Date(),
           };
@@ -502,6 +513,7 @@ export async function POST(request: NextRequest) {
             prompt: fullPrompt,
             productImages: productImagesForVariation,
             totalTokens: null,
+            tokenBreakdown: undefined,
             startedAt,
             finishedAt: new Date(),
           };
@@ -527,10 +539,60 @@ export async function POST(request: NextRequest) {
 
       let totalTokensSum = 0;
       let totalTokensKnown = 0;
+
+      const agg = {
+        inputTokensTotal: 0,
+        inputTokensTotalKnown: 0,
+        inputUserPromptTokens: 0,
+        inputUserPromptTokensKnown: 0,
+        inputSystemPromptTokens: 0,
+        inputSystemPromptTokensKnown: 0,
+        inputImageTokens: 0,
+        inputImageTokensKnown: 0,
+        outputTokensTotal: 0,
+        outputTokensTotalKnown: 0,
+        outputImageTokens: 0,
+        outputImageTokensKnown: 0,
+        outputTextTokens: 0,
+        outputTextTokensKnown: 0,
+      };
+
       for (const item of ordered) {
         if (typeof item.totalTokens === 'number' && Number.isFinite(item.totalTokens)) {
           totalTokensSum += item.totalTokens;
           totalTokensKnown += 1;
+        }
+
+        const b = item.tokenBreakdown;
+        if (b) {
+          if (typeof b.inputTokensTotal === 'number' && Number.isFinite(b.inputTokensTotal)) {
+            agg.inputTokensTotal += b.inputTokensTotal;
+            agg.inputTokensTotalKnown += 1;
+          }
+          if (typeof b.inputUserPromptTokens === 'number' && Number.isFinite(b.inputUserPromptTokens)) {
+            agg.inputUserPromptTokens += b.inputUserPromptTokens;
+            agg.inputUserPromptTokensKnown += 1;
+          }
+          if (typeof b.inputSystemPromptTokens === 'number' && Number.isFinite(b.inputSystemPromptTokens)) {
+            agg.inputSystemPromptTokens += b.inputSystemPromptTokens;
+            agg.inputSystemPromptTokensKnown += 1;
+          }
+          if (typeof b.inputImageTokens === 'number' && Number.isFinite(b.inputImageTokens)) {
+            agg.inputImageTokens += b.inputImageTokens;
+            agg.inputImageTokensKnown += 1;
+          }
+          if (typeof b.outputTokensTotal === 'number' && Number.isFinite(b.outputTokensTotal)) {
+            agg.outputTokensTotal += b.outputTokensTotal;
+            agg.outputTokensTotalKnown += 1;
+          }
+          if (typeof b.outputImageTokens === 'number' && Number.isFinite(b.outputImageTokens)) {
+            agg.outputImageTokens += b.outputImageTokens;
+            agg.outputImageTokensKnown += 1;
+          }
+          if (typeof b.outputTextTokens === 'number' && Number.isFinite(b.outputTextTokens)) {
+            agg.outputTextTokens += b.outputTextTokens;
+            agg.outputTextTokensKnown += 1;
+          }
         }
       }
 
@@ -547,12 +609,35 @@ export async function POST(request: NextRequest) {
         inputProductImages: uniqueProductImages.size,
         inputStyleImages: safeStyleImages.length,
         outputImages: succeeded.length,
+        inputTokensTotal: agg.inputTokensTotalKnown > 0 ? agg.inputTokensTotal : null,
+        inputUserPromptTokens: agg.inputUserPromptTokensKnown > 0 ? agg.inputUserPromptTokens : null,
+        inputSystemPromptTokens: agg.inputSystemPromptTokensKnown > 0 ? agg.inputSystemPromptTokens : null,
+        inputImageTokens: agg.inputImageTokensKnown > 0 ? agg.inputImageTokens : null,
+        outputTokensTotal: agg.outputTokensTotalKnown > 0 ? agg.outputTokensTotal : null,
+        outputImageTokens: agg.outputImageTokensKnown > 0 ? agg.outputImageTokens : null,
+        outputTextTokens: agg.outputTextTokensKnown > 0 ? agg.outputTextTokens : null,
         totalTokens: totalTokensKnown > 0 ? totalTokensSum : null,
         meta: {
           outputs_total: ordered.length,
           outputs_succeeded: succeeded.length,
           outputs_failed: failed.length,
           tokens_outputs_known: totalTokensKnown,
+          input_tokens_total: agg.inputTokensTotalKnown > 0 ? agg.inputTokensTotal : null,
+          input_user_prompt_tokens: agg.inputUserPromptTokensKnown > 0 ? agg.inputUserPromptTokens : null,
+          input_system_prompt_tokens: agg.inputSystemPromptTokensKnown > 0 ? agg.inputSystemPromptTokens : null,
+          input_image_tokens: agg.inputImageTokensKnown > 0 ? agg.inputImageTokens : null,
+          output_tokens_total: agg.outputTokensTotalKnown > 0 ? agg.outputTokensTotal : null,
+          output_image_tokens: agg.outputImageTokensKnown > 0 ? agg.outputImageTokens : null,
+          output_text_tokens: agg.outputTextTokensKnown > 0 ? agg.outputTextTokens : null,
+          breakdown_outputs_known: {
+            input_tokens_total: agg.inputTokensTotalKnown,
+            input_user_prompt_tokens: agg.inputUserPromptTokensKnown,
+            input_system_prompt_tokens: agg.inputSystemPromptTokensKnown,
+            input_image_tokens: agg.inputImageTokensKnown,
+            output_tokens_total: agg.outputTokensTotalKnown,
+            output_image_tokens: agg.outputImageTokensKnown,
+            output_text_tokens: agg.outputTextTokensKnown,
+          },
         },
       });
     } catch {

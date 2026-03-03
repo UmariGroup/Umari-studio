@@ -64,6 +64,15 @@ const MARKETPLACE_ANGLES = [
   "SIDE PROFILE: true side profile view (about 90°), silhouette and proportions, clean negative space.",
 ];
 
+const MARKETPLACE_SYSTEM_INSTRUCTION = `You are a professional ecommerce product photography generator.
+
+GLOBAL RULES:
+- Preserve the real product identity EXACTLY if product reference images are provided.
+- If style reference images are provided, match their visual style strongly (lighting/background/composition/color grading) but NEVER copy the object/brand.
+- Output must be a single realistic marketplace-ready product image.
+- Do not add any text overlays, watermarks, logos, borders, UI, or collage.
+- Keep it commercial, studio-like, and brand-safe. Avoid surreal/illustration looks and AI artifacts.`;
+
 function buildStrongStyleTransferRules(): string {
   return `
 
@@ -457,6 +466,30 @@ function extractFirstImageDataUrl(response: any): string | null {
   }
 
   return null;
+}
+
+function extractCandidateText(response: any): string {
+  const parts = response?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return '';
+
+  const out: string[] = [];
+  for (const part of parts) {
+    if (typeof part?.text === 'string' && part.text.trim()) {
+      out.push(part.text.trim());
+    }
+  }
+
+  return out.join('\n').trim();
+}
+
+async function safeCountTokensTotal(model: string, body: unknown): Promise<number | null> {
+  try {
+    const res = await geminiCountTokens(model, body);
+    const tokens = Number(res?.totalTokens ?? res?.total_tokens);
+    return Number.isFinite(tokens) ? tokens : null;
+  } catch {
+    return null;
+  }
 }
 
 async function generateText(model: string, systemInstruction: string | null, userText: string): Promise<string> {
@@ -1449,8 +1482,21 @@ export async function generateMarketplaceImageDetailed(
   productImages: string[] = [],
   styleImages: string[] = [],
   aspectRatio: string = '3:4',
-  options?: { model?: string; fallbackModels?: string[]; imageIndex?: number }
-): Promise<{ dataUrl: string; usage: { promptTokens: number | null; candidatesTokens: number | null; totalTokens: number | null } }> {
+  options?: { model?: string; fallbackModels?: string[]; imageIndex?: number; includeTokenBreakdown?: boolean }
+): Promise<{
+  dataUrl: string;
+  usage: { promptTokens: number | null; candidatesTokens: number | null; totalTokens: number | null };
+  outputText: string | null;
+  breakdown?: {
+    inputTokensTotal: number | null;
+    inputUserPromptTokens: number | null;
+    inputSystemPromptTokens: number | null;
+    inputImageTokens: number | null;
+    outputTokensTotal: number | null;
+    outputImageTokens: number | null;
+    outputTextTokens: number | null;
+  };
+}> {
   const promptSafety = checkImagePromptSafety(prompt);
   if (!promptSafety.allowed) {
     throw new Error('PROMPT_POLICY_BLOCKED');
@@ -1502,8 +1548,12 @@ export async function generateMarketplaceImageDetailed(
     }
   }
 
-  const body = {
+  const includeTokenBreakdown = Boolean(options?.includeTokenBreakdown);
+  const textOnlyParts = parts.filter((part) => typeof part?.text === 'string');
+
+  const body: any = {
     contents: [{ role: 'user', parts }],
+    systemInstruction: { parts: [{ text: MARKETPLACE_SYSTEM_INSTRUCTION }] },
     safetySettings: [
       { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' },
       { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
@@ -1529,7 +1579,76 @@ export async function generateMarketplaceImageDetailed(
 
       const dataUrl = extractFirstImageDataUrl(response);
       if (dataUrl) {
-        return { dataUrl, usage: extractTokenUsage(response) };
+        const usage = extractTokenUsage(response);
+        const outputTextRaw = extractCandidateText(response);
+        const outputText = outputTextRaw ? outputTextRaw.slice(0, 10_000) : '';
+
+        let breakdown:
+          | {
+              inputTokensTotal: number | null;
+              inputUserPromptTokens: number | null;
+              inputSystemPromptTokens: number | null;
+              inputImageTokens: number | null;
+              outputTokensTotal: number | null;
+              outputImageTokens: number | null;
+              outputTextTokens: number | null;
+            }
+          | undefined;
+
+        if (includeTokenBreakdown) {
+          const textOnlyBodyNoSystem = {
+            contents: [{ role: 'user', parts: textOnlyParts }],
+          };
+
+          const textOnlyBodyWithSystem = {
+            contents: [{ role: 'user', parts: textOnlyParts }],
+            systemInstruction: { parts: [{ text: MARKETPLACE_SYSTEM_INSTRUCTION }] },
+          };
+
+          const [inputTokensTotal, inputUserPromptTokens, textWithSystemTokens] = await Promise.all([
+            safeCountTokensTotal(model, body),
+            safeCountTokensTotal(model, textOnlyBodyNoSystem),
+            safeCountTokensTotal(model, textOnlyBodyWithSystem),
+          ]);
+
+          const outputTokensTotal = usage.candidatesTokens;
+
+          const outputTextTokens = outputText
+            ? await safeCountTokensTotal(model, { contents: [{ role: 'user', parts: [{ text: outputText }] }] })
+            : null;
+
+          const inputSystemPromptTokens =
+            inputUserPromptTokens !== null && textWithSystemTokens !== null
+              ? Math.max(0, textWithSystemTokens - inputUserPromptTokens)
+              : null;
+
+          const inputImageTokens =
+            inputTokensTotal !== null && textWithSystemTokens !== null
+              ? Math.max(0, inputTokensTotal - textWithSystemTokens)
+              : null;
+
+          const outputImageTokens =
+            typeof outputTokensTotal === 'number' && Number.isFinite(outputTokensTotal)
+              ? Math.max(0, outputTokensTotal - (outputTextTokens ?? 0))
+              : null;
+
+          breakdown = {
+            inputTokensTotal,
+            inputUserPromptTokens,
+            inputSystemPromptTokens,
+            inputImageTokens,
+            outputTokensTotal: typeof outputTokensTotal === 'number' && Number.isFinite(outputTokensTotal) ? outputTokensTotal : null,
+            outputImageTokens,
+            outputTextTokens,
+          };
+        }
+
+        return {
+          dataUrl,
+          usage,
+          outputText: outputText ? outputText : null,
+          breakdown,
+        };
       }
 
       lastError = new Error(`NO_IMAGE: ${model}`);
@@ -1592,6 +1711,7 @@ export async function countTokensForMarketplaceImage(
 
   const body = {
     contents: [{ role: 'user', parts }],
+    systemInstruction: { parts: [{ text: MARKETPLACE_SYSTEM_INSTRUCTION }] },
     generationConfig: {
       imageConfig: {
         aspectRatio: normalizeAspectRatio(aspectRatio),
@@ -1600,9 +1720,8 @@ export async function countTokensForMarketplaceImage(
   };
 
   try {
-    const res = await geminiCountTokens(model, body);
-    const tokens = Number(res?.totalTokens ?? res?.total_tokens);
-    return Number.isFinite(tokens) ? tokens : null;
+    const tokens = await safeCountTokensTotal(model, body);
+    return tokens;
   } catch {
     return null;
   }

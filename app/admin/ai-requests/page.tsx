@@ -17,6 +17,13 @@ type AiRequestRow = {
   input_product_images: number;
   input_style_images: number;
   output_images: number;
+  input_tokens_total?: number | null;
+  input_user_prompt_tokens?: number | null;
+  input_system_prompt_tokens?: number | null;
+  input_image_tokens?: number | null;
+  output_tokens_total?: number | null;
+  output_image_tokens?: number | null;
+  output_text_tokens?: number | null;
   total_tokens: number | null;
   user_email: string;
   batch_id: string | null;
@@ -141,6 +148,23 @@ export default function AdminAiRequestsPage() {
                 <tbody className="divide-y divide-white/10">
                   {filtered.map((r) => {
                     const inputTotal = Number(r.input_product_images || 0) + Number(r.input_style_images || 0);
+
+                    const meta = (r.meta && typeof r.meta === 'object' ? (r.meta as any) : null) as any;
+                    const inputTokensTotal =
+                      typeof r.input_tokens_total === 'number' ? r.input_tokens_total : typeof meta?.input_tokens_total === 'number' ? meta.input_tokens_total : null;
+                    const inputUserTokens =
+                      typeof r.input_user_prompt_tokens === 'number' ? r.input_user_prompt_tokens : typeof meta?.input_user_prompt_tokens === 'number' ? meta.input_user_prompt_tokens : null;
+                    const inputSystemTokens =
+                      typeof r.input_system_prompt_tokens === 'number' ? r.input_system_prompt_tokens : typeof meta?.input_system_prompt_tokens === 'number' ? meta.input_system_prompt_tokens : null;
+                    const inputImageTokens =
+                      typeof r.input_image_tokens === 'number' ? r.input_image_tokens : typeof meta?.input_image_tokens === 'number' ? meta.input_image_tokens : null;
+                    const outputTokensTotal =
+                      typeof r.output_tokens_total === 'number' ? r.output_tokens_total : typeof meta?.output_tokens_total === 'number' ? meta.output_tokens_total : null;
+                    const outputImageTokens =
+                      typeof r.output_image_tokens === 'number' ? r.output_image_tokens : typeof meta?.output_image_tokens === 'number' ? meta.output_image_tokens : null;
+                    const outputTextTokens =
+                      typeof r.output_text_tokens === 'number' ? r.output_text_tokens : typeof meta?.output_text_tokens === 'number' ? meta.output_text_tokens : null;
+
                     return (
                       <tr key={r.id} className="hover:bg-white/5 align-top">
                         <td className="px-6 py-4 text-white/70 whitespace-nowrap">
@@ -174,6 +198,14 @@ export default function AdminAiRequestsPage() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="text-white font-semibold">{typeof r.total_tokens === 'number' ? r.total_tokens : '—'}</div>
+                          <div className="mt-1 text-[11px] leading-4 text-white/60 whitespace-nowrap">
+                            In: {typeof inputTokensTotal === 'number' ? inputTokensTotal : '—'}
+                            <span className="text-white/40"> (user {typeof inputUserTokens === 'number' ? inputUserTokens : '—'}, sys {typeof inputSystemTokens === 'number' ? inputSystemTokens : '—'}, img {typeof inputImageTokens === 'number' ? inputImageTokens : '—'})</span>
+                          </div>
+                          <div className="text-[11px] leading-4 text-white/60 whitespace-nowrap">
+                            Out: {typeof outputTokensTotal === 'number' ? outputTokensTotal : '—'}
+                            <span className="text-white/40"> (img {typeof outputImageTokens === 'number' ? outputImageTokens : '—'}, text {typeof outputTextTokens === 'number' ? outputTextTokens : '—'})</span>
+                          </div>
                         </td>
                       </tr>
                     );

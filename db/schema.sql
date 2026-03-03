@@ -95,6 +95,13 @@ CREATE TABLE IF NOT EXISTS ai_request_stats (
   input_product_images INT NOT NULL DEFAULT 0,
   input_style_images INT NOT NULL DEFAULT 0,
   output_images INT NOT NULL DEFAULT 0,
+  input_tokens_total INT,
+  input_user_prompt_tokens INT,
+  input_system_prompt_tokens INT,
+  input_image_tokens INT,
+  output_tokens_total INT,
+  output_image_tokens INT,
+  output_text_tokens INT,
   total_tokens INT,
   meta JSONB,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
