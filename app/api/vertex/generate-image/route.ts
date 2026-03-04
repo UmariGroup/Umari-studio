@@ -23,11 +23,50 @@ import { checkImagePromptSafety } from '@/lib/content-safety';
 import { countWords, recordAiRequestStat } from '@/lib/ai-request-stats';
 
 function shouldUseAsyncQueue(): boolean {
-  const mode = String(process.env.IMAGE_GENERATION_MODE || '').trim().toLowerCase();
-  if (mode === 'queue') return true;
-  if (mode === 'sync') return false;
-  // Default: async queue in production (prevents Cloudflare 524 timeouts)
-  return process.env.NODE_ENV !== 'development';
+  // Worker/queue mode removed: always run synchronously.
+  return false;
+}
+
+function readIntEnv(name: string, fallback: number): number {
+  const raw = Number(process.env[name]);
+  return Number.isFinite(raw) ? Math.trunc(raw) : fallback;
+}
+
+function makeAdvisoryLockKey(input: string): string {
+  // FNV-1a 64-bit; keep it within signed bigint range (2^63-1)
+  let hash = 1469598103934665603n;
+  const prime = 1099511628211n;
+  const mask = (1n << 63n) - 1n;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= BigInt(input.charCodeAt(i));
+    hash = (hash * prime) & mask;
+  }
+  return hash.toString();
+}
+
+async function tryAcquirePlanConcurrencySlot(params: {
+  plan: string;
+  slots: number;
+}): Promise<{ client: any; lockKey: string } | null> {
+  const { plan, slots } = params;
+  const client = await getClient();
+  try {
+    for (let slot = 0; slot < slots; slot++) {
+      const lockKey = makeAdvisoryLockKey(`umari:image:sync:${plan}:${slot}`);
+      const res = await client.query('SELECT pg_try_advisory_lock($1) AS locked', [lockKey]);
+      const locked = Boolean(res?.rows?.[0]?.locked);
+      if (locked) return { client, lockKey };
+    }
+  } catch {
+    // ignore and fallthrough
+  }
+
+  try {
+    client.release();
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
 function splitTokensAcrossOutputs(totalTokens: number, outputsCount: number): number[] {
@@ -645,6 +684,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ===============================
+    // Sync mode concurrency gate (no worker/queue): reject when too busy
+    // ===============================
+    const concurrencySlots = Math.max(
+      1,
+      Math.min(
+        parallelLimit,
+        Math.max(1, readIntEnv('IMAGE_SYNC_MAX_INFLIGHT_PER_PLAN', parallelLimit))
+      )
+    );
+
+    const slot = await tryAcquirePlanConcurrencySlot({ plan, slots: concurrencySlots });
+    if (!slot) {
+      const retryAfterSeconds = Math.max(5, readIntEnv('IMAGE_SYNC_BUSY_RETRY_AFTER_SECONDS', 20));
+      return NextResponse.json(
+        {
+          error: "So'rov ko'p bo'ldi, keyinroq qayta urinib ko'ring.",
+          code: 'TOO_BUSY',
+          retry_after_seconds: retryAfterSeconds,
+          parallel_limit: parallelLimit,
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(retryAfterSeconds),
+          },
+        }
+      );
+    }
+
+    try {
+
     const maxPerRequest = Math.max(1, Number(process.env.IMAGE_SYNC_MAX_CONCURRENT_PER_REQUEST || 1));
     const maxConcurrent = Math.min(Math.max(1, parallelLimit), maxPerRequest, variations.length);
 
@@ -1026,6 +1097,19 @@ export async function POST(request: NextRequest) {
       tokens_remaining: user.role === 'admin' ? 999999 : Number(reservedTokensRemaining.toFixed(2)),
       note: 'Synchronous generation completed.',
     });
+
+    } finally {
+      try {
+        await slot.client.query('SELECT pg_advisory_unlock($1)', [slot.lockKey]);
+      } catch {
+        // ignore unlock errors
+      }
+      try {
+        slot.client.release();
+      } catch {
+        // ignore
+      }
+    }
 
   } catch (error) {
     console.error('Generate image error:', error);
