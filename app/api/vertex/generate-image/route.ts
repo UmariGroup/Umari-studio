@@ -7,6 +7,7 @@ import {
   getImagePolicy,
   getNextPlan,
   recordTokenUsage,
+  refundTokens,
   reserveTokens,
 } from '@/lib/subscription';
 import { getClient, query } from '@/lib/db';
@@ -14,11 +15,40 @@ import {
   ensureImageJobsTable,
   getImageDailyLimit,
   getImageParallelLimit,
+  getImageQueuePriority,
   getImageRateLimit,
 } from '@/lib/image-queue';
 import { generateMarketplaceImageDetailed } from '@/services/gemini';
 import { checkImagePromptSafety } from '@/lib/content-safety';
 import { countWords, recordAiRequestStat } from '@/lib/ai-request-stats';
+
+function shouldUseAsyncQueue(): boolean {
+  const mode = String(process.env.IMAGE_GENERATION_MODE || '').trim().toLowerCase();
+  if (mode === 'queue') return true;
+  if (mode === 'sync') return false;
+  // Default: async queue in production (prevents Cloudflare 524 timeouts)
+  return process.env.NODE_ENV !== 'development';
+}
+
+function splitTokensAcrossOutputs(totalTokens: number, outputsCount: number): number[] {
+  const total = Number(totalTokens);
+  const n = Math.max(1, Math.trunc(Number(outputsCount) || 1));
+  if (!Number.isFinite(total) || total <= 0) return new Array(n).fill(0);
+
+  const totalCents = Math.max(0, Math.round(total * 100));
+  const baseCents = Math.floor(totalCents / n);
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const cents = i === n - 1 ? totalCents - baseCents * (n - 1) : baseCents;
+    out.push(Number((cents / 100).toFixed(2)));
+  }
+  return out;
+}
+
+function isUuidLike(value: unknown): boolean {
+  const s = String(value || '').trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+}
 
 function mergeImagesUpToLimit(groups: string[][], limit: number): string[] {
   const out: string[] = [];
@@ -401,6 +431,41 @@ export async function POST(request: NextRequest) {
       ];
     })();
 
+    const useAsyncQueue = shouldUseAsyncQueue();
+
+    const clientRequestId = body?.client_request_id;
+    const batchId = isUuidLike(clientRequestId) ? String(clientRequestId).trim() : randomUUID();
+
+    // Idempotency: when the client retries after a 524/network timeout,
+    // return the existing batch instead of reserving tokens again.
+    if (useAsyncQueue && isUuidLike(clientRequestId)) {
+      try {
+        const existingRes = await query(
+          `SELECT 1
+           FROM image_jobs
+           WHERE batch_id = $1 AND user_id = $2
+           LIMIT 1`,
+          [batchId, user.id]
+        );
+
+        if ((existingRes.rows || []).length > 0) {
+          return NextResponse.json(
+            {
+              success: true,
+              batch_id: batchId,
+              queue_position: null,
+              eta_seconds: null,
+              parallel_limit: parallelLimit,
+              note: 'Batch already exists (idempotent retry).',
+            },
+            { status: 202 }
+          );
+        }
+      } catch {
+        // ignore idempotency lookup errors; proceed normally
+      }
+    }
+
     const costPerRequest = policy.costPerRequest;
     reservedTokens = Number(costPerRequest.toFixed(2));
     reservedTokensRemaining = user.role === 'admin' ? 999999 : Number(user.tokens_remaining || 0);
@@ -412,10 +477,173 @@ export async function POST(request: NextRequest) {
         recommendedPlan: getNextPlan(plan),
       });
     }
-
-    const batchId = randomUUID();
     const selectedModel =
       policy.allowedModels.length > 0 ? (model || policy.allowedModels[0] || '').trim() : model.trim();
+
+    if (useAsyncQueue) {
+      // ===============================
+      // Async queue mode (avoids long HTTP requests / Cloudflare 524)
+      // ===============================
+      const totalToReserve = user.role === 'admin' ? 0 : Number(Number(policy.costPerRequest).toFixed(2));
+
+      let reserveDebits: any = null;
+      if (user.role !== 'admin' && totalToReserve > 0) {
+        const reserveResult = await reserveTokens({ userId: user.id, tokens: totalToReserve });
+        reserveDebits = reserveResult;
+        reservedTokensRemaining = reserveResult.tokensRemaining;
+      } else {
+        reservedTokensRemaining = user.role === 'admin' ? 999999 : Number(user.tokens_remaining || 0);
+      }
+
+      reservedTokens = totalToReserve;
+
+      const priority = getImageQueuePriority(plan);
+      const jobItems = variations.map((variation, index) => {
+        const fullPrompt = `${safePrompt}${variation.suffix}\n\nOUTPUT REQUIREMENT: The final image must be exactly 1080x1440 pixels (3:4).`;
+        const productImagesForVariation =
+          variation.productImages?.length > 0 ? variation.productImages : safeProductImages;
+
+        return {
+          id: randomUUID(),
+          index,
+          label: variation?.label || variation?.id || `Image ${index + 1}`,
+          prompt: fullPrompt,
+          productImages: productImagesForVariation,
+          // IMPORTANT: reserve tokens ONCE per request (batch_index=0 only).
+          // The worker uses this convention to settle billing correctly.
+          tokensReserved: user.role === 'admin' ? 0 : index === 0 ? totalToReserve : 0,
+        };
+      });
+
+      try {
+        const client = await getClient();
+        try {
+          await client.query('BEGIN');
+          for (const item of jobItems) {
+            await client.query(
+              `INSERT INTO image_jobs (
+                 id, batch_id, batch_index, user_id,
+                 plan, mode, provider, model, aspect_ratio,
+                 label, base_prompt, prompt, product_images, style_images,
+                 status, priority, result_url, error_text,
+                 tokens_reserved, tokens_refunded, usage_recorded,
+                 created_at, updated_at, started_at, finished_at
+               ) VALUES (
+                 $1, $2, $3, $4,
+                 $5, $6, 'gemini', $7, $8,
+                 $9, $10, $11, $12::jsonb, $13::jsonb,
+                 'queued', $14, NULL, NULL,
+                 $15, 0, false,
+                 NOW(), NOW(), NULL, NULL
+               )`,
+              [
+                item.id,
+                batchId,
+                item.index,
+                user.id,
+                plan,
+                inferredMode,
+                selectedModel || null,
+                aspectRatio,
+                item.label,
+                safePrompt || null,
+                item.prompt,
+                JSON.stringify(item.productImages || []),
+                JSON.stringify(safeStyleImages || []),
+                priority,
+                item.tokensReserved,
+              ]
+            );
+          }
+          await client.query('COMMIT');
+        } catch (err) {
+          try {
+            await client.query('ROLLBACK');
+          } catch {
+            // ignore
+          }
+          throw err;
+        } finally {
+          client.release();
+        }
+      } catch (err) {
+        // If we reserved tokens but failed to enqueue, refund immediately.
+        if (user.role !== 'admin' && totalToReserve > 0 && reserveDebits) {
+          try {
+            await refundTokens({
+              userId: user.id,
+              tokens: totalToReserve,
+              debited: reserveDebits.debited,
+              referralDebits: reserveDebits.referralDebits,
+            } as any);
+          } catch {
+            // ignore refund errors (best-effort)
+          }
+        }
+        throw err;
+      }
+
+      // Best-effort queue position (plan-wide)
+      let queuePosition: number | null = null;
+      try {
+        const createdRes = await query(
+          `SELECT created_at
+           FROM image_jobs
+           WHERE batch_id = $1
+           ORDER BY batch_index ASC
+           LIMIT 1`,
+          [batchId]
+        );
+        const createdAtRaw = createdRes.rows?.[0]?.created_at;
+        const createdAt = createdAtRaw instanceof Date ? createdAtRaw : createdAtRaw ? new Date(createdAtRaw) : null;
+        if (createdAt) {
+          const posRes = await query(
+            `SELECT COUNT(DISTINCT batch_id)::int AS cnt
+             FROM image_jobs
+             WHERE plan = $1 AND status = 'queued' AND created_at < $2`,
+            [plan, createdAt]
+          );
+          const ahead = Number(posRes.rows?.[0]?.cnt ?? 0);
+          queuePosition = Number.isFinite(ahead) ? Math.max(1, ahead + 1) : null;
+        }
+      } catch {
+        queuePosition = null;
+      }
+
+      return NextResponse.json(
+        {
+          success: true,
+          batch_id: batchId,
+          queue_position: queuePosition,
+          eta_seconds: null,
+          parallel_limit: parallelLimit,
+          tokens_reserved: reservedTokens,
+          tokens_charged: 0,
+          tokens_refunded: 0,
+          tokens_remaining: user.role === 'admin' ? 999999 : Number(reservedTokensRemaining.toFixed(2)),
+          items: jobItems.map((item) => ({
+            id: item.id,
+            index: item.index,
+            status: 'queued',
+            label: item.label,
+            imageUrl: null,
+            error: null,
+          })),
+          progress: {
+            done: 0,
+            total: jobItems.length,
+            percent: 0,
+            queued: jobItems.length,
+            processing: 0,
+            succeeded: 0,
+            failed: 0,
+            canceled: 0,
+          },
+          note: 'Queued for async image generation.',
+        },
+        { status: 202 }
+      );
+    }
 
     const maxPerRequest = Math.max(1, Number(process.env.IMAGE_SYNC_MAX_CONCURRENT_PER_REQUEST || 1));
     const maxConcurrent = Math.min(Math.max(1, parallelLimit), maxPerRequest, variations.length);

@@ -143,6 +143,21 @@ const MarketplaceStudio: React.FC = () => {
   const [progressPct, setProgressPct] = useState<number>(0);
   const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
 
+  const pendingClientRequestIdRef = useRef<string | null>(null);
+
+  const createClientRequestId = () => {
+    const c: any = (globalThis as any)?.crypto;
+    if (c?.randomUUID) return c.randomUUID();
+    // Fallback UUIDv4-like (still matches server uuid regex)
+    const hex = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).slice(1);
+    return `${hex()}${hex()}-${hex()}-4${hex().slice(1)}-${((8 + Math.random() * 4) | 0).toString(16)}${hex().slice(1)}-${hex()}${hex()}${hex()}`;
+  };
+
+  useEffect(() => {
+    if (generating) return;
+    pendingClientRequestIdRef.current = null;
+  }, [generating, imageMode, promptUz, promptEn, productImages, styleImages]);
+
   const MARKETPLACE_ASPECT_RATIO = '3:4' as const;
   const TARGET_W = 1080;
   const TARGET_H = 1440;
@@ -711,6 +726,9 @@ const MarketplaceStudio: React.FC = () => {
     setProgressPct(0);
     setGeneratedImages([]);
 
+    const clientRequestId = pendingClientRequestIdRef.current || createClientRequestId();
+    pendingClientRequestIdRef.current = clientRequestId;
+
     try {
       const model =
         imageMode === 'ultra'
@@ -734,6 +752,7 @@ const MarketplaceStudio: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          client_request_id: clientRequestId,
           productImages: validProductImages,
           styleImages: validStyleImages,
           prompt: promptForRequest,
@@ -750,6 +769,12 @@ const MarketplaceStudio: React.FC = () => {
 
         if (typeof parsed.retryAfterSeconds === 'number' && parsed.retryAfterSeconds > 0) {
           setCooldownSeconds(parsed.retryAfterSeconds);
+        }
+
+        // If a gateway timeout happens, keep the same client_request_id for the next retry
+        // to avoid double token debits (server is idempotent by batch_id).
+        if (![502, 503, 504, 524].includes(response.status)) {
+          pendingClientRequestIdRef.current = null;
         }
 
         setGenerating(false);
@@ -787,6 +812,7 @@ const MarketplaceStudio: React.FC = () => {
         setEtaSeconds(null);
         setParallelLimit(typeof data?.parallel_limit === 'number' ? data.parallel_limit : null);
         setGenerating(false);
+        pendingClientRequestIdRef.current = null;
 
         if (typeof data?.tokens_remaining === 'number') {
           setUser((prev) => (prev ? { ...prev, tokens_remaining: data.tokens_remaining } : prev));
@@ -806,6 +832,7 @@ const MarketplaceStudio: React.FC = () => {
       if (!newBatchId) {
         toast.error(t('marketplaceNew.toasts.missingBatchId', 'Server batch id qaytarmadi.'));
         setGenerating(false);
+        pendingClientRequestIdRef.current = null;
         return;
       }
 
@@ -820,9 +847,13 @@ const MarketplaceStudio: React.FC = () => {
       }
 
       toast.info(t('marketplaceNew.toasts.queued', "So'rov navbatga qo'shildi. Navbat va progress ko'rsatiladi."));
+
+      // Success path: clear pending id (next request should be a new batch)
+      pendingClientRequestIdRef.current = null;
     } catch (error) {
       toast.error((error as Error).message || t('common.error', 'Xatolik'));
       setGenerating(false);
+      // Network failure: keep pendingClientRequestIdRef so user retry is idempotent
     } finally {
       // generating is stopped by the poller when the batch finishes
     }

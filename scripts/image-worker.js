@@ -527,6 +527,8 @@ async function settleBatchRequestBilling(client, batchId) {
     const tokensRefunded = Number(billing.tokens_refunded || 0);
     const usageRecorded = Boolean(billing.usage_recorded);
 
+    const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+
     const countsRes = await client.query(
       `SELECT COUNT(*)::int AS total,
               COUNT(*) FILTER (WHERE status = 'succeeded')::int AS succeeded,
@@ -565,20 +567,38 @@ async function settleBatchRequestBilling(client, batchId) {
     }
 
     if (succeeded > 0) {
-      // Charge ONCE per request
-      const prompt = String(billing.base_prompt || '').slice(0, 1000) || null;
-      await client.query(
-        `INSERT INTO token_usage (user_id, tokens_used, service_type, model_used, prompt)
-         VALUES ($1, $2, 'image_generate', $3, $4)`,
-        [billing.user_id, tokensReserved, billing.model || null, prompt]
-      );
+      // Pro-rata: charge only for successful outputs (matches sync API behavior)
+      // Example: reserved=10, total=4, succeeded=3 => charge=7.5, refund=2.5
+      const chargeAmount = round2((tokensReserved * succeeded) / Math.max(1, total));
+      const targetRefund = round2(tokensReserved - chargeAmount);
+      const refundAmount = Math.max(0, round2(targetRefund - tokensRefunded));
+
+      if (chargeAmount > 0) {
+        const prompt = String(billing.base_prompt || '').slice(0, 1000) || null;
+        await client.query(
+          `INSERT INTO token_usage (user_id, tokens_used, service_type, model_used, prompt)
+           VALUES ($1, $2, 'image_generate', $3, $4)`,
+          [billing.user_id, chargeAmount, billing.model || null, prompt]
+        );
+      }
+
+      if (refundAmount > 0) {
+        await client.query(
+          `UPDATE users
+           SET tokens_remaining = tokens_remaining + $1,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [refundAmount, billing.user_id]
+        );
+      }
 
       await client.query(
         `UPDATE image_jobs
          SET usage_recorded = true,
+             tokens_refunded = tokens_refunded + $2,
              updated_at = NOW()
          WHERE batch_id = $1 AND batch_index = 0`,
-        [batchId]
+        [batchId, refundAmount]
       );
 
       await client.query('COMMIT');
@@ -586,7 +606,7 @@ async function settleBatchRequestBilling(client, batchId) {
     }
 
     // All outputs failed/canceled: refund full request
-    const refundAmount = Math.max(0, tokensReserved - tokensRefunded);
+    const refundAmount = Math.max(0, round2(tokensReserved - tokensRefunded));
     if (refundAmount > 0) {
       await client.query(
         `UPDATE users
