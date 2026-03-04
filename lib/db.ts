@@ -1,5 +1,10 @@
 import { Pool } from 'pg';
 
+const readInt = (name: string, fallback: number): number => {
+  const raw = Number(process.env[name]);
+  return Number.isFinite(raw) ? Math.trunc(raw) : fallback;
+};
+
 const pool = new Pool({
   user: process.env.DB_USER || 'umari-ai',
   password: process.env.DB_PASSWORD || 'umari-ai-password',
@@ -9,10 +14,38 @@ const pool = new Pool({
   connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT_MS || '5000', 10),
   idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS || '30000', 10),
   max: parseInt(process.env.DB_POOL_MAX || '10', 10),
+
+  // Reduce random idle disconnects in Docker/cloud networks.
+  keepAlive: true,
+  keepAliveInitialDelayMillis: readInt('DB_KEEPALIVE_INITIAL_DELAY_MS', 10_000),
+
+  // Recycle long-lived connections to avoid stale sockets.
+  // (Supported by pg@8.x)
+  maxUses: readInt('DB_POOL_MAX_USES', 500),
 });
 
-pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
+let lastIdleErrorLogAt = 0;
+const idleErrorLogThrottleMs = readInt('DB_IDLE_ERROR_LOG_THROTTLE_MS', 30_000);
+
+pool.on('error', (err: any) => {
+  const code = String(err?.code || '').trim() || null;
+  const message = String(err?.message || err || '').trim();
+  const lower = message.toLowerCase();
+  const isExpectedDisconnect =
+    lower.includes('connection terminated unexpectedly') ||
+    lower.includes('server closed the connection unexpectedly') ||
+    lower.includes('terminating connection') ||
+    lower.includes('the connection has been closed');
+
+  const now = Date.now();
+  if (isExpectedDisconnect && now - lastIdleErrorLogAt < idleErrorLogThrottleMs) {
+    return;
+  }
+  lastIdleErrorLogAt = now;
+
+  const payload = { code, message };
+  if (isExpectedDisconnect) console.warn('DB pool idle client disconnected', payload);
+  else console.error('DB pool idle client error', payload);
 });
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
