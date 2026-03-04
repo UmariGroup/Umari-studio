@@ -410,6 +410,9 @@ const MarketplaceStudio: React.FC = () => {
 
     const poll = async () => {
       if (cancelled || inFlight) return;
+
+          // Stop polling on terminal status (prevents repeated toasts)
+          cancelled = true;
       inFlight = true;
 
       let nextDelayMs = 2500;
@@ -669,28 +672,7 @@ const MarketplaceStudio: React.FC = () => {
     [config.maxProductImages, imageMode, isAdmin, plan, productImages, t, toast, tokensRemaining]
   );
 
-  useEffect(() => {
-    const validProductImages = productImages.filter((img): img is string => Boolean(img));
-    const firstImage = validProductImages[0] || null;
-
-    if (imageMode !== 'ultra' || !firstImage) {
-      ultraAutoPromptDoneRef.current = false;
-      lastAutoPromptImageRef.current = null;
-      return;
-    }
-
-    if (promptUz.trim()) {
-      ultraAutoPromptDoneRef.current = true;
-      lastAutoPromptImageRef.current = firstImage;
-      return;
-    }
-
-    if (lastAutoPromptImageRef.current === firstImage) return;
-
-    lastAutoPromptImageRef.current = firstImage;
-    ultraAutoPromptDoneRef.current = true;
-    void handleGeneratePromptByImage({ auto: true });
-  }, [handleGeneratePromptByImage, imageMode, productImages, promptUz]);
+  // Prompt generation by image is disabled (prompt is optional now)
 
   // Generate images
   const handleGenerate = async () => {
@@ -708,11 +690,6 @@ const MarketplaceStudio: React.FC = () => {
     const validProductImages = productImages.filter((img): img is string => img !== null);
     if (validProductImages.length === 0) {
       toast.error(t('marketplaceNew.toasts.uploadAtLeastOneProductImage', 'Kamida bitta mahsulot rasmi yuklang!'));
-      return;
-    }
-
-    if (!promptUz.trim()) {
-      toast.error(t('marketplaceNew.toasts.enterPrompt', "So'rov matnini kiriting!"));
       return;
     }
 
@@ -1178,24 +1155,7 @@ const MarketplaceStudio: React.FC = () => {
                 placeholder={t('marketplaceNew.promptPlaceholder', "Masalan: Mahsulotni oq fonda professional tarzda ko'rsating...")}
                 className="w-full h-32 p-4 pr-24 border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              {imageMode !== 'ultra' && plan !== 'free' && (
-                <button
-                  type="button"
-                  onClick={() => void handleGeneratePromptByImage()}
-                  disabled={promptGenerating}
-                  title="Rasmga qarab tayyor prompt generate qilish"
-                  className="absolute right-3 bottom-3 inline-flex items-center gap-1 rounded-lg bg-blue-600 text-white px-3 py-2 text-xs font-semibold hover:bg-blue-700 disabled:opacity-60"
-                >
-                  <FiStar className="w-4 h-4" />
-                  {promptGenerating ? '...' : '1 token'}
-                </button>
-              )}
             </div>
-            {imageMode !== 'ultra' && plan !== 'free' && (
-              <p className="mt-2 text-xs text-gray-500">
-                Yulduzcha tugmasi rasmga qarab marketplace uchun tayyor prompt yaratadi (1 token).
-              </p>
-            )}
           </div>
 
           {/* Aspect Ratio */}
