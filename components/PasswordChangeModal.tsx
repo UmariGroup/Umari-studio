@@ -9,7 +9,6 @@ export function PasswordChangeModal(props: {
   onSuccess: () => void;
 }) {
   const { t } = useLanguage();
-  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,7 +16,6 @@ export function PasswordChangeModal(props: {
   const [success, setSuccess] = useState<string | null>(null);
 
   const handleClose = () => {
-    setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
     setError(null);
@@ -31,7 +29,7 @@ export function PasswordChangeModal(props: {
     setSuccess(null);
 
     // Validation
-    if (!currentPassword || !newPassword || !confirmPassword) {
+    if (!newPassword || !confirmPassword) {
       setError(t('auth.passwordRequired', 'Barcha maydonlar to\'ldirilishi kerak'));
       return;
     }
@@ -46,10 +44,7 @@ export function PasswordChangeModal(props: {
       return;
     }
 
-    if (currentPassword === newPassword) {
-      setError(t('auth.passwordSame', 'Yangi parol eski paroldif bo\'lishi kerak'));
-      return;
-    }
+
 
     try {
       setLoading(true);
@@ -57,7 +52,6 @@ export function PasswordChangeModal(props: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          currentPassword,
           newPassword,
           confirmPassword,
         }),
@@ -97,21 +91,6 @@ export function PasswordChangeModal(props: {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Current Password */}
-          <div>
-            <label className="text-sm font-semibold text-slate-700">
-              {t("auth.currentPassword", "Joriy parol")}
-            </label>
-            <input
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              className="mt-2 w-full rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm focus:border-blue-500 focus:bg-white focus:outline-none"
-              placeholder={t("auth.enterCurrentPassword", "Joriy parolni kiriting")}
-              disabled={loading}
-            />
-          </div>
-
           {/* New Password */}
           <div>
             <label className="text-sm font-semibold text-slate-700">

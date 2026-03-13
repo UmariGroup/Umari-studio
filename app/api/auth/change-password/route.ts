@@ -36,10 +36,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 2️⃣ Parse request body
-    const { currentPassword, newPassword, confirmPassword } = await request.json();
+    const { newPassword, confirmPassword } = await request.json();
 
     // 3️⃣ Validate inputs
-    if (!currentPassword || !newPassword || !confirmPassword) {
+    if (!newPassword || !confirmPassword) {
       return NextResponse.json(
         { error: 'Barcha maydonlar to\'ldirilishi kerak' },
         { status: 400 }
@@ -61,36 +61,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4️⃣ Get current password hash from database
-    const userResult = await query(
-      'SELECT password_hash FROM users WHERE id = $1',
-      [user.id]
-    );
-
-    if (userResult.rows.length === 0) {
-      return NextResponse.json(
-        { error: 'Foydalanuvchi topilmadi' },
-        { status: 404 }
-      );
-    }
-
-    // 5️⃣ Verify current password
-    const passwordMatch = await bcrypt.compare(
-      currentPassword,
-      userResult.rows[0].password_hash
-    );
-
-    if (!passwordMatch) {
-      return NextResponse.json(
-        { error: 'Joriy parol noto\'g\'ri' },
-        { status: 401 }
-      );
-    }
-
-    // 6️⃣ Hash new password
+    // 4️⃣ Hash new password
     const newPasswordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
 
-    // 7️⃣ Update password in database
+    // 5️⃣ Update password in database
     await query(
       'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
       [newPasswordHash, user.id]
