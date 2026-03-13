@@ -100,12 +100,18 @@ export default function AdminUsersPage() {
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState('');
   const [filterSubscription, setFilterSubscription] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; pages: number } | null>(null);
   const [selectedPlans, setSelectedPlans] = useState<Record<string, string>>({});
   const [planVariants, setPlanVariants] = useState<DbSubscriptionPlanRow[]>([]);
   const [activatingUser, setActivatingUser] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUsers();
+  }, [search, filterRole, filterSubscription, page]);
+
+  useEffect(() => {
+    setPage(1);
   }, [search, filterRole, filterSubscription]);
 
   useEffect(() => {
@@ -134,13 +140,15 @@ export default function AdminUsersPage() {
       if (search) params.append('search', search);
       if (filterRole) params.append('role', filterRole);
       if (filterSubscription) params.append('subscription', filterSubscription);
-      params.append('limit', '100');
+      params.append('page', String(page));
+      params.append('limit', '20');
 
       const response = await fetch(`/api/admin/users?${params}`);
       const data = await response.json();
 
       if (data.success) {
         setUsers(data.users);
+        setPagination(data.pagination || null);
         const nextSelected: Record<string, string> = {};
         for (const u of data.users as User[]) {
           nextSelected[u.id] = normalizePlan(u.subscription_plan);
@@ -261,7 +269,15 @@ export default function AdminUsersPage() {
             </Link>
             <div>
               <h1 className="text-xl font-bold text-white">Foydalanuvchilar boshqaruvi</h1>
-              <p className="text-white/50 text-sm">{users.length} ta foydalanuvchi</p>
+              <p className="text-white/50 text-sm">
+                {pagination ? (
+                  <>
+                    Sahifa: {pagination.page}/{pagination.pages} • Ko'rsatilmoqda: {users.length} • Jami: {pagination.total}
+                  </>
+                ) : (
+                  <>{users.length} ta foydalanuvchi</>
+                )}
+              </p>
             </div>
           </div>
         </div>
@@ -477,6 +493,33 @@ export default function AdminUsersPage() {
             })
           )}
         </div>
+
+        {/* Pagination */}
+        {pagination && pagination.pages > 1 && (
+          <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-4 border border-white/10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-white/60 text-sm">
+              Jami: {pagination.total} • Sahifa: {pagination.page}/{pagination.pages}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={loading || page <= 1}
+                className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Oldingi
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.min((pagination?.pages || prev + 1), prev + 1))}
+                disabled={loading || page >= (pagination.pages || 1)}
+                className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Keyingi
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Info Card */}
         <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-2xl p-6 border border-purple-500/20">

@@ -25,6 +25,19 @@ function readInt(value, fallback) {
   return Math.trunc(n);
 }
 
+function isLikelyTransientDbError(err) {
+  const code = String(err?.code || '').trim();
+  const msg = String(err?.message || err || '').toLowerCase();
+  if (code && code.startsWith('08')) return true; // connection exception class
+  if (['57P01', '57P02', '57P03'].includes(code)) return true;
+  return (
+    msg.includes('connection terminated unexpectedly') ||
+    msg.includes('server closed the connection unexpectedly') ||
+    msg.includes('client has encountered a connection error') ||
+    msg.includes('terminating connection')
+  );
+}
+
 const IDLE_SLEEP_MIN_MS = Math.max(250, readInt(process.env.IMAGE_WORKER_IDLE_MIN_MS, 500));
 const IDLE_SLEEP_MAX_MS = Math.max(IDLE_SLEEP_MIN_MS, readInt(process.env.IMAGE_WORKER_IDLE_MAX_MS, 4000));
 
@@ -45,6 +58,13 @@ function getDbConfig() {
     port: readInt(process.env.DB_PORT, 5432),
     database: process.env.DB_NAME || 'umari_studio',
     max: Math.max(5, readInt(process.env.IMAGE_WORKER_DB_POOL_MAX, 10)),
+
+    // Keepalive + recycling to reduce stale sockets in Docker/cloud networks
+    keepAlive: true,
+    keepAliveInitialDelayMillis: Math.max(1000, readInt(process.env.DB_KEEPALIVE_INITIAL_DELAY_MS, 10_000)),
+    connectionTimeoutMillis: Math.max(2000, readInt(process.env.DB_CONNECTION_TIMEOUT_MS, 5000)),
+    idleTimeoutMillis: Math.max(5000, readInt(process.env.DB_IDLE_TIMEOUT_MS, 30_000)),
+    maxUses: Math.max(50, readInt(process.env.DB_POOL_MAX_USES, 500)),
   };
 }
 
@@ -310,7 +330,7 @@ async function ensureImageJobsTable(pool) {
 }
 
 async function requeueStaleJobs(pool) {
-  const staleMinutes = Math.max(5, readInt(process.env.IMAGE_WORKER_STALE_MINUTES, 20));
+  const staleMinutes = Math.max(5, readInt(process.env.IMAGE_WORKER_STALE_MINUTES, 10));
   try {
     const res = await pool.query(
       `UPDATE image_jobs
@@ -527,6 +547,8 @@ async function settleBatchRequestBilling(client, batchId) {
     const tokensRefunded = Number(billing.tokens_refunded || 0);
     const usageRecorded = Boolean(billing.usage_recorded);
 
+    const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+
     const countsRes = await client.query(
       `SELECT COUNT(*)::int AS total,
               COUNT(*) FILTER (WHERE status = 'succeeded')::int AS succeeded,
@@ -565,20 +587,38 @@ async function settleBatchRequestBilling(client, batchId) {
     }
 
     if (succeeded > 0) {
-      // Charge ONCE per request
-      const prompt = String(billing.base_prompt || '').slice(0, 1000) || null;
-      await client.query(
-        `INSERT INTO token_usage (user_id, tokens_used, service_type, model_used, prompt)
-         VALUES ($1, $2, 'image_generate', $3, $4)`,
-        [billing.user_id, tokensReserved, billing.model || null, prompt]
-      );
+      // Pro-rata: charge only for successful outputs (matches sync API behavior)
+      // Example: reserved=10, total=4, succeeded=3 => charge=7.5, refund=2.5
+      const chargeAmount = round2((tokensReserved * succeeded) / Math.max(1, total));
+      const targetRefund = round2(tokensReserved - chargeAmount);
+      const refundAmount = Math.max(0, round2(targetRefund - tokensRefunded));
+
+      if (chargeAmount > 0) {
+        const prompt = String(billing.base_prompt || '').slice(0, 1000) || null;
+        await client.query(
+          `INSERT INTO token_usage (user_id, tokens_used, service_type, model_used, prompt)
+           VALUES ($1, $2, 'image_generate', $3, $4)`,
+          [billing.user_id, chargeAmount, billing.model || null, prompt]
+        );
+      }
+
+      if (refundAmount > 0) {
+        await client.query(
+          `UPDATE users
+           SET tokens_remaining = tokens_remaining + $1,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [refundAmount, billing.user_id]
+        );
+      }
 
       await client.query(
         `UPDATE image_jobs
          SET usage_recorded = true,
+             tokens_refunded = tokens_refunded + $2,
              updated_at = NOW()
          WHERE batch_id = $1 AND batch_index = 0`,
-        [batchId]
+        [batchId, refundAmount]
       );
 
       await client.query('COMMIT');
@@ -586,7 +626,7 @@ async function settleBatchRequestBilling(client, batchId) {
     }
 
     // All outputs failed/canceled: refund full request
-    const refundAmount = Math.max(0, tokensReserved - tokensRefunded);
+    const refundAmount = Math.max(0, round2(tokensReserved - tokensRefunded));
     if (refundAmount > 0) {
       await client.query(
         `UPDATE users
@@ -657,7 +697,7 @@ async function processJob(client, job) {
 }
 
 async function runPlanSlot(pool, plan, slot) {
-  const client = await pool.connect();
+  let client = await pool.connect();
   const lockKey = planLockKey(plan, slot);
   const name = `${WORKER_ID}:${plan}:${slot}`;
 
@@ -670,29 +710,86 @@ async function runPlanSlot(pool, plan, slot) {
     // ignore
   }
 
-  console.log(`[${name}] acquiring slot lock ${lockKey}...`);
-  await client.query(`SELECT pg_advisory_lock($1)`, [lockKey]);
-  console.log(`[${name}] slot lock acquired.`);
+  const acquireLock = async () => {
+    console.log(`[${name}] acquiring slot lock ${lockKey}...`);
+    while (true) {
+      const res = await client.query(`SELECT pg_try_advisory_lock($1) AS locked`, [lockKey]);
+      const locked = Boolean(res?.rows?.[0]?.locked);
+      if (locked) break;
+      await sleep(750);
+    }
+    console.log(`[${name}] slot lock acquired.`);
+  };
+
+  await acquireLock();
 
   let idleSleepMs = IDLE_SLEEP_MIN_MS;
   while (true) {
-    const job = await claimNextJob(client, plan);
-    if (!job) {
-      await sleep(idleSleepMs);
-      idleSleepMs = Math.min(IDLE_SLEEP_MAX_MS, Math.floor(idleSleepMs * 1.5));
-      continue;
-    }
+    try {
+      const job = await claimNextJob(client, plan);
+      if (!job) {
+        await sleep(idleSleepMs);
+        idleSleepMs = Math.min(IDLE_SLEEP_MAX_MS, Math.floor(idleSleepMs * 1.5));
+        continue;
+      }
 
-    idleSleepMs = IDLE_SLEEP_MIN_MS;
-    await processJob(client, job);
+      idleSleepMs = IDLE_SLEEP_MIN_MS;
+      await processJob(client, job);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[${name}] loop error`, msg);
+
+      // If connection is broken, reconnect and re-acquire lock.
+      if (isLikelyTransientDbError(err)) {
+        try {
+          client.release();
+        } catch {
+          // ignore
+        }
+        await sleep(750);
+        client = await pool.connect();
+        try {
+          await acquireLock();
+        } catch (err2) {
+          console.error(`[${name}] failed to re-acquire lock`, err2);
+          await sleep(1500);
+        }
+      } else {
+        await sleep(1000);
+      }
+    }
   }
+}
+
+function startPlanSlot(pool, plan, slot) {
+  const restartDelayMs = Math.max(2000, readInt(process.env.IMAGE_WORKER_SLOT_RESTART_MS, 5000));
+  const run = () =>
+    runPlanSlot(pool, plan, slot).catch((err) => {
+      console.error(`[${WORKER_ID}] plan slot crashed`, plan, slot, err);
+      setTimeout(run, restartDelayMs);
+    });
+  run();
 }
 
 async function main() {
   const pool = new Pool(getDbConfig());
 
+  let lastIdleLogAt = 0;
+  const idleThrottleMs = Math.max(5000, readInt(process.env.DB_IDLE_ERROR_LOG_THROTTLE_MS, 30_000));
   pool.on('error', (err) => {
-    console.error('Unexpected error on idle client', err);
+    const msg = String(err?.message || err || '').trim();
+    const lower = msg.toLowerCase();
+    const expected =
+      lower.includes('connection terminated unexpectedly') ||
+      lower.includes('server closed the connection unexpectedly') ||
+      lower.includes('the connection has been closed');
+
+    const now = Date.now();
+    if (expected && now - lastIdleLogAt < idleThrottleMs) return;
+    lastIdleLogAt = now;
+
+    if (expected) console.warn(`[${WORKER_ID}] DB idle disconnect`, msg);
+    else console.error(`[${WORKER_ID}] DB pool error`, err);
   });
 
   await ensureImageJobsTable(pool);
@@ -705,16 +802,13 @@ async function main() {
   for (const plan of plans) {
     const count = slots[plan];
     for (let slot = 0; slot < count; slot++) {
-      runPlanSlot(pool, plan, slot).catch((err) => {
-        console.error(`[${WORKER_ID}] plan slot crashed`, plan, slot, err);
-        process.exitCode = 1;
-      });
+      startPlanSlot(pool, plan, slot);
     }
   }
 
   const sweeper = setInterval(() => {
     void requeueStaleJobs(pool);
-  }, Math.max(15_000, readInt(process.env.IMAGE_WORKER_SWEEP_INTERVAL_MS, 60_000)));
+  }, Math.max(15_000, readInt(process.env.IMAGE_WORKER_SWEEP_INTERVAL_MS, 30_000)));
 
   const shutdown = async () => {
     clearInterval(sweeper);

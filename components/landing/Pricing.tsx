@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Container } from '@/components/ui/Container';
 import { Badge } from '@/components/ui/Badge';
@@ -16,7 +16,6 @@ import {
   durationLabelUz,
   featuresToList,
   pickPlanForDuration,
-  safeDiscountPercent,
   type DbSubscriptionPlanRow,
 } from '@/lib/subscription-plan-catalog';
 
@@ -41,6 +40,11 @@ export function Pricing() {
 
   const [dbPlans, setDbPlans] = useState<DbSubscriptionPlanRow[]>([]);
   const [durationMonths, setDurationMonths] = useState<number>(1);
+
+  const durationToggleRef = useRef<HTMLDivElement | null>(null);
+  const durationButtonRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+  const [highlight, setHighlight] = useState<{ x: number; width: number }>({ x: 0, width: 0 });
+  const [popularBadge, setPopularBadge] = useState<{ x: number; width: number } | null>(null);
 
   const plans: LandingPlan[] = [
     {
@@ -81,7 +85,7 @@ export function Pricing() {
         video: '25',
         text: '2',
       },
-      popular: true,
+      popular: false,
     },
     {
       id: 'business_plus',
@@ -101,12 +105,20 @@ export function Pricing() {
         video: '20',
         text: '1',
       },
-      popular: false,
+      popular: true,
     },
   ];
 
+  const discountPercentForDuration = useCallback((months: number): number => {
+    const m = Number(months) || 1;
+    if (m === 3) return 5;
+    if (m === 6) return 10;
+    if (m === 12) return 20;
+    return 0;
+  }, []);
+
   const onSelectPlan = (plan: SubscriptionPlan) => {
-    const url = getTelegramSubscribeUrl(plan);
+    const url = getTelegramSubscribeUrl(plan, durationMonths);
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -131,11 +143,57 @@ export function Pricing() {
 
   const durationOptions = useMemo(() => availableDurations(dbPlans), [dbPlans]);
 
+  const updateHighlight = useCallback(() => {
+    const container = durationToggleRef.current;
+    if (!container) return;
+
+    const btn = durationButtonRefs.current[durationMonths];
+    if (!btn) return;
+
+    setHighlight({
+      x: btn.offsetLeft,
+      width: btn.offsetWidth,
+    });
+
+    const popularBtn = durationButtonRefs.current[12];
+    if (popularBtn) {
+      setPopularBadge({
+        x: popularBtn.offsetLeft,
+        width: popularBtn.offsetWidth,
+      });
+    } else {
+      setPopularBadge(null);
+    }
+  }, [durationMonths]);
+
   useEffect(() => {
     if (!durationOptions.includes(durationMonths)) {
       setDurationMonths(durationOptions[0] || 1);
     }
   }, [durationOptions, durationMonths]);
+
+  useLayoutEffect(() => {
+    updateHighlight();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [durationMonths, durationOptions.length]);
+
+  useEffect(() => {
+    const container = durationToggleRef.current;
+    if (!container) return;
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => updateHighlight());
+      ro.observe(container);
+    }
+
+    const onResize = () => updateHighlight();
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      ro?.disconnect();
+    };
+  }, [updateHighlight]);
 
   const planRowsById = useMemo(() => {
     const out = new Map<SubscriptionPlan, DbSubscriptionPlanRow | null>();
@@ -161,14 +219,28 @@ export function Pricing() {
         </div>
 
         {durationOptions.length > 1 && (
-          <div className="mx-auto mb-10 flex max-w-md items-center justify-center">
-            <div className="relative inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+          <div className="mx-auto mb-10 flex max-w-xl items-center justify-center">
+            <div
+              ref={durationToggleRef}
+              className="relative inline-flex w-full overflow-visible rounded-2xl border border-slate-200 bg-white p-1 shadow-sm"
+            >
+              {popularBadge && durationOptions.includes(12) ? (
+                <div
+                  className="pointer-events-none absolute -top-4 z-20"
+                  style={{ left: popularBadge.x + popularBadge.width / 2, transform: 'translateX(-50%)' }}
+                >
+                  <span className="inline-flex items-center whitespace-nowrap rounded-full bg-blue-600 px-3 py-1 text-[11px] font-bold text-white">
+                    {t('pricing.popular')}
+                  </span>
+                </div>
+              ) : null}
+
               <motion.div
                 className="absolute inset-y-1 rounded-xl bg-slate-900"
                 initial={false}
                 animate={{
-                  x: `${durationOptions.indexOf(durationMonths) * (100 / durationOptions.length)}%`,
-                  width: `${100 / durationOptions.length}%`,
+                  x: highlight.x,
+                  width: highlight.width,
                 }}
                 transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                 style={{ left: 0 }}
@@ -178,13 +250,34 @@ export function Pricing() {
                   key={m}
                   type="button"
                   onClick={() => setDurationMonths(m)}
+                  ref={(el) => {
+                    durationButtonRefs.current[m] = el;
+                  }}
                   className={clsx(
-                    'relative z-10 flex-1 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition',
+                    'relative z-10 flex-1 rounded-xl px-5 pb-3 pt-8 text-base font-semibold transition',
                     m === durationMonths ? 'text-white' : 'text-slate-700 hover:bg-slate-50'
                   )}
-                  style={{ width: `${100 / durationOptions.length}%` }}
                 >
-                  {durationLabelUz(m)}
+                  <span className="pointer-events-none absolute left-3 right-3 top-2 flex items-center justify-between gap-2">
+                    <span>
+                      {/* reserved for future top-left badges */}
+                    </span>
+
+                    <span>
+                      {discountPercentForDuration(m) > 0 ? (
+                        <span
+                          className={clsx(
+                            'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold',
+                            m === durationMonths ? 'bg-white/15 text-white' : 'bg-rose-50 text-rose-700'
+                          )}
+                        >
+                          -{discountPercentForDuration(m)}%
+                        </span>
+                      ) : null}
+                    </span>
+                  </span>
+
+                  <span className="block text-center leading-none">{durationLabelUz(m)}</span>
                 </button>
               ))}
             </div>
@@ -197,11 +290,8 @@ export function Pricing() {
               const dbPlan = planRowsById.get(plan.id) || null;
               const tokens = dbPlan?.tokens_included ?? plan.monthlyTokens;
               const price = dbPlan?.price ?? plan.priceMonthly;
-              const discountPercent = safeDiscountPercent(dbPlan?.discount_percent);
-              const oldPrice = computeOldPrice(price, discountPercent);
               const isMulti = durationMonths > 1;
               const tokenPerMonth = isMulti ? Math.round(tokens / durationMonths) : tokens;
-              const pricePerMonth = isMulti ? price / durationMonths : price;
               const featuresFromDb = dbPlan ? featuresToList(dbPlan.features) : [];
               const showDbFeatures = featuresFromDb.length > 0;
 
@@ -227,22 +317,31 @@ export function Pricing() {
               <h3 className="mt-1 text-2xl font-black text-slate-900">{plan.name}</h3>
               <p className="mt-2 text-sm text-slate-600">{dbPlan?.description || t(plan.subtitleKey)}</p>
 
-              <div className="mt-5 flex items-end gap-1">
-                <div className="flex items-end gap-2">
-                  {oldPrice ? (
-                    <span className="pb-1 text-sm font-semibold text-slate-400 line-through">${oldPrice.toFixed(2)}</span>
-                  ) : null}
-                  <span className="text-4xl font-black text-slate-900">${Number(price).toFixed(2)}</span>
-                </div>
-                <span className="pb-1 text-slate-500">/{durationLabelUz(durationMonths)}</span>
-              </div>
+              {(() => {
+                const discount = discountPercentForDuration(durationMonths);
+                const old = computeOldPrice(price, discount);
+                return (
+                  <div className="mt-5 flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      {old ? (
+                        <span className="text-sm font-semibold text-slate-400 line-through">${old.toFixed(2)}</span>
+                      ) : null}
+                      {discount > 0 ? (
+                        <span className="inline-flex items-center rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-rose-700">
+                          -{discount}%
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="flex items-end gap-1">
+                      <span className="text-4xl font-black text-slate-900">${Number(price).toFixed(2)}</span>
+                      <span className="pb-1 text-slate-500">/{durationLabelUz(durationMonths)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                {discountPercent > 0 ? (
-                  <span className="inline-flex items-center rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-rose-700">
-                    -{discountPercent}%
-                  </span>
-                ) : null}
                 <p className="text-sm font-semibold text-blue-700">
                   {tokens} {t('pricing.tokens')} / {durationLabelUz(durationMonths)}
                 </p>
@@ -299,5 +398,5 @@ export function Pricing() {
         </div>
       </Container>
     </section>
-  );
+  );      
 }

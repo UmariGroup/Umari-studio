@@ -674,21 +674,6 @@ const VideoStudio: React.FC = () => {
                     </span>
                     {t('videoNew.motionDescription', 'Harakat tavsifi')}
                   </h3>
-
-                  <button
-                    type="button"
-                    onClick={handleGeneratePromptByImages}
-                    disabled={promptGenerating || !canUsePromptAssist || sourceImages.length === 0}
-                    title={canUsePromptAssist ? t('videoNew.promptAssistTitle', 'Rasmga qarab prompt yozish (1 token)') : t('videoNew.promptAssistLocked', 'Starter va undan yuqori tarif kerak')}
-                    className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
-                      promptGenerating || !canUsePromptAssist || sourceImages.length === 0
-                        ? 'bg-gray-200 text-gray-400 border-gray-200 cursor-not-allowed'
-                        : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'
-                    }`}
-                  >
-                    <FiStar className="w-4 h-4" aria-hidden />
-                    <span>{promptGenerating ? '...' : '1 token'}</span>
-                  </button>
                 </div>
                 <input
                   type="text"

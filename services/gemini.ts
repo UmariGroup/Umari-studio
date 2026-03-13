@@ -64,6 +64,31 @@ const MARKETPLACE_ANGLES = [
   "SIDE PROFILE: true side profile view (about 90°), silhouette and proportions, clean negative space.",
 ];
 
+const MARKETPLACE_SYSTEM_INSTRUCTION = `You are a professional ecommerce product photography generator.
+
+GLOBAL RULES:
+- Preserve the real product identity EXACTLY if product reference images are provided.
+- If style reference images are provided, match their visual style strongly (lighting/background/composition/color grading) but NEVER copy the object/brand.
+- Output must be a single realistic marketplace-ready product image.
+- Do not add any text overlays, watermarks, logos, borders, UI, or collage.
+- Keep it commercial, studio-like, and brand-safe. Avoid surreal/illustration looks and AI artifacts.`;
+
+let marketplaceSystemPromptTokensCache: number | null | undefined;
+
+function buildStrongStyleTransferRules(): string {
+  return `
+
+STYLE TRANSFER (VERY IMPORTANT — MUST MATCH):
+- Use the STYLE REFERENCE IMAGES as the target look.
+- Match as closely as possible: background type/color/gradient, surface/table, lighting direction and softness, shadow style, reflections, color palette, exposure, contrast, saturation, white balance, depth of field, lens look, and overall composition feel.
+- Keep the image commercially realistic (marketplace studio photo), sharp focus, crisp edges.
+
+STYLE SAFETY RULES:
+- Copy ONLY the visual style; do NOT copy the object/brand/logo from the style references.
+- If style and product identity conflict: PRODUCT IDENTITY wins.
+`;
+}
+
 function buildMarketplaceImagePrompt(userPrompt: string, angle: string) {
   return `
 Task: Generate a high-converting professional marketplace product image.
@@ -307,6 +332,88 @@ async function geminiGenerateContent(model: string, body: unknown): Promise<any>
   });
 }
 
+async function geminiCountTokens(model: string, body: unknown): Promise<any> {
+  requireApiKey();
+  assertGeminiModelName(model);
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    model
+  )}:countTokens`;
+
+  return geminiSemaphore.use(async () => {
+    let lastErr: unknown;
+
+    for (let attempt = 1; attempt <= GEMINI_RETRY_ATTEMPTS; attempt++) {
+      try {
+        const res = await axios.post(url, body, {
+          params: { key: GEMINI_API_KEY },
+          timeout: 120_000,
+        });
+
+        return res.data;
+      } catch (error: unknown) {
+        lastErr = error;
+
+        if (!axios.isAxiosError(error)) {
+          throw error;
+        }
+
+        const status = error.response?.status;
+        const retryable =
+          status === 429 ||
+          status === 500 ||
+          status === 502 ||
+          status === 503 ||
+          status === 504;
+
+        if (retryable && attempt < GEMINI_RETRY_ATTEMPTS) {
+          const retryAfterMs = parseRetryAfterMs((error.response?.headers as any)?.['retry-after']);
+          const expBackoffMs = Math.min(15_000, 750 * Math.pow(2, attempt - 1));
+          const jitterMs = Math.floor(Math.random() * 250);
+          const waitMs = Math.max(retryAfterMs || 0, expBackoffMs) + jitterMs;
+          await sleep(waitMs);
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    throw lastErr;
+  });
+}
+
+function extractTokenUsage(response: any): {
+  promptTokens: number | null;
+  candidatesTokens: number | null;
+  totalTokens: number | null;
+} {
+  const usage = response?.usageMetadata || response?.usage_metadata;
+  const rawPrompt = Number(usage?.promptTokenCount ?? usage?.prompt_token_count);
+  const rawCandidates = Number(usage?.candidatesTokenCount ?? usage?.candidates_token_count);
+  const rawTotal = Number(usage?.totalTokenCount ?? usage?.total_token_count);
+
+  let promptTokens = Number.isFinite(rawPrompt) ? rawPrompt : null;
+  let candidatesTokens = Number.isFinite(rawCandidates) ? rawCandidates : null;
+  let totalTokens = Number.isFinite(rawTotal) ? rawTotal : null;
+
+  // Some responses omit prompt/candidates but include total.
+  if (totalTokens !== null) {
+    if (promptTokens === null && candidatesTokens !== null) {
+      promptTokens = Math.max(0, totalTokens - candidatesTokens);
+    } else if (candidatesTokens === null && promptTokens !== null) {
+      candidatesTokens = Math.max(0, totalTokens - promptTokens);
+    }
+  }
+
+  // If we have prompt+candidates but total is missing, reconstruct it.
+  if (totalTokens === null && promptTokens !== null && candidatesTokens !== null) {
+    totalTokens = promptTokens + candidatesTokens;
+  }
+
+  return { promptTokens, candidatesTokens, totalTokens };
+}
+
 function extractText(response: any): string {
   if (!response) return '';
   if (typeof response.text === 'string') return response.text;
@@ -375,6 +482,63 @@ function extractFirstImageDataUrl(response: any): string | null {
   }
 
   return null;
+}
+
+function extractCandidateText(response: any): string {
+  const parts = response?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return '';
+
+  const out: string[] = [];
+  for (const part of parts) {
+    if (typeof part?.text === 'string' && part.text.trim()) {
+      out.push(part.text.trim());
+    }
+  }
+
+  return out.join('\n').trim();
+}
+
+async function safeCountTokensTotal(model: string, body: unknown): Promise<number | null> {
+  try {
+    const res = await geminiCountTokens(model, body);
+    const tokens = Number(res?.totalTokens ?? res?.total_tokens);
+    return Number.isFinite(tokens) ? tokens : null;
+  } catch {
+    return null;
+  }
+}
+
+async function getMarketplaceSystemPromptTokens(): Promise<number | null> {
+  if (marketplaceSystemPromptTokensCache !== undefined) return marketplaceSystemPromptTokensCache;
+
+  // Compute as the difference between (empty user + system) and (empty user without system)
+  // using a TEXT model to avoid countTokens incompatibility on image models.
+  const empty = { contents: [{ role: 'user', parts: [{ text: '' }] }] };
+  const withSystem = {
+    contents: [{ role: 'user', parts: [{ text: '' }] }],
+    systemInstruction: { parts: [{ text: MARKETPLACE_SYSTEM_INSTRUCTION }] },
+  };
+
+  const [baseTokens, withSystemTokens] = await Promise.all([
+    safeCountTokensTotal(GEMINI_TEXT_MODEL, empty),
+    safeCountTokensTotal(GEMINI_TEXT_MODEL, withSystem),
+  ]);
+
+  if (baseTokens === null || withSystemTokens === null) {
+    marketplaceSystemPromptTokensCache = null;
+    return null;
+  }
+
+  marketplaceSystemPromptTokensCache = Math.max(0, withSystemTokens - baseTokens);
+  return marketplaceSystemPromptTokensCache;
+}
+
+async function countTokensForPlainText(text: string): Promise<number | null> {
+  const s = String(text || '').trim();
+  if (!s) return 0;
+  return safeCountTokensTotal(GEMINI_TEXT_MODEL, {
+    contents: [{ role: 'user', parts: [{ text: s }] }],
+  });
 }
 
 async function generateText(model: string, systemInstruction: string | null, userText: string): Promise<string> {
@@ -1285,26 +1449,30 @@ export async function generateMarketplaceImage(
   const imageIndex = Number(options?.imageIndex || 0);
   const angle = MARKETPLACE_ANGLES[imageIndex % MARKETPLACE_ANGLES.length];
 
-  const finalPrompt = buildMarketplaceImagePrompt(prompt, angle);
+  const finalPrompt =
+    buildMarketplaceImagePrompt(prompt, angle) +
+    (styleImages.length > 0 ? buildStrongStyleTransferRules() : '');
 
   parts.push({ text: finalPrompt });
 
-  if (productImages.length > 0) {
-    parts.push({ text: "\n[[MAIN PRODUCT IMAGES]]\n" });
+  // Important: put style references BEFORE product images to increase style adherence.
+  // Product identity is still enforced by the prompt + the product images.
+  if (styleImages.length > 0) {
+    parts.push({
+      text:
+        "\n[[STYLE REFERENCE IMAGES — match the STYLE strongly (lighting/background/color grading/composition). Ignore the object.]]\n",
+    });
 
-    for (const img of productImages) {
+    for (const img of styleImages) {
       const inlinePart = toInlineDataPart(img);
       if (inlinePart) parts.push(inlinePart);
     }
   }
 
-  if (styleImages.length > 0) {
-    parts.push({
-      text:
-        "\n[[STYLE REFERENCE IMAGES - Copy ONLY lighting/background/composition. Ignore the object.]]\n",
-    });
+  if (productImages.length > 0) {
+    parts.push({ text: "\n[[MAIN PRODUCT IMAGES — preserve identity EXACTLY]]\n" });
 
-    for (const img of styleImages) {
+    for (const img of productImages) {
       const inlinePart = toInlineDataPart(img);
       if (inlinePart) parts.push(inlinePart);
     }
@@ -1320,6 +1488,8 @@ export async function generateMarketplaceImage(
       imageConfig: {
         aspectRatio: normalizeAspectRatio(aspectRatio),
       },
+      // Lower temperature to reduce creative drift and better follow references.
+      temperature: styleImages.length > 0 ? 0.2 : 0.3,
     },
   };
 
@@ -1354,6 +1524,259 @@ export async function generateMarketplaceImage(
   }
 
   throw lastError instanceof Error ? lastError : new Error('No image returned.');
+}
+
+export async function generateMarketplaceImageDetailed(
+  prompt: string,
+  productImages: string[] = [],
+  styleImages: string[] = [],
+  aspectRatio: string = '3:4',
+  options?: {
+    model?: string;
+    fallbackModels?: string[];
+    imageIndex?: number;
+    includeTokenBreakdown?: boolean;
+    statsUserPromptText?: string;
+  }
+): Promise<{
+  dataUrl: string;
+  usage: { promptTokens: number | null; candidatesTokens: number | null; totalTokens: number | null };
+  outputText: string | null;
+  breakdown?: {
+    inputTokensTotal: number | null;
+    inputUserPromptTokens: number | null;
+    inputSystemPromptTokens: number | null;
+    inputImageTokens: number | null;
+    outputTokensTotal: number | null;
+    outputImageTokens: number | null;
+    outputTextTokens: number | null;
+    inputTextTokensTotal: number | null;
+  };
+}> {
+  const promptSafety = checkImagePromptSafety(prompt);
+  if (!promptSafety.allowed) {
+    throw new Error('PROMPT_POLICY_BLOCKED');
+  }
+
+  const primaryModel = (options?.model || GEMINI_IMAGE_MODEL).trim();
+
+  const planFallbacks = Array.isArray(options?.fallbackModels)
+    ? options!.fallbackModels!.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+
+  const modelCandidates = Array.from(
+    new Set([primaryModel, ...planFallbacks, ...GEMINI_IMAGE_FALLBACK_MODELS].filter(Boolean))
+  );
+
+  if (modelCandidates.length === 0) {
+    throw new Error('Gemini image model is empty.');
+  }
+
+  const parts: any[] = [];
+
+  const imageIndex = Number(options?.imageIndex || 0);
+  const angle = MARKETPLACE_ANGLES[imageIndex % MARKETPLACE_ANGLES.length];
+
+  const finalPrompt =
+    buildMarketplaceImagePrompt(prompt, angle) +
+    (styleImages.length > 0 ? buildStrongStyleTransferRules() : '');
+
+  parts.push({ text: finalPrompt });
+
+  if (styleImages.length > 0) {
+    parts.push({
+      text:
+        "\n[[STYLE REFERENCE IMAGES — match the STYLE strongly (lighting/background/color grading/composition). Ignore the object.]]\n",
+    });
+
+    for (const img of styleImages) {
+      const inlinePart = toInlineDataPart(img);
+      if (inlinePart) parts.push(inlinePart);
+    }
+  }
+
+  if (productImages.length > 0) {
+    parts.push({ text: "\n[[MAIN PRODUCT IMAGES — preserve identity EXACTLY]]\n" });
+
+    for (const img of productImages) {
+      const inlinePart = toInlineDataPart(img);
+      if (inlinePart) parts.push(inlinePart);
+    }
+  }
+
+  const includeTokenBreakdown = Boolean(options?.includeTokenBreakdown);
+  const statsUserPromptText = typeof options?.statsUserPromptText === 'string' ? options!.statsUserPromptText : '';
+  const textOnlyParts = parts.filter((part) => typeof part?.text === 'string');
+
+  const body: any = {
+    contents: [{ role: 'user', parts }],
+    systemInstruction: { parts: [{ text: MARKETPLACE_SYSTEM_INSTRUCTION }] },
+    safetySettings: [
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+    ],
+    generationConfig: {
+      imageConfig: {
+        aspectRatio: normalizeAspectRatio(aspectRatio),
+      },
+      temperature: styleImages.length > 0 ? 0.2 : 0.3,
+    },
+  };
+
+  let lastError: unknown = null;
+  for (let index = 0; index < modelCandidates.length; index++) {
+    const model = modelCandidates[index];
+    try {
+      const response = await geminiGenerateContent(model, body);
+
+      const blockReason = response?.promptFeedback?.blockReason;
+      if (blockReason) {
+        throw new Error(`PROMPT_BLOCKED: ${blockReason}`);
+      }
+
+      const dataUrl = extractFirstImageDataUrl(response);
+      if (dataUrl) {
+        const usage = extractTokenUsage(response);
+        const outputTextRaw = extractCandidateText(response);
+        const outputText = outputTextRaw ? outputTextRaw.slice(0, 10_000) : '';
+
+        let breakdown:
+          | {
+              inputTokensTotal: number | null;
+              inputUserPromptTokens: number | null;
+              inputSystemPromptTokens: number | null;
+              inputImageTokens: number | null;
+              outputTokensTotal: number | null;
+              outputImageTokens: number | null;
+              outputTextTokens: number | null;
+              inputTextTokensTotal: number | null;
+            }
+          | undefined;
+
+        if (includeTokenBreakdown) {
+          // Total input/output tokens from the *actual generation call*.
+          const inputTokensTotal = usage.promptTokens;
+          const outputTokensTotal = usage.candidatesTokens;
+
+          // Count system prompt tokens reliably with a text model (cached).
+          const inputSystemPromptTokens = await getMarketplaceSystemPromptTokens();
+
+          // Count user prompt tokens from the original short user prompt only (NOT the expanded template).
+          const inputUserPromptTokens = statsUserPromptText ? await countTokensForPlainText(statsUserPromptText) : null;
+
+          // Estimate total text tokens (system + all text parts) using a text model.
+          const textOnlyBodyWithSystem = {
+            contents: [{ role: 'user', parts: textOnlyParts }],
+            systemInstruction: { parts: [{ text: MARKETPLACE_SYSTEM_INSTRUCTION }] },
+          };
+          const inputTextTokensTotal = await safeCountTokensTotal(GEMINI_TEXT_MODEL, textOnlyBodyWithSystem);
+
+          // Derive image token cost as: promptTokens - textTokensTotal.
+          const inputImageTokens =
+            inputTokensTotal !== null && inputTextTokensTotal !== null
+              ? Math.max(0, inputTokensTotal - inputTextTokensTotal)
+              : null;
+
+          const outputTextTokens = outputText ? await countTokensForPlainText(outputText) : null;
+          const outputImageTokens =
+            typeof outputTokensTotal === 'number' && Number.isFinite(outputTokensTotal)
+              ? Math.max(0, outputTokensTotal - (outputTextTokens ?? 0))
+              : null;
+
+          breakdown = {
+            inputTokensTotal: typeof inputTokensTotal === 'number' && Number.isFinite(inputTokensTotal) ? inputTokensTotal : null,
+            inputUserPromptTokens,
+            inputSystemPromptTokens,
+            inputImageTokens,
+            outputTokensTotal: typeof outputTokensTotal === 'number' && Number.isFinite(outputTokensTotal) ? outputTokensTotal : null,
+            outputImageTokens,
+            outputTextTokens,
+            inputTextTokensTotal,
+          };
+        }
+
+        return {
+          dataUrl,
+          usage,
+          outputText: outputText ? outputText : null,
+          breakdown,
+        };
+      }
+
+      lastError = new Error(`NO_IMAGE: ${model}`);
+    } catch (error) {
+      lastError = error;
+      if (index < modelCandidates.length - 1 && shouldTryNextImageModel(error)) continue;
+      throw error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('No image returned.');
+}
+
+export async function countTokensForMarketplaceImage(
+  prompt: string,
+  productImages: string[] = [],
+  styleImages: string[] = [],
+  aspectRatio: string = '3:4',
+  options?: { model?: string; fallbackModels?: string[]; imageIndex?: number }
+): Promise<number | null> {
+  const primaryModel = (options?.model || GEMINI_IMAGE_MODEL).trim();
+
+  const planFallbacks = Array.isArray(options?.fallbackModels)
+    ? options!.fallbackModels!.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+
+  const modelCandidates = Array.from(
+    new Set([primaryModel, ...planFallbacks, ...GEMINI_IMAGE_FALLBACK_MODELS].filter(Boolean))
+  );
+
+  const model = modelCandidates[0];
+  if (!model) return null;
+
+  const parts: any[] = [];
+
+  const imageIndex = Number(options?.imageIndex || 0);
+  const angle = MARKETPLACE_ANGLES[imageIndex % MARKETPLACE_ANGLES.length];
+
+  const finalPrompt =
+    buildMarketplaceImagePrompt(prompt, angle) +
+    (styleImages.length > 0 ? buildStrongStyleTransferRules() : '');
+
+  parts.push({ text: finalPrompt });
+
+  if (styleImages.length > 0) {
+    parts.push({ text: "\n[[STYLE REFERENCE IMAGES]]\n" });
+    for (const img of styleImages) {
+      const inlinePart = toInlineDataPart(img);
+      if (inlinePart) parts.push(inlinePart);
+    }
+  }
+
+  if (productImages.length > 0) {
+    parts.push({ text: "\n[[MAIN PRODUCT IMAGES]]\n" });
+    for (const img of productImages) {
+      const inlinePart = toInlineDataPart(img);
+      if (inlinePart) parts.push(inlinePart);
+    }
+  }
+
+  const body = {
+    contents: [{ role: 'user', parts }],
+    systemInstruction: { parts: [{ text: MARKETPLACE_SYSTEM_INSTRUCTION }] },
+    generationConfig: {
+      imageConfig: {
+        aspectRatio: normalizeAspectRatio(aspectRatio),
+      },
+    },
+  };
+
+  try {
+    const tokens = await safeCountTokensTotal(model, body);
+    return tokens;
+  } catch {
+    return null;
+  }
 }
 
 export async function* generateMarketplaceDescriptionStream(

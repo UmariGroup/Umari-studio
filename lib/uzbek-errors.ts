@@ -162,6 +162,15 @@ export function toUzbekErrorMessage(err: ParsedApiError): { title: string; messa
     };
   }
 
+  if (err.code === 'TOO_BUSY') {
+    const base = err.error || "So'rov ko'p bo'ldi, keyinroq qayta urinib ko'ring.";
+    const suffix = typeof err.retryAfterSeconds === 'number' ? `\n\nTaxminan ${formatMmSs(err.retryAfterSeconds)} dan keyin urinib ko'ring.` : '';
+    return {
+      title: "So'rov ko'p",
+      message: `${base}${suffix}`,
+    };
+  }
+
   if (err.status === 429 || (err.error && err.error.includes('429'))) {
     return {
       title: "Juda ko'p so'rov",
@@ -178,7 +187,7 @@ export function toUzbekErrorMessage(err: ParsedApiError): { title: string; messa
 
   if (err.status >= 500) {
     return {
-      title: 'Server xatosi',
+      title: 'Ko`p so`rov',
       message: "Birozdan so'ng qayta urinib ko'ring.",
     };
   }

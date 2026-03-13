@@ -3,6 +3,19 @@ import { getClient, query } from '@/lib/db';
 import { hashPassword, setAuthCookies } from '@/lib/auth';
 import { validateEmail, validatePassword, sanitizeInput } from '@/lib/password';
 import { REFERRAL_COOKIE_NAME, ensureReferralSchema, ensureUserReferralCode, maybeAttachReferralToUser } from '@/lib/referral';
+import { syncNewUserToAmoCrm } from '@/lib/amocrm-sync';
+
+const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> => {
+  let timeoutId: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('timeout')), ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -106,6 +119,16 @@ export async function POST(req: NextRequest) {
     );
 
     setAuthCookies(response, authPayload);
+
+    // amoCRM sync (best-effort; never block registration)
+    try {
+      const amoRes = await withTimeout(syncNewUserToAmoCrm(user.id), 1500);
+      if (!amoRes?.ok) {
+        console.warn('amoCRM sync skipped/failed on register:', { userId: user.id, reason: amoRes?.reason });
+      }
+    } catch (err) {
+      console.warn('amoCRM sync exception on register:', { userId: user.id, err });
+    }
 
     if (referralAttached) {
       response.cookies.set(REFERRAL_COOKIE_NAME, '', {

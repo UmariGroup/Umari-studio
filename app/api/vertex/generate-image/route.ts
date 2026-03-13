@@ -7,6 +7,7 @@ import {
   getImagePolicy,
   getNextPlan,
   recordTokenUsage,
+  refundTokens,
   reserveTokens,
 } from '@/lib/subscription';
 import { getClient, query } from '@/lib/db';
@@ -14,10 +15,79 @@ import {
   ensureImageJobsTable,
   getImageDailyLimit,
   getImageParallelLimit,
+  getImageQueuePriority,
   getImageRateLimit,
 } from '@/lib/image-queue';
-import { generateMarketplaceImage } from '@/services/gemini';
+import { generateMarketplaceImageDetailed } from '@/services/gemini';
 import { checkImagePromptSafety } from '@/lib/content-safety';
+import { countWords, recordAiRequestStat } from '@/lib/ai-request-stats';
+
+function shouldUseAsyncQueue(): boolean {
+  // Worker/queue mode removed: always run synchronously.
+  return false;
+}
+
+function readIntEnv(name: string, fallback: number): number {
+  const raw = Number(process.env[name]);
+  return Number.isFinite(raw) ? Math.trunc(raw) : fallback;
+}
+
+function makeAdvisoryLockKey(input: string): string {
+  // FNV-1a 64-bit; keep it within signed bigint range (2^63-1)
+  let hash = 1469598103934665603n;
+  const prime = 1099511628211n;
+  const mask = (1n << 63n) - 1n;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= BigInt(input.charCodeAt(i));
+    hash = (hash * prime) & mask;
+  }
+  return hash.toString();
+}
+
+async function tryAcquirePlanConcurrencySlot(params: {
+  plan: string;
+  slots: number;
+}): Promise<{ client: any; lockKey: string } | null> {
+  const { plan, slots } = params;
+  const client = await getClient();
+  try {
+    for (let slot = 0; slot < slots; slot++) {
+      const lockKey = makeAdvisoryLockKey(`umari:image:sync:${plan}:${slot}`);
+      const res = await client.query('SELECT pg_try_advisory_lock($1) AS locked', [lockKey]);
+      const locked = Boolean(res?.rows?.[0]?.locked);
+      if (locked) return { client, lockKey };
+    }
+  } catch {
+    // ignore and fallthrough
+  }
+
+  try {
+    client.release();
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function splitTokensAcrossOutputs(totalTokens: number, outputsCount: number): number[] {
+  const total = Number(totalTokens);
+  const n = Math.max(1, Math.trunc(Number(outputsCount) || 1));
+  if (!Number.isFinite(total) || total <= 0) return new Array(n).fill(0);
+
+  const totalCents = Math.max(0, Math.round(total * 100));
+  const baseCents = Math.floor(totalCents / n);
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const cents = i === n - 1 ? totalCents - baseCents * (n - 1) : baseCents;
+    out.push(Number((cents / 100).toFixed(2)));
+  }
+  return out;
+}
+
+function isUuidLike(value: unknown): boolean {
+  const s = String(value || '').trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+}
 
 function mergeImagesUpToLimit(groups: string[][], limit: number): string[] {
   const out: string[] = [];
@@ -119,6 +189,15 @@ export async function POST(request: NextRequest) {
 
     const safePrompt = basePrompt.slice(0, policy.maxPromptChars);
     const safeProductImages = productImages.slice(0, policy.maxProductImages);
+    if (styleImages.length > 0 && policy.maxStyleImages <= 0) {
+      throw new BillingError({
+        status: 403,
+        code: 'PLAN_RESTRICTED',
+        message: "Uslub rasmi faqat Business+ tarifida Pro/Ultra rejimlarda mavjud.",
+        recommendedPlan: user.role === 'admin' ? null : 'business_plus',
+      });
+    }
+
     const safeStyleImages = styleImages.slice(0, policy.maxStyleImages);
 
     const promptSafety = checkImagePromptSafety(safePrompt);
@@ -391,6 +470,41 @@ export async function POST(request: NextRequest) {
       ];
     })();
 
+    const useAsyncQueue = shouldUseAsyncQueue();
+
+    const clientRequestId = body?.client_request_id;
+    const batchId = isUuidLike(clientRequestId) ? String(clientRequestId).trim() : randomUUID();
+
+    // Idempotency: when the client retries after a 524/network timeout,
+    // return the existing batch instead of reserving tokens again.
+    if (useAsyncQueue && isUuidLike(clientRequestId)) {
+      try {
+        const existingRes = await query(
+          `SELECT 1
+           FROM image_jobs
+           WHERE batch_id = $1 AND user_id = $2
+           LIMIT 1`,
+          [batchId, user.id]
+        );
+
+        if ((existingRes.rows || []).length > 0) {
+          return NextResponse.json(
+            {
+              success: true,
+              batch_id: batchId,
+              queue_position: null,
+              eta_seconds: null,
+              parallel_limit: parallelLimit,
+              note: 'Batch already exists (idempotent retry).',
+            },
+            { status: 202 }
+          );
+        }
+      } catch {
+        // ignore idempotency lookup errors; proceed normally
+      }
+    }
+
     const costPerRequest = policy.costPerRequest;
     reservedTokens = Number(costPerRequest.toFixed(2));
     reservedTokensRemaining = user.role === 'admin' ? 999999 : Number(user.tokens_remaining || 0);
@@ -402,10 +516,205 @@ export async function POST(request: NextRequest) {
         recommendedPlan: getNextPlan(plan),
       });
     }
-
-    const batchId = randomUUID();
     const selectedModel =
       policy.allowedModels.length > 0 ? (model || policy.allowedModels[0] || '').trim() : model.trim();
+
+    if (useAsyncQueue) {
+      // ===============================
+      // Async queue mode (avoids long HTTP requests / Cloudflare 524)
+      // ===============================
+      const totalToReserve = user.role === 'admin' ? 0 : Number(Number(policy.costPerRequest).toFixed(2));
+
+      let reserveDebits: any = null;
+      if (user.role !== 'admin' && totalToReserve > 0) {
+        const reserveResult = await reserveTokens({ userId: user.id, tokens: totalToReserve });
+        reserveDebits = reserveResult;
+        reservedTokensRemaining = reserveResult.tokensRemaining;
+      } else {
+        reservedTokensRemaining = user.role === 'admin' ? 999999 : Number(user.tokens_remaining || 0);
+      }
+
+      reservedTokens = totalToReserve;
+
+      const priority = getImageQueuePriority(plan);
+      const jobItems = variations.map((variation, index) => {
+        const fullPrompt = `${safePrompt}${variation.suffix}\n\nOUTPUT REQUIREMENT: The final image must be exactly 1080x1440 pixels (3:4).`;
+        const productImagesForVariation =
+          variation.productImages?.length > 0 ? variation.productImages : safeProductImages;
+
+        return {
+          id: randomUUID(),
+          index,
+          label: variation?.label || variation?.id || `Image ${index + 1}`,
+          prompt: fullPrompt,
+          productImages: productImagesForVariation,
+          // IMPORTANT: reserve tokens ONCE per request (batch_index=0 only).
+          // The worker uses this convention to settle billing correctly.
+          tokensReserved: user.role === 'admin' ? 0 : index === 0 ? totalToReserve : 0,
+        };
+      });
+
+      try {
+        const client = await getClient();
+        try {
+          await client.query('BEGIN');
+          for (const item of jobItems) {
+            await client.query(
+              `INSERT INTO image_jobs (
+                 id, batch_id, batch_index, user_id,
+                 plan, mode, provider, model, aspect_ratio,
+                 label, base_prompt, prompt, product_images, style_images,
+                 status, priority, result_url, error_text,
+                 tokens_reserved, tokens_refunded, usage_recorded,
+                 created_at, updated_at, started_at, finished_at
+               ) VALUES (
+                 $1, $2, $3, $4,
+                 $5, $6, 'gemini', $7, $8,
+                 $9, $10, $11, $12::jsonb, $13::jsonb,
+                 'queued', $14, NULL, NULL,
+                 $15, 0, false,
+                 NOW(), NOW(), NULL, NULL
+               )`,
+              [
+                item.id,
+                batchId,
+                item.index,
+                user.id,
+                plan,
+                inferredMode,
+                selectedModel || null,
+                aspectRatio,
+                item.label,
+                safePrompt || null,
+                item.prompt,
+                JSON.stringify(item.productImages || []),
+                JSON.stringify(safeStyleImages || []),
+                priority,
+                item.tokensReserved,
+              ]
+            );
+          }
+          await client.query('COMMIT');
+        } catch (err) {
+          try {
+            await client.query('ROLLBACK');
+          } catch {
+            // ignore
+          }
+          throw err;
+        } finally {
+          client.release();
+        }
+      } catch (err) {
+        // If we reserved tokens but failed to enqueue, refund immediately.
+        if (user.role !== 'admin' && totalToReserve > 0 && reserveDebits) {
+          try {
+            await refundTokens({
+              userId: user.id,
+              tokens: totalToReserve,
+              debited: reserveDebits.debited,
+              referralDebits: reserveDebits.referralDebits,
+            } as any);
+          } catch {
+            // ignore refund errors (best-effort)
+          }
+        }
+        throw err;
+      }
+
+      // Best-effort queue position (plan-wide)
+      let queuePosition: number | null = null;
+      try {
+        const createdRes = await query(
+          `SELECT created_at
+           FROM image_jobs
+           WHERE batch_id = $1
+           ORDER BY batch_index ASC
+           LIMIT 1`,
+          [batchId]
+        );
+        const createdAtRaw = createdRes.rows?.[0]?.created_at;
+        const createdAt = createdAtRaw instanceof Date ? createdAtRaw : createdAtRaw ? new Date(createdAtRaw) : null;
+        if (createdAt) {
+          const posRes = await query(
+            `SELECT COUNT(DISTINCT batch_id)::int AS cnt
+             FROM image_jobs
+             WHERE plan = $1 AND status = 'queued' AND created_at < $2`,
+            [plan, createdAt]
+          );
+          const ahead = Number(posRes.rows?.[0]?.cnt ?? 0);
+          queuePosition = Number.isFinite(ahead) ? Math.max(1, ahead + 1) : null;
+        }
+      } catch {
+        queuePosition = null;
+      }
+
+      return NextResponse.json(
+        {
+          success: true,
+          batch_id: batchId,
+          queue_position: queuePosition,
+          eta_seconds: null,
+          parallel_limit: parallelLimit,
+          tokens_reserved: reservedTokens,
+          tokens_charged: 0,
+          tokens_refunded: 0,
+          tokens_remaining: user.role === 'admin' ? 999999 : Number(reservedTokensRemaining.toFixed(2)),
+          items: jobItems.map((item) => ({
+            id: item.id,
+            index: item.index,
+            status: 'queued',
+            label: item.label,
+            imageUrl: null,
+            error: null,
+          })),
+          progress: {
+            done: 0,
+            total: jobItems.length,
+            percent: 0,
+            queued: jobItems.length,
+            processing: 0,
+            succeeded: 0,
+            failed: 0,
+            canceled: 0,
+          },
+          note: 'Queued for async image generation.',
+        },
+        { status: 202 }
+      );
+    }
+
+    // ===============================
+    // Sync mode concurrency gate (no worker/queue): reject when too busy
+    // ===============================
+    const concurrencySlots = Math.max(
+      1,
+      Math.min(
+        parallelLimit,
+        Math.max(1, readIntEnv('IMAGE_SYNC_MAX_INFLIGHT_PER_PLAN', parallelLimit))
+      )
+    );
+
+    const slot = await tryAcquirePlanConcurrencySlot({ plan, slots: concurrencySlots });
+    if (!slot) {
+      const retryAfterSeconds = Math.max(5, readIntEnv('IMAGE_SYNC_BUSY_RETRY_AFTER_SECONDS', 20));
+      return NextResponse.json(
+        {
+          error: "So'rov ko'p bo'ldi, keyinroq qayta urinib ko'ring.",
+          code: 'TOO_BUSY',
+          retry_after_seconds: retryAfterSeconds,
+          parallel_limit: parallelLimit,
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(retryAfterSeconds),
+          },
+        }
+      );
+    }
+
+    try {
 
     const maxPerRequest = Math.max(1, Number(process.env.IMAGE_SYNC_MAX_CONCURRENT_PER_REQUEST || 1));
     const maxConcurrent = Math.min(Math.max(1, parallelLimit), maxPerRequest, variations.length);
@@ -419,6 +728,16 @@ export async function POST(request: NextRequest) {
       error: string | null;
       prompt: string;
       productImages: string[];
+      totalTokens: number | null;
+      tokenBreakdown?: {
+        inputTokensTotal: number | null;
+        inputUserPromptTokens: number | null;
+        inputSystemPromptTokens: number | null;
+        inputImageTokens: number | null;
+        outputTokensTotal: number | null;
+        outputImageTokens: number | null;
+        outputTextTokens: number | null;
+      };
       startedAt: Date;
       finishedAt: Date;
     };
@@ -454,7 +773,7 @@ export async function POST(request: NextRequest) {
         })();
 
         try {
-          const dataUrl = await generateMarketplaceImage(
+          const result = await generateMarketplaceImageDetailed(
             fullPrompt,
             productImagesForVariation,
             safeStyleImages,
@@ -463,6 +782,8 @@ export async function POST(request: NextRequest) {
               model: selectedModel || undefined,
               fallbackModels: policy.allowedModels.filter((value) => value !== selectedModel),
               imageIndex: angleIndexForVariation,
+              includeTokenBreakdown: true,
+              statsUserPromptText: safePrompt,
             }
           );
 
@@ -471,10 +792,12 @@ export async function POST(request: NextRequest) {
             index,
             label: variation?.label || variation?.id || `Image ${index + 1}`,
             status: 'succeeded',
-            imageUrl: dataUrl,
+            imageUrl: result.dataUrl,
             error: null,
             prompt: fullPrompt,
             productImages: productImagesForVariation,
+            totalTokens: result.usage?.totalTokens ?? null,
+            tokenBreakdown: result.breakdown,
             startedAt,
             finishedAt: new Date(),
           };
@@ -489,6 +812,8 @@ export async function POST(request: NextRequest) {
             error: msg.slice(0, 5000),
             prompt: fullPrompt,
             productImages: productImagesForVariation,
+            totalTokens: null,
+            tokenBreakdown: undefined,
             startedAt,
             finishedAt: new Date(),
           };
@@ -504,22 +829,142 @@ export async function POST(request: NextRequest) {
     const succeeded = ordered.filter((item) => item.status === 'succeeded');
     const failed = ordered.filter((item) => item.status === 'failed');
 
+    // ===============================
+    // AI request stats logging (best-effort)
+    // ===============================
+    try {
+      const uniqueProductImages = new Set(
+        [...safeProductImages, ...safeFrontImages, ...safeBackImages, ...safeSideImages].filter(Boolean)
+      );
+
+      let totalTokensSum = 0;
+      let totalTokensKnown = 0;
+
+      const agg = {
+        inputTokensTotal: 0,
+        inputTokensTotalKnown: 0,
+        inputUserPromptTokens: 0,
+        inputUserPromptTokensKnown: 0,
+        inputSystemPromptTokens: 0,
+        inputSystemPromptTokensKnown: 0,
+        inputImageTokens: 0,
+        inputImageTokensKnown: 0,
+        outputTokensTotal: 0,
+        outputTokensTotalKnown: 0,
+        outputImageTokens: 0,
+        outputImageTokensKnown: 0,
+        outputTextTokens: 0,
+        outputTextTokensKnown: 0,
+      };
+
+      for (const item of ordered) {
+        if (typeof item.totalTokens === 'number' && Number.isFinite(item.totalTokens)) {
+          totalTokensSum += item.totalTokens;
+          totalTokensKnown += 1;
+        }
+
+        const b = item.tokenBreakdown;
+        if (b) {
+          if (typeof b.inputTokensTotal === 'number' && Number.isFinite(b.inputTokensTotal)) {
+            agg.inputTokensTotal += b.inputTokensTotal;
+            agg.inputTokensTotalKnown += 1;
+          }
+          if (typeof b.inputUserPromptTokens === 'number' && Number.isFinite(b.inputUserPromptTokens)) {
+            agg.inputUserPromptTokens += b.inputUserPromptTokens;
+            agg.inputUserPromptTokensKnown += 1;
+          }
+          if (typeof b.inputSystemPromptTokens === 'number' && Number.isFinite(b.inputSystemPromptTokens)) {
+            agg.inputSystemPromptTokens += b.inputSystemPromptTokens;
+            agg.inputSystemPromptTokensKnown += 1;
+          }
+          if (typeof b.inputImageTokens === 'number' && Number.isFinite(b.inputImageTokens)) {
+            agg.inputImageTokens += b.inputImageTokens;
+            agg.inputImageTokensKnown += 1;
+          }
+          if (typeof b.outputTokensTotal === 'number' && Number.isFinite(b.outputTokensTotal)) {
+            agg.outputTokensTotal += b.outputTokensTotal;
+            agg.outputTokensTotalKnown += 1;
+          }
+          if (typeof b.outputImageTokens === 'number' && Number.isFinite(b.outputImageTokens)) {
+            agg.outputImageTokens += b.outputImageTokens;
+            agg.outputImageTokensKnown += 1;
+          }
+          if (typeof b.outputTextTokens === 'number' && Number.isFinite(b.outputTextTokens)) {
+            agg.outputTextTokens += b.outputTextTokens;
+            agg.outputTextTokensKnown += 1;
+          }
+        }
+      }
+
+      await recordAiRequestStat({
+        userId: user.id,
+        batchId,
+        serviceType: 'image_generate',
+        provider: 'gemini',
+        model: selectedModel || null,
+        plan,
+        mode: inferredMode,
+        promptWords: countWords(safePrompt),
+        promptChars: safePrompt.length,
+        inputProductImages: uniqueProductImages.size,
+        inputStyleImages: safeStyleImages.length,
+        outputImages: succeeded.length,
+        inputTokensTotal: agg.inputTokensTotalKnown > 0 ? agg.inputTokensTotal : null,
+        inputUserPromptTokens: agg.inputUserPromptTokensKnown > 0 ? agg.inputUserPromptTokens : null,
+        inputSystemPromptTokens: agg.inputSystemPromptTokensKnown > 0 ? agg.inputSystemPromptTokens : null,
+        inputImageTokens: agg.inputImageTokensKnown > 0 ? agg.inputImageTokens : null,
+        outputTokensTotal: agg.outputTokensTotalKnown > 0 ? agg.outputTokensTotal : null,
+        outputImageTokens: agg.outputImageTokensKnown > 0 ? agg.outputImageTokens : null,
+        outputTextTokens: agg.outputTextTokensKnown > 0 ? agg.outputTextTokens : null,
+        totalTokens: totalTokensKnown > 0 ? totalTokensSum : null,
+        meta: {
+          outputs_total: ordered.length,
+          outputs_succeeded: succeeded.length,
+          outputs_failed: failed.length,
+          tokens_outputs_known: totalTokensKnown,
+          input_tokens_total: agg.inputTokensTotalKnown > 0 ? agg.inputTokensTotal : null,
+          input_user_prompt_tokens: agg.inputUserPromptTokensKnown > 0 ? agg.inputUserPromptTokens : null,
+          input_system_prompt_tokens: agg.inputSystemPromptTokensKnown > 0 ? agg.inputSystemPromptTokens : null,
+          input_image_tokens: agg.inputImageTokensKnown > 0 ? agg.inputImageTokens : null,
+          output_tokens_total: agg.outputTokensTotalKnown > 0 ? agg.outputTokensTotal : null,
+          output_image_tokens: agg.outputImageTokensKnown > 0 ? agg.outputImageTokens : null,
+          output_text_tokens: agg.outputTextTokensKnown > 0 ? agg.outputTextTokens : null,
+          breakdown_outputs_known: {
+            input_tokens_total: agg.inputTokensTotalKnown,
+            input_user_prompt_tokens: agg.inputUserPromptTokensKnown,
+            input_system_prompt_tokens: agg.inputSystemPromptTokensKnown,
+            input_image_tokens: agg.inputImageTokensKnown,
+            output_tokens_total: agg.outputTokensTotalKnown,
+            output_image_tokens: agg.outputImageTokensKnown,
+            output_text_tokens: agg.outputTextTokensKnown,
+          },
+        },
+      });
+    } catch {
+      // ignore analytics errors
+    }
+
     const anySucceeded = succeeded.length > 0;
     let tokensRefunded = 0;
     let tokensCharged = 0;
 
     if (user.role !== 'admin' && anySucceeded) {
-      const reserveResult = await reserveTokens({ userId: user.id, tokens: reservedTokens });
-      reservedTokensRemaining = reserveResult.tokensRemaining;
+      const costPerImage = policy.costPerRequest / policy.outputCount;
+      const tokensToCharge = Math.max(0, costPerImage * succeeded.length);
+      tokensCharged = Number(tokensToCharge.toFixed(2));
 
-      await recordTokenUsage({
-        userId: user.id,
-        tokensUsed: reservedTokens,
-        serviceType: 'image_generate',
-        modelUsed: selectedModel || null,
-        prompt: safePrompt,
-      });
-      tokensCharged = reservedTokens;
+      if (tokensCharged > 0) {
+        const reserveResult = await reserveTokens({ userId: user.id, tokens: tokensCharged });
+        reservedTokensRemaining = reserveResult.tokensRemaining;
+
+        await recordTokenUsage({
+          userId: user.id,
+          tokensUsed: tokensCharged,
+          serviceType: 'image_generate',
+          modelUsed: selectedModel || null,
+          prompt: safePrompt,
+        });
+      }
     }
 
     // Keep image_jobs table for limits/analytics, but skip queued/worker flow.
@@ -561,9 +1006,10 @@ export async function POST(request: NextRequest) {
               item.status,
               item.imageUrl,
               item.error,
-              user.role === 'admin' ? 0 : anySucceeded && item.index === 0 ? reservedTokens : 0,
+              // Only log the full charge on the first successful item for simplicity in analytics.
+              user.role === 'admin' ? 0 : item.status === 'succeeded' && item.index === succeeded[0]?.index ? tokensCharged : 0,
               0,
-              user.role === 'admin' ? true : anySucceeded && item.index === 0,
+              user.role === 'admin' ? true : item.status === 'succeeded' && item.index === succeeded[0]?.index,
               item.startedAt,
               item.finishedAt,
             ]
@@ -651,6 +1097,19 @@ export async function POST(request: NextRequest) {
       tokens_remaining: user.role === 'admin' ? 999999 : Number(reservedTokensRemaining.toFixed(2)),
       note: 'Synchronous generation completed.',
     });
+
+    } finally {
+      try {
+        await slot.client.query('SELECT pg_advisory_unlock($1)', [slot.lockKey]);
+      } catch {
+        // ignore unlock errors
+      }
+      try {
+        slot.client.release();
+      } catch {
+        // ignore
+      }
+    }
 
   } catch (error) {
     console.error('Generate image error:', error);

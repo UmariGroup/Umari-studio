@@ -5,6 +5,19 @@ import { OAuth2Client } from 'google-auth-library';
 import { FREE_TRIAL_TOKENS } from '@/lib/subscription-plans';
 import { getClient } from '@/lib/db';
 import { REFERRAL_COOKIE_NAME, ensureReferralSchema, ensureUserReferralCode, maybeAttachReferralToUser } from '@/lib/referral';
+import { syncNewUserToAmoCrm } from '@/lib/amocrm-sync';
+
+const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> => {
+  let timeoutId: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('timeout')), ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -48,6 +61,7 @@ export async function POST(req: NextRequest) {
     );
 
     let user = result.rows[0];
+    let createdNewUser = false;
 
     if (!user) {
       // Check if email already exists (for linking Google to existing email account)
@@ -65,6 +79,7 @@ export async function POST(req: NextRequest) {
           [google_id, email, first_name || '', last_name || '', avatar_url || null, FREE_TRIAL_TOKENS]
         );
         user = createResult.rows[0];
+        createdNewUser = true;
       } else {
         // Link Google to existing email account
         const linkResult = await query(
@@ -123,6 +138,18 @@ export async function POST(req: NextRequest) {
     });
 
     setAuthCookies(response, authPayload);
+
+    // amoCRM sync faqat yangi yaratilgan user uchun (old user login/link bo'lsa yubormaymiz)
+    if (createdNewUser) {
+      try {
+        const amoRes = await withTimeout(syncNewUserToAmoCrm(user.id), 1200);
+        if (!amoRes?.ok) {
+          console.warn('amoCRM sync skipped/failed on google auth (new user):', { userId: user.id, reason: amoRes?.reason });
+        }
+      } catch (err) {
+        console.warn('amoCRM sync exception on google auth (new user):', { userId: user.id, err });
+      }
+    }
 
     if (referralAttached) {
       response.cookies.set(REFERRAL_COOKIE_NAME, '', {

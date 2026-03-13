@@ -113,6 +113,65 @@ Muqobil variant (query o'rniga header):
 
 Javobda nechta user/subscription `expired` bo'lganini qaytaradi.
 
+## 🤝 amoCRM (OAuth + lead sync)
+
+Admin panelda: `/admin/amocrm` (Auth • Setup • Debug)
+
+`.env.local` yoki production env ga qo'shing:
+
+```env
+AMOCRM_ENABLED=true
+
+# Variant A: to'liq base URL
+AMOCRM_BASE_URL=https://YOUR_SUBDOMAIN.amocrm.ru
+
+# yoki Variant B: subdomain + domain
+# AMOCRM_SUBDOMAIN=YOUR_SUBDOMAIN
+# AMOCRM_DOMAIN=amocrm.ru
+
+AMOCRM_CLIENT_ID=...
+AMOCRM_CLIENT_SECRET=...
+AMOCRM_REDIRECT_URI=https://YOUR_APP_DOMAIN/api/admin/amocrm/oauth/callback
+
+# Pipeline va stage sozlamalari
+# Agar siz leadlar ANIQ bir pipeline’ga tushsin desangiz (masalan pipeline ID: 10567594),
+# pipeline ID + stage nomini berishingiz mumkin.
+# Kod o‘sha pipeline ichidan stage nomi bo‘yicha `status_id`ni avtomatik topib, lead yaratadi.
+
+# Yangi userlar uchun
+AMOCRM_NEW_PIPELINE_ID=10567594
+AMOCRM_NEW_STAGE_NAME=Yangi mijoz (AI)
+
+# Low-token (qayta sotuv) uchun
+AMOCRM_RESALE_PIPELINE_ID=10567594
+AMOCRM_RESALE_STAGE_NAME=Qayta sotuv
+
+# Ixtiyoriy: agar status_id ni oldindan bilsangiz, to‘g‘ridan-to‘g‘ri qo‘ysangiz ham bo‘ladi
+# (bunda pipeline/stage name qidiruvi ishlatilmaydi):
+# AMOCRM_NEW_STATUS_ID=123
+# AMOCRM_RESALE_STATUS_ID=456
+
+# Low-token trigger
+AMOCRM_LOW_TOKEN_THRESHOLD=10
+AMOCRM_LOW_TOKEN_BATCH=50
+```
+
+Eslatma (local/dev):
+
+- `AMOCRM_REDIRECT_URI` amoCRM integratsiyadagi redirect URI bilan **1:1** (harfma-harf) mos bo'lishi shart.
+- Agar siz localda ishlayotgan bo'lsangiz, odatda admin sahifa `http://localhost:3000/admin/amocrm` bo'ladi.
+   - Local callback: `http://localhost:3000/api/admin/amocrm/oauth/callback`
+   - Ammo amoCRM serverlari `localhost`ga kira olmaydi. Shu sabab dev test uchun ko'pincha `ngrok/cloudflared` kabi tunnel kerak bo'ladi yoki bevosita production domenni ishlatasiz.
+- Brauzerda `d9d1b21bf035:3000` kabi container ID host ochilmaydi (DNS topolmaydi). Tashqaridan kirish uchun `localhost:3000` (yoki tunnel domeni) dan foydalaning.
+
+Low-token cron endpoint:
+
+- `GET /api/cron/amocrm-low-tokens` (CRON_SECRET bilan)
+
+Misol:
+
+- `https://YOUR_DOMAIN/api/cron/amocrm-low-tokens?secret=CRON_SECRET`
+
 ## 🎯 Protected Routes
 
 ```

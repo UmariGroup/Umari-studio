@@ -80,6 +80,69 @@ CREATE TABLE token_usage (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- AI request analytics (tokens + inputs/outputs)
+CREATE TABLE IF NOT EXISTS ai_request_stats (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  batch_id UUID,
+  service_type VARCHAR(64) NOT NULL,
+  provider VARCHAR(32) NOT NULL,
+  model VARCHAR(128),
+  plan VARCHAR(50),
+  mode VARCHAR(16),
+  prompt_words INT NOT NULL DEFAULT 0,
+  prompt_chars INT NOT NULL DEFAULT 0,
+  input_product_images INT NOT NULL DEFAULT 0,
+  input_style_images INT NOT NULL DEFAULT 0,
+  output_images INT NOT NULL DEFAULT 0,
+  input_tokens_total INT,
+  input_user_prompt_tokens INT,
+  input_system_prompt_tokens INT,
+  input_image_tokens INT,
+  output_tokens_total INT,
+  output_image_tokens INT,
+  output_text_tokens INT,
+  total_tokens INT,
+  meta JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_request_stats_created_at ON ai_request_stats(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_request_stats_user ON ai_request_stats(user_id);
+CREATE INDEX IF NOT EXISTS idx_ai_request_stats_service ON ai_request_stats(service_type);
+
+-- ============================================================
+-- amoCRM integration (OAuth tokens + per-user sync)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS amocrm_oauth_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  base_url TEXT NOT NULL,
+  access_token TEXT NOT NULL,
+  refresh_token TEXT NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  account_id BIGINT,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_amocrm_oauth_tokens_updated
+  ON amocrm_oauth_tokens(updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS amocrm_user_sync (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  amocrm_contact_id BIGINT,
+  amocrm_lead_id_new BIGINT,
+  amocrm_lead_id_resale BIGINT,
+  new_synced_at TIMESTAMP,
+  resale_synced_at TIMESTAMP,
+  last_tokens_remaining NUMERIC(10, 2),
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_amocrm_user_sync_updated
+  ON amocrm_user_sync(updated_at DESC);
+
 -- Admin logs
 CREATE TABLE admin_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
