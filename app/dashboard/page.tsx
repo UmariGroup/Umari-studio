@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/LanguageContext';
+import { PasswordChangeModal } from '@/components/PasswordChangeModal';
 import {
   FiAlertTriangle,
   FiArrowRight,
@@ -11,6 +12,7 @@ import {
   FiEdit3,
   FiFilm,
   FiImage,
+  FiKey,
   FiMessageSquare,
   FiSearch,
   FiVideo,
@@ -68,9 +70,9 @@ interface ReferralData {
 
 const TOKEN_COSTS: Record<string, TokenCostInfo> = {
   free: { basic: 2, pro: 999, videoBasic: 999, copywriter: 999 },
-  starter: { basic: 2, pro: 7, videoBasic: 15, copywriter: 3 },
-  pro: { basic: 1.5, pro: 6, videoBasic: 25, videoPro: 35, copywriter: 2 },
-  business_plus: { basic: 1, pro: 5, videoBasic: 20, videoPro: 30, videoPremium: 45, copywriter: 1 },
+  starter: { basic: 2, pro: 7, videoBasic: 15, copywriter: 6 },
+  pro: { basic: 1.5, pro: 6, videoBasic: 25, videoPro: 35, copywriter: 5 },
+  business_plus: { basic: 1, pro: 5, videoBasic: 20, videoPro: 30, videoPremium: 45, copywriter: 4 },
 };
 
 export default function DashboardPage() {
@@ -95,6 +97,13 @@ export default function DashboardPage() {
   const [referral, setReferral] = useState<ReferralData | null>(null);
   const [referralLink, setReferralLink] = useState<string>('');
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
+  const [tokenUsageBreakdown, setTokenUsageBreakdown] = useState<Array<{
+    service_type: string;
+    request_count: number;
+    total_tokens_used: number;
+    last_used_at: string | null;
+  }> | null>(null);
+  const [passwordChangeModalOpen, setPasswordChangeModalOpen] = useState(false);
 
   const isAdmin = user?.role === 'admin';
   const plan = user?.subscription_plan || 'free';
@@ -143,6 +152,19 @@ export default function DashboardPage() {
                   stats: refData.stats,
                   invited_users: Array.isArray(refData.invited_users) ? refData.invited_users : [],
                 });
+              }
+            }
+          } catch (e) {
+            // ignore
+          }
+
+          // Fetch token usage breakdown (best-effort)
+          try {
+            const tokenRes = await fetch('/api/user/token-usage-breakdown');
+            if (tokenRes.ok) {
+              const tokenData = await tokenRes.json();
+              if (tokenData?.success) {
+                setTokenUsageBreakdown(tokenData.data?.breakdown || []);
               }
             }
           } catch (e) {
@@ -254,6 +276,61 @@ export default function DashboardPage() {
           )}
         </section>
 
+        {/* Subscription Info Section */}
+        {user && user.subscription_plan && user.subscription_plan !== 'free' && (
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-5">
+              <span className="rounded-xl bg-indigo-100 p-2 text-indigo-700"><FiClock className="h-5 w-5" /></span>
+              <h2 className="text-lg font-bold text-slate-900">{t('dashboard.subscription.title', 'Obuna ma\'lumotlari')}</h2>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs text-slate-500">{t('dashboard.subscription.status', 'Holati')}</p>
+                <p className="mt-2 text-lg font-bold text-slate-900">
+                  {user.subscription_status === 'active' ? (
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      {t('dashboard.subscription.active', 'Faol')}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-500" />
+                      {t('dashboard.subscription.inactive', 'Faol emas')}
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs text-slate-500">{t('dashboard.subscription.plan', 'Tarif')}</p>
+                <p className="mt-2 text-lg font-bold text-slate-900">{planLabel(user.subscription_plan)}</p>
+              </div>
+
+              {user.subscription_expires_at && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs text-slate-500">{t('dashboard.subscription.expiresAt', 'Tugash sanasi')}</p>
+                  <p className="mt-2 text-lg font-bold text-slate-900">
+                    {new Date(user.subscription_expires_at).toLocaleDateString(language === 'ru' ? 'ru-RU' : 'uz-UZ')}
+                  </p>
+                  {(() => {
+                    const now = new Date();
+                    const expiresAt = new Date(user.subscription_expires_at);
+                    const daysLeft = Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                    return (
+                      <p className="mt-1 text-xs text-slate-600">
+                        {daysLeft > 0
+                          ? t('dashboard.subscription.daysLeft', `${daysLeft} kun qolgan`)
+                          : t('dashboard.subscription.expired', 'Tugagan')}
+                      </p>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
         {access.blockedReason === 'expired' && (
           <section className="rounded-2xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50 p-5 shadow-sm">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -307,6 +384,35 @@ export default function DashboardPage() {
             </div>
           </section>
         )}
+
+        {/* Account Settings Section */}
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-5">
+            <span className="rounded-xl bg-slate-100 p-2 text-slate-700"><FiKey className="h-5 w-5" /></span>
+            <h2 className="text-lg font-bold text-slate-900">{t('dashboard.account.title', 'Hisob sozlamalari')}</h2>
+          </div>
+
+          <div className="space-y-3">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-slate-900">{t('dashboard.account.passwordChange', 'Parolni o\'zgartirish')}</p>
+                <p className="mt-1 text-sm text-slate-600">{t('dashboard.account.passwordChangeDesc', 'Hisob xavfsizligi uchun parol o\'zgartiring')}</p>
+              </div>
+              <button
+                onClick={() => setPasswordChangeModalOpen(true)}
+                className="rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:shadow-lg"
+              >
+                {t('dashboard.account.change', 'O\'zgartirish')}
+              </button>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <p className="font-semibold text-slate-900">{t('dashboard.account.email', 'Email')}</p>
+              <p className="mt-2 text-slate-700">{user?.email || '-'}</p>
+              <p className="mt-1 text-xs text-slate-500">{t('dashboard.account.emailDesc', 'Email o\'zgartirishiniz uchun biz bilan bog\'lanish')}</p>
+            </div>
+          </div>
+        </section>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -436,6 +542,55 @@ export default function DashboardPage() {
           </div>
         </section>
 
+        {/* Token Usage Breakdown */}
+        {tokenUsageBreakdown && tokenUsageBreakdown.length > 0 && !isAdmin && (
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-5">
+              <span className="rounded-xl bg-purple-100 p-2 text-purple-700"><FiCpu className="h-5 w-5" /></span>
+              <h2 className="text-lg font-bold text-slate-900">{t('dashboard.tokenUsage.title', 'Token sarflamalari')}</h2>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-slate-200">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-semibold text-slate-600">{t('dashboard.tokenUsage.service', 'Xizmat')}</th>
+                    <th className="text-right px-4 py-3 font-semibold text-slate-600">{t('dashboard.tokenUsage.requests', "So'rovlar")}</th>
+                    <th className="text-right px-4 py-3 font-semibold text-slate-600">{t('dashboard.tokenUsage.tokens', 'Tokenlar')}</th>
+                    <th className="text-right px-4 py-3 font-semibold text-slate-600">{t('dashboard.tokenUsage.lastUsed', 'Oxirgi ishlatilgan')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {tokenUsageBreakdown.map((row) => {
+                    const serviceLabel = (serviceType: string) => {
+                      const type = String(serviceType || '').toLowerCase();
+                      if (type.includes('image')) return t('dashboard.tokenUsage.service.image', 'Rasm yaratish');
+                      if (type.includes('video')) return t('dashboard.tokenUsage.service.video', 'Video yaratish');
+                      if (type.includes('copywriter') || type.includes('card')) return t('dashboard.tokenUsage.service.copywriter', 'Copywriter');
+                      if (type.includes('infografika')) return t('dashboard.tokenUsage.service.infografika', 'Infografika');
+                      if (type.includes('prompt')) return t('dashboard.tokenUsage.service.prompt', 'Prompt yaratish');
+                      return serviceType;
+                    };
+
+                    return (
+                      <tr key={row.service_type} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 text-slate-900 font-medium">{serviceLabel(row.service_type)}</td>
+                        <td className="px-4 py-3 text-right text-slate-600">{row.request_count}</td>
+                        <td className="px-4 py-3 text-right text-slate-900 font-semibold">{row.total_tokens_used.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right text-slate-600 text-xs">
+                          {row.last_used_at
+                            ? new Date(row.last_used_at).toLocaleDateString(language === 'ru' ? 'ru-RU' : 'uz-UZ')
+                            : '-'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
         <section>
           <h2 className="mb-4 text-xl font-bold text-slate-900">{t('dashboard.studios.title', 'AI studiyalar')}</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -505,6 +660,16 @@ export default function DashboardPage() {
           </section>
         )}
       </div>
+
+      {/* Password Change Modal */}
+      <PasswordChangeModal
+        open={passwordChangeModalOpen}
+        onClose={() => setPasswordChangeModalOpen(false)}
+        onSuccess={() => {
+          // Optionally refresh user data after password change
+          console.log('Password changed successfully');
+        }}
+      />
     </div>
   );
 }

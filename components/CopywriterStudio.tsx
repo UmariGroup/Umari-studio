@@ -59,9 +59,9 @@ const FIELD_LABEL_KEYS: Record<(typeof FIELD_ORDER)[number], string> = {
 // ============ TOKEN COSTS ============
 const COPYWRITER_TOKEN_COSTS: Record<SubscriptionPlan, number> = {
   free: 999,
-  starter: 3,
-  pro: 2,
-  business_plus: 1,
+  starter: 6,
+  pro: 5,
+  business_plus: 4,
 };
 
 // ============ TYPES ============
@@ -183,6 +183,68 @@ const CopywriterStudio: React.FC = () => {
       next[index] = null;
       return next;
     });
+  };
+
+  // Process file and convert to data URL
+  const processFile = (file: File, callback: (dataUrl: string) => void) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error(t('common.invalidFileType', 'Faqat rasm fayllari ruxsat etilgan'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      callback(reader.result as string);
+    };
+    reader.onerror = () => {
+      toast.error(t('common.fileReadError', 'Fayl o\'qishda xatolik'));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle drag over
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  // Handle drop
+  const handleDrop = (index: number, e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processFile(file, (dataUrl) => {
+        setImages((prev) => {
+          const next = prev.slice(0, maxImages);
+          while (next.length < maxImages) next.push(null);
+          next[index] = dataUrl;
+          return next;
+        });
+      });
+    }
+  };
+
+  // Handle paste
+  const handlePaste = (index: number, e: React.ClipboardEvent<HTMLDivElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile();
+        if (file) {
+          processFile(file, (dataUrl) => {
+            setImages((prev) => {
+              const next = prev.slice(0, maxImages);
+              while (next.length < maxImages) next.push(null);
+              next[index] = dataUrl;
+              return next;
+            });
+          });
+          e.preventDefault();
+          break;
+        }
+      }
+    }
   };
 
   const parseIncremental = (text: string) => {
@@ -441,7 +503,13 @@ const CopywriterStudio: React.FC = () => {
                 return (
                   <div key={idx} className="space-y-2">
                     <p className="text-xs font-semibold text-gray-500 px-1">{label}</p>
-                    <div className="relative aspect-square rounded-xl overflow-hidden shadow-md group bg-gray-50 border-2 border-dashed border-gray-200">
+                    <div
+                      className="relative aspect-square rounded-xl overflow-hidden shadow-md group bg-gray-50 border-2 border-dashed border-gray-200 cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-all"
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(idx, e)}
+                      onPaste={(e) => handlePaste(idx, e)}
+                      tabIndex={0}
+                    >
                       {img ? (
                         <>
                           <img src={img} className="w-full h-full object-cover" alt={label} />
@@ -455,16 +523,17 @@ const CopywriterStudio: React.FC = () => {
                           </button>
                         </>
                       ) : (
-                        <label className="w-full h-full flex items-center justify-center hover:bg-orange-50 transition-colors cursor-pointer">
+                        <label className="w-full h-full flex flex-col items-center justify-center hover:bg-orange-50 transition-colors cursor-pointer" title={t('copywriterNew.dragDropOrPaste', 'Rasmi tortib qo\'ying yoki Ctrl+V dan foydalaning')}>
                           <input
                             type="file"
                             onChange={(e) => handleUpload(idx, e)}
                             accept="image/*"
                             className="hidden"
                           />
-                          <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-8 h-8 text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                           </svg>
+                          <span className="text-xs text-gray-400 text-center px-2">{t('copywriterNew.dragDropOrPaste', 'Tortib qo\'ying\nyoki Ctrl+V')}</span>
                         </label>
                       )}
                     </div>

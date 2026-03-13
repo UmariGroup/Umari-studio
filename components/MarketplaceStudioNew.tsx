@@ -570,6 +570,66 @@ const MarketplaceStudio: React.FC = () => {
     [config, productImages, styleImages, styleMaxImages]
   );
 
+  // Handle drag over
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  // Handle drop for product images
+  const handleDropProduct = (index: number, e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = e.dataTransfer.files || [];
+    if (files.length > 0) {
+      const maxCount = config.maxProductImages;
+      handleUploadMany(index, Array.from(files), 'product', setProductImages, maxCount);
+    }
+  };
+
+  // Handle drop for style images
+  const handleDropStyle = (index: number, e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = e.dataTransfer.files || [];
+    if (files.length > 0) {
+      const maxCount = styleMaxImages;
+      handleUploadMany(index, Array.from(files), 'style', setStyleImages, maxCount);
+    }
+  };
+
+  // Handle paste for product images
+  const handlePasteProduct = (index: number, e: React.ClipboardEvent<HTMLDivElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile();
+        if (file) {
+          handleUpload(index, file, 'product', setProductImages);
+          e.preventDefault();
+          break;
+        }
+      }
+    }
+  };
+
+  // Handle paste for style images
+  const handlePasteStyle = (index: number, e: React.ClipboardEvent<HTMLDivElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile();
+        if (file) {
+          handleUpload(index, file, 'style', setStyleImages);
+          e.preventDefault();
+          break;
+        }
+      }
+    }
+  };
+
   // Remove image
   const removeImage = useCallback(
     (index: number, type: 'product' | 'style') => {
@@ -1056,27 +1116,35 @@ const MarketplaceStudio: React.FC = () => {
                       </button>
                     </div>
                   ) : (
-                    <label className="w-full h-full border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
-                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const files = e.target.files;
-                        if (!files || files.length === 0) return;
+                    <div
+                      className="w-full h-full border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all"
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDropProduct(idx, e)}
+                      onPaste={(e) => handlePasteProduct(idx, e)}
+                      tabIndex={0}
+                    >
+                      <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer" title="Rasmi tortib qo'ying yoki Ctrl+V dan foydalaning">
+                        <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <span className="text-xs text-gray-400 text-center px-2">Tortib qo'ying\nyoki Ctrl+V</span>
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const files = e.target.files;
+                            if (!files || files.length === 0) return;
 
-                        handleUploadMany(idx, Array.from(files), 'product', setProductImages, config.maxProductImages);
+                            handleUploadMany(idx, Array.from(files), 'product', setProductImages, config.maxProductImages);
 
-                        // bir xil faylni qayta tanlasa ham change ishlashi uchun
-                        e.currentTarget.value = '';
-                      }}
-                    />
-
-                    </label>
+                            // bir xil faylni qayta tanlasa ham change ishlashi uchun
+                            e.currentTarget.value = '';
+                          }}
+                        />
+                      </label>
+                    </div>
                   )}
                 </div>
               ))}
@@ -1114,17 +1182,26 @@ const MarketplaceStudio: React.FC = () => {
                         </button>
                       </div>
                     ) : (
-                      <label className="w-full h-full border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-purple-400 hover:bg-purple-50 transition-colors">
-                        <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => e.target.files?.[0] && handleUpload(idx, e.target.files[0], 'style', setStyleImages)}
-                        />
-                      </label>
+                      <div
+                        className="w-full h-full border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-purple-400 hover:bg-purple-50 transition-all"
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDropStyle(idx, e)}
+                        onPaste={(e) => handlePasteStyle(idx, e)}
+                        tabIndex={0}
+                      >
+                        <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer" title="Rasmi tortib qo'ying yoki Ctrl+V dan foydalaning">
+                          <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                          </svg>
+                          <span className="text-xs text-gray-400 text-center px-2">Tortib qo'ying\nyoki Ctrl+V</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => e.target.files?.[0] && handleUpload(idx, e.target.files[0], 'style', setStyleImages)}
+                          />
+                        </label>
+                      </div>
                     )}
                   </div>
                 ))}

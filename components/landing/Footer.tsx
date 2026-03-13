@@ -50,7 +50,6 @@ export default function Footer() {
               <Link href="https://t.me/UmariAI" className="transition-colors hover:text-white"><FaTelegram className="h-5 w-5" /></Link>
               <Link href="https://youtube.com/@umariai?si=NKCuPJ5Piv5b41lo" className="transition-colors hover:text-white"><Youtube className="h-5 w-5" /></Link>
               <Link href="https://www.instagram.com/umariai.uz/" className="transition-colors hover:text-white"><Instagram className="h-5 w-5" /></Link>
-              <Link href="https://t.me/UmariAI" className="transition-colors hover:text-white"><FaTelegram className="h-5 w-5" /></Link>
             </div>
           </div>
         </div>
