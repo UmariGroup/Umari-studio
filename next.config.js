@@ -39,9 +39,27 @@ const nextConfig = {
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
 
+  /* ✅ IMAGE UPLOAD SIZE LIMITS
+   * IMPORTANT: Set these environment variables during deployment/runtime:
+   * 
+   * NODE_OPTIONS="--max-http-header-size=16384 --max-body-size=52428800"
+   * 
+   * Or use nginx/reverse proxy with appropriate body_size settings:
+   * client_max_body_size 50m;
+   * 
+   * Default limits in Node.js are ~1MB. Images are compressed on client (JPEG 75% quality)
+   * to reduce payload size, but server should allow up to 50MB just in case.
+   */
+
   /* ✅ MUHIM QISM */
   images: {
     unoptimized: true,
+  },
+
+  /* Increase request body size for image uploads (experimental) */
+  onDemandEntries: {
+    maxInactiveAge: 60 * 1000,
+    pagesBufferLength: 5,
   },
 };
 

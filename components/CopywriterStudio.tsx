@@ -71,6 +71,33 @@ interface UserData {
   role: string;
 }
 
+// Compress image to JPEG format with reduced quality
+const compressImage = async (dataUrl: string, quality: number = 0.75): Promise<string> => {
+  return new Promise<string>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl); // Fallback to original
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        // Convert to JPEG with reduced quality to compress
+        const compressed = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressed);
+      } catch (e) {
+        resolve(dataUrl); // Fallback to original on error
+      }
+    };
+    img.onerror = () => resolve(dataUrl); // Fallback on load error
+    img.src = dataUrl;
+  });
+};
+
 // ============ COMPONENT ============
 const CopywriterStudio: React.FC = () => {
   const toast = useToast();
@@ -192,8 +219,14 @@ const CopywriterStudio: React.FC = () => {
       return;
     }
     const reader = new FileReader();
-    reader.onloadend = () => {
-      callback(reader.result as string);
+    reader.onloadend = async () => {
+      try {
+        const dataUrl = reader.result as string;
+        const compressed = await compressImage(dataUrl, 0.75);
+        callback(compressed);
+      } catch (e) {
+        callback(reader.result as string); // Fallback to uncompressed
+      }
     };
     reader.onerror = () => {
       toast.error(t('common.fileReadError', 'Fayl o\'qishda xatolik'));
