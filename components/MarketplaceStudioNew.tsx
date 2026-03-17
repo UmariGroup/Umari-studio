@@ -101,33 +101,6 @@ const PLAN_CONFIGS: Record<SubscriptionPlan, PlanConfig> = {
   },
 };
 
-// Compress image to JPEG format with reduced quality
-const compressImage = async (dataUrl: string, quality: number = 0.75): Promise<string> => {
-  return new Promise<string>((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(dataUrl); // Fallback to original
-          return;
-        }
-        ctx.drawImage(img, 0, 0);
-        // Convert to JPEG with reduced quality to compress
-        const compressed = canvas.toDataURL('image/jpeg', quality);
-        resolve(compressed);
-      } catch (e) {
-        resolve(dataUrl); // Fallback to original on error
-      }
-    };
-    img.onerror = () => resolve(dataUrl); // Fallback on load error
-    img.src = dataUrl;
-  });
-};
-
 const MarketplaceStudio: React.FC = () => {
   const toast = useToast();
   const { t, language } = useLanguage();
@@ -241,7 +214,7 @@ const MarketplaceStudio: React.FC = () => {
 
               ctx.clearRect(0, 0, TARGET_W, TARGET_H);
               ctx.drawImage(img, dx, dy, dw, dh);
-              resolve(canvas.toDataURL('image/jpeg', 0.8));
+              resolve(canvas.toDataURL('image/png'));
             } catch (e) {
               reject(e);
             }
@@ -277,7 +250,7 @@ const MarketplaceStudio: React.FC = () => {
 
             ctx.clearRect(0, 0, TARGET_W, TARGET_H);
             ctx.drawImage(img, dx, dy, dw, dh);
-            resolve(canvas.toDataURL('image/jpeg', 0.8));
+            resolve(canvas.toDataURL('image/png'));
           } catch (e) {
             reject(e);
           }
@@ -533,12 +506,11 @@ const MarketplaceStudio: React.FC = () => {
       setImages: React.Dispatch<React.SetStateAction<(string | null)[]>>
     ) => {
       const reader = new FileReader();
-      reader.onload = async (e) => {
+      reader.onload = (e) => {
         const base64 = e.target?.result as string;
-        const compressed = await compressImage(base64, 0.75);
         setImages((prev) => {
           const newArr = [...prev];
-          newArr[index] = compressed;
+          newArr[index] = base64;
           return newArr;
         });
       };
@@ -558,15 +530,7 @@ const MarketplaceStudio: React.FC = () => {
     const toBase64 = (file: File) =>
       new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = async () => {
-          try {
-            const base64 = String(reader.result);
-            const compressed = await compressImage(base64, 0.75);
-            resolve(compressed);
-          } catch (e) {
-            resolve(String(reader.result)); // Fallback to uncompressed
-          }
-        };
+        reader.onload = () => resolve(String(reader.result));
         reader.onerror = () => reject(new Error('FileReader error'));
         reader.readAsDataURL(file);
       });
